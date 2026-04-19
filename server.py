@@ -118,6 +118,138 @@ def save_cache(cache_data):
         pass
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def build_test_payload(self, pulled_at=None):
+        today = datetime.date.today().isoformat()
+        pulled_at = pulled_at or datetime.datetime.now().isoformat(timespec="seconds")
+        income_statement = {
+            "periods": ["TTM", "2025-12-31", "2024-12-31", "2023-12-31", "2022-12-31"],
+            "rows": [
+                {"label": "Total Revenue", "values": ["100B", "92B", "84B", "76B", "68B"]},
+                {"label": "Cost of Revenue", "values": ["40B", "37B", "35B", "32B", "24B"]},
+                {"label": "Gross Profit", "values": ["60B", "55B", "49B", "44B", "44B"]},
+                {"label": "Research & Development", "values": ["12B", "11B", "10B", "8B", "7B"]},
+                {"label": "Selling, General & Administrative", "values": ["14B", "13B", "12B", "11B", "10B"]},
+                {"label": "Operating Income", "values": ["30B", "27.6B", "25.2B", "22.8B", "20.4B"]},
+                {"label": "Interest Expense", "values": ["1.2B", "1.1B", "1.0B", "900M", "800M"]},
+                {"label": "Pretax Income", "values": ["29B", "26.8B", "24.5B", "22B", "19.5B"]},
+                {"label": "Tax Provision", "values": ["5.8B", "5.36B", "4.9B", "4.4B", "3.9B"]},
+                {"label": "Net Income", "values": ["23.2B", "21.4B", "19.6B", "17.6B", "15.6B"]},
+                {"label": "Diluted Average Shares", "values": ["2.32B", "2.35B", "2.4B", "2.45B", "2.5B"]},
+                {"label": "Diluted EPS", "values": ["10", "9.1", "8.17", "7.18", "6.24"]},
+                {"label": "EBITDA", "values": ["35B", "32.6B", "30.2B", "27.8B", "25.4B"]},
+                {"label": "Tax Rate For Calcs", "values": ["0.20", "0.20", "0.20", "0.20", "0.20"]},
+            ],
+        }
+        balance_statement = {
+            "periods": ["MRQ", "2025-12-31", "2024-12-31", "2023-12-31", "2022-12-31"],
+            "rows": [
+                {"label": "Cash & Cash Equivalents", "values": ["25B", "24B", "21B", "18B", "15B"]},
+                {"label": "Other Short Term Investments", "values": ["20B", "18B", "16B", "12B", "10B"]},
+                {"label": "Cash, Equivalents & Short Term Investments", "values": ["45B", "42B", "37B", "30B", "25B"]},
+                {"label": "Accounts Receivable", "values": ["15B", "14B", "13B", "12B", "11B"]},
+                {"label": "Inventory", "values": ["10B", "9B", "8B", "7B", "6B"]},
+                {"label": "Accounts Payable", "values": ["8B", "7.5B", "7B", "6.5B", "6B"]},
+                {"label": "Current Debt", "values": ["5B", "4B", "4B", "3B", "3B"]},
+                {"label": "Long Term Debt", "values": ["20B", "22B", "24B", "25B", "26B"]},
+                {"label": "Total Debt", "values": ["25B", "26B", "28B", "28B", "29B"]},
+                {"label": "Gross PP&E", "values": ["80B", "76B", "70B", "65B", "60B"]},
+                {"label": "Net PP&E", "values": ["50B", "48B", "45B", "42B", "39B"]},
+                {"label": "Total Assets", "values": ["180B", "170B", "158B", "145B", "132B"]},
+                {"label": "Total Liabilities", "values": ["70B", "68B", "66B", "62B", "58B"]},
+                {"label": "Stockholders Equity", "values": ["110B", "102B", "92B", "83B", "74B"]},
+            ],
+        }
+        cash_flow_statement = {
+            "periods": ["TTM", "2025-12-31", "2024-12-31", "2023-12-31", "2022-12-31"],
+            "rows": [
+                {"label": "Operating Cash Flow", "values": ["34B", "32B", "29B", "25B", "22B"]},
+                {"label": "Capital Expenditures", "values": ["-7B", "-6.5B", "-6B", "-5.5B", "-5B"]},
+                {"label": "Depreciation And Amortization", "values": ["5B", "5B", "4.8B", "4.5B", "4.2B"]},
+                {"label": "Free Cash Flow", "values": ["27B", "25.5B", "23B", "19.5B", "17B"]},
+                {"label": "Repurchase Of Capital Stock", "values": ["-8B", "-7B", "-6B", "-4B", "-3B"]},
+                {"label": "Cash Dividends Paid", "values": ["-3B", "-2.8B", "-2.5B", "-2.2B", "-2B"]},
+            ],
+        }
+        return {
+            "ticker": "TEST",
+            "shortFloat": "4.2%",
+            "income": "30B",
+            "margin": "30%",
+            "grossMargin": "60%",
+            "ev_cy_ebit": "14.5",
+            "ev_ny_ebit": "12.8",
+            "adj_income": "30B",
+            "capex": "7B",
+            "da": "5B",
+            "ev": "480B",
+            "ev_adj_ebit": "16",
+            "cy_growth": "10%",
+            "ny_growth": "12%",
+            "gp_3y_growth": "36.4%",
+            "gp_3y_start": "44B",
+            "gp_3y_end": "60B",
+            "gp_3y_label": "3Y GP Growth",
+            "rndAdjIncome": "40%",
+            "cy_adj_inc": "33B",
+            "ny_adj_inc": "37B",
+            "marketCap": "500B",
+            "netCash": "20B",
+            "derivedEnterpriseValue": "480B",
+            "revenue": "100B",
+            "operating_margin": "30%",
+            "da_minus_capex": "-2B",
+            "cy_revenue": "110B",
+            "ny_revenue": "123B",
+            "grossPpe": "80B",
+            "adjEbitGrossPpe": "37.5%",
+            "capexAdjIncome": "6.67%",
+            "investmentCapex": "2B",
+            "roc": "44.8%",
+            "netWorkingCapital": "17B",
+            "netFixedAssets": "50B",
+            "receivables": "15B",
+            "inventory": "10B",
+            "accountsPayable": "8B",
+            "financialCurrency": "USD",
+            "usdFxRate": 1.0,
+            "companyName": "Test Fixture Corporation",
+            "incomeStatement": income_statement,
+            "balanceStatement": balance_statement,
+            "cashFlowStatement": cash_flow_statement,
+            "currentPrice": "100",
+            "targetMeanPrice": "125",
+            "targetLowPrice": "90",
+            "targetHighPrice": "160",
+            "targetMove": "25%",
+            "recommendationMean": "1.8",
+            "recommendationKey": "buy",
+            "analystRecommendations": {
+                "period": "0m",
+                "strongBuy": 5,
+                "buy": 8,
+                "hold": 3,
+                "sell": 1,
+                "strongSell": 0,
+            },
+            "valuationBasis": "derivedEnterpriseValue",
+            "valuationPrefix": "EV",
+            "valuationNumeratorLabel": "Derived Enterprise Value",
+            "currentYearEps": "10",
+            "nextYearEps": "12",
+            "yearAgoEps": "8",
+            "currentYearEpsGrowth": "25%",
+            "nextYearEpsGrowth": "20%",
+            "priceCurrentEps": "12.5",
+            "priceCyEps": "10",
+            "priceNyEps": "8.33",
+            "payloadVersion": PAYLOAD_VERSION,
+            "evSource": "test-fixture",
+            "marketCapSource": "test-fixture",
+            "dataDate": today,
+            "pulledAt": pulled_at,
+            "fetchCount": 0,
+        }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory="public", **kwargs)
 
@@ -1051,6 +1183,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         today = datetime.date.today().isoformat()
         now_dt = datetime.datetime.now()
         pulled_at = now_dt.isoformat(timespec="seconds")
+
+        if ticker.upper() == "TEST":
+            self._send_response(200, self.build_test_payload(pulled_at=pulled_at))
+            return
 
         def cache_has_missing_ttm_anchor(payload):
             statement = payload.get("incomeStatement") or {}

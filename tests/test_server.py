@@ -489,6 +489,35 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
 
 
 class HandleApiRequestContractTests(unittest.TestCase):
+    def test_test_ticker_returns_complete_fixture_without_external_fetches(self):
+        handler = make_handler()
+        captured = {}
+
+        def fake_send_response(status, payload):
+            captured["status"] = status
+            captured["payload"] = payload
+
+        with mock.patch.object(handler, "fetch_finviz_snapshot_metrics") as mock_finviz, \
+             mock.patch.object(handler, "fetch_yahoo_finance_data") as mock_yahoo, \
+             mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
+            handler.handle_api_request("TEST", refresh=True)
+
+        self.assertEqual(captured["status"], 200)
+        payload = captured["payload"]
+        self.assertEqual(payload["ticker"], "TEST")
+        self.assertEqual(payload["companyName"], "Test Fixture Corporation")
+        self.assertEqual(payload["marketCap"], "500B")
+        self.assertEqual(payload["netCash"], "20B")
+        self.assertEqual(payload["derivedEnterpriseValue"], "480B")
+        self.assertEqual(payload["grossMargin"], "60%")
+        self.assertEqual(payload["capexAdjIncome"], "6.67%")
+        self.assertEqual(payload["priceCyEps"], "10")
+        self.assertEqual(payload["incomeStatement"]["rows"][0]["label"], "Total Revenue")
+        self.assertEqual(payload["balanceStatement"]["rows"][2]["label"], "Cash, Equivalents & Short Term Investments")
+        self.assertEqual(payload["cashFlowStatement"]["rows"][1]["label"], "Capital Expenditures")
+        mock_finviz.assert_not_called()
+        mock_yahoo.assert_not_called()
+
     def test_same_day_cache_is_reused_even_if_pulled_at_is_old(self):
         handler = make_handler()
         captured = {}

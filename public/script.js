@@ -68,12 +68,19 @@ document.addEventListener('DOMContentLoaded', () => {
         return `As of ${date}${time ? ` ${time}` : ''} • Fetch time: ${data.fetchTime || '--'} • Fetches: ${fetches}`;
     }
 
+    function escapeAttr(value) {
+        return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     function metric(label, value, calcType = '', editType = '') {
         const link = calcType ? ' metric-title-link' : '';
-        const edit = editType ? ` data-edit-assumption="${editType}"` : '';
+        const displayValue = formatSigned(value || '--');
+        const editableValue = editType
+            ? `<input class="value-display metric-edit-input" type="text" value="${escapeAttr(displayValue)}" data-edit-assumption="${editType}" data-original-value="${escapeAttr(displayValue)}" aria-label="Edit ${escapeAttr(label)}">`
+            : `<div class="value-display">${displayValue}</div>`;
         return `<div class="stat-box">
-            <span class="stat-label${link}" data-calc="${calcType}"${edit}>${label}</span>
-            <div class="value-display">${formatSigned(value || '--')}</div>
+            <span class="stat-label${link}" data-calc="${calcType}">${label}</span>
+            ${editableValue}
         </div>`;
     }
 
@@ -91,7 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
         stats.classList.remove('stats-grid');
         stats.innerHTML = [
             metricGroup('Margins', [
-                metric('Adj Margin', data.margin, 'adj_margin', 'margin'),
+                metric('Adj Op Inc Margin', data.margin, 'adj_margin', 'margin'),
                 metric('Gross Margin', data.grossMargin),
             ]),
             metricGroup('Growth', [
@@ -134,8 +141,22 @@ document.addEventListener('DOMContentLoaded', () => {
             node.addEventListener('click', () => openCalc(node.dataset.calc));
         });
         stats.querySelectorAll('[data-edit-assumption]').forEach((node) => {
-            node.addEventListener('dblclick', () => editAssumption(node.dataset.editAssumption));
-            node.title = 'Double-click to edit this assumption';
+            node.addEventListener('focus', () => {
+                node.dataset.editingOriginalValue = node.value;
+                node.value = '';
+            });
+            node.addEventListener('blur', () => commitAssumptionInput(node));
+            node.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    node.blur();
+                }
+                if (event.key === 'Escape') {
+                    node.value = node.dataset.editingOriginalValue || node.dataset.originalValue || '';
+                    node.blur();
+                }
+            });
+            node.title = 'Edit directly. Press Enter or click away to save.';
         });
     }
 
@@ -192,17 +213,24 @@ document.addEventListener('DOMContentLoaded', () => {
         return data;
     }
 
-    function editAssumption(key) {
+    function commitAssumptionInput(input) {
+        const key = input.dataset.editAssumption;
         const ticker = (state.latest?.ticker || '').toUpperCase();
         if (!ticker) return;
-        const label = key === 'margin' ? 'Adj Margin' : key === 'cy_growth' ? 'CY Growth' : 'NY Growth';
-        const current = (state.assumptions[ticker] || {})[key];
-        const fallback = current === undefined ? '' : (current * 100).toFixed(1);
-        const entered = prompt(`Override ${label} % for ${ticker}. Leave blank to clear override.`, fallback);
-        if (entered === null) return;
+        const entered = input.value.trim();
+        const original = input.dataset.editingOriginalValue || input.dataset.originalValue || '';
         state.assumptions[ticker] = state.assumptions[ticker] || {};
-        if (entered.trim() === '') delete state.assumptions[ticker][key];
-        else state.assumptions[ticker][key] = Number(entered.replace('%', '')) / 100;
+        if (entered === '') {
+            input.value = original;
+            return;
+        } else {
+            const parsed = Number(entered.replace('%', ''));
+            if (!Number.isFinite(parsed)) {
+                input.value = original;
+                return;
+            }
+            state.assumptions[ticker][key] = parsed / 100;
+        }
         if (!Object.keys(state.assumptions[ticker]).length) delete state.assumptions[ticker];
         save('stock_assumptions', state.assumptions);
         renderStats(state.latest);
@@ -549,16 +577,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderStatementTable(statement, statementKey, hideHeader = false) {
+        statement = statementForDisplay(statement);
         const periods = statement.periods || [];
         const rows = statement.rows || [];
         if (!rows.length) return '<p class="empty-note">No statement data available.</p>';
         return `<table class="statement-table">
             ${hideHeader ? '' : `<thead><tr><th>Actions</th><th>Line Item</th>${periods.map(p => `<th>${p}</th>`).join('')}</tr></thead>`}
-            <tbody>${rows.map(row => renderStatementRow(row, periods, statementKey)).join('')}</tbody>
+            <tbody>${rows.map(row => renderStatementRow(row, periods, statementKey, statement)).join('')}</tbody>
         </table>`;
     }
 
-    function renderStatementRow(row, periods, statementKey) {
+    function statementForDisplay(statement) {
+        const periods = statement.periods || [];
+        const rows = statement.rows || [];
+        const sortable = periods.map((period, idx) => ({ period, idx }));
+        sortable.sort((a, b) => {
+            const aSpecial = isSummaryPeriod(a.period);
+            const bSpecial = isSummaryPeriod(b.period);
+            if (aSpecial && bSpecial) return 0;
+            if (aSpecial) return 1;
+            if (bSpecial) return -1;
+            return Date.parse(a.period) - Date.parse(b.period);
+        });
+        return {
+            periods: sortable.map(item => item.period),
+            rows: rows.map(row => ({
+                ...row,
+                values: sortable.map(item => (row.values || [])[item.idx] || '--'),
+            })),
+        };
+    }
+
+    function isSummaryPeriod(period) {
+        return ['TTM', 'LATEST', 'MRQ'].includes(String(period || '').toUpperCase());
+    }
+
+    function renderStatementRow(row, periods, statementKey, displayStatement) {
         const canMargin = statementKey === 'income' || statementKey === 'cash';
         const starred = state.starredAccounts[starredKey(statementKey, row.label)];
         const growthOn = state.statementToggles[`${statementKey}:growth:${row.label}`];
@@ -569,7 +623,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ${canMargin ? `<button class="mini-btn ${marginOn ? 'on green' : ''}" data-statement="${statementKey}" data-toggle-ratio="margin" data-label="${row.label}">Margin</button>` : ''}
         </td><td>${row.label}</td>${(row.values || []).map(value => `<td>${formatSigned(value)}</td>`).join('')}</tr>`;
         if (growthOn) html += ratioRow('Growth', growthValues(row.values || []));
-        if (marginOn) html += ratioRow('Margin', marginValues(row, periods, statementForTab(state.latest, statementKey)));
+        if (marginOn) html += ratioRow('Margin', marginValues(row, periods, displayStatement));
         return html;
     }
 

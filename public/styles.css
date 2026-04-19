@@ -85,7 +85,7 @@ body {
 }
 
 #view-scanner {
-    max-width: 850px;
+    max-width: 1080px;
     margin: 0 auto;
 }
 
@@ -186,6 +186,7 @@ button:active {
 }
 
 #result-container.hidden {
+    display: none;
     opacity: 0;
     transform: translateY(20px);
     pointer-events: none;
@@ -391,6 +392,11 @@ button:active {
     border-bottom: 1px solid var(--card-border);
 }
 
+.statement-header > div:first-child {
+    min-width: 0;
+    max-width: 42%;
+}
+
 .statement-header p,
 .empty-note {
     color: var(--text-secondary);
@@ -401,8 +407,13 @@ button:active {
 
 .statement-tabs {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    flex: 0 0 auto;
     gap: 0.7rem;
+}
+
+.statement-tabs .tab-btn {
+    white-space: nowrap;
 }
 
 .statement-table {
@@ -541,10 +552,38 @@ button:active {
 .value-display {
     font-size: 2.4rem;
     font-weight: 700;
+    font-family: inherit;
     text-shadow: 0 0 30px rgba(14, 165, 233, 0.4);
     background: linear-gradient(to right, #f8fafc, #94a3b8);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    box-shadow: none;
+}
+
+.value-display:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.metric-edit-input {
+    flex: 0 0 auto;
+    width: 5.5ch;
+    min-width: 4.5ch;
+    max-width: 7ch;
+    border: 0;
+    border-bottom: 2px dashed rgba(148, 163, 184, 0.35);
+    border-radius: 0;
+    outline: none;
+    text-align: center;
+    line-height: 1.1;
+    caret-color: var(--accent-color);
+    cursor: pointer;
+    -webkit-text-fill-color: #cbd5e1;
+}
+
+.metric-edit-input:hover,
+.metric-edit-input:focus {
+    border-bottom-color: var(--accent-color);
 }
 
 .error-text {
