@@ -24,6 +24,9 @@
         <nav class="tabs">
             <button class="tab-btn active" id="tab-scanner">Scanner</button>
             <button class="tab-btn" id="tab-watchlist">Watchlist</button>
+            <button class="tab-btn" id="tab-groups">Groups</button>
+            <button class="tab-btn" id="tab-starred">Starred</button>
+            <button class="tab-btn" id="tab-most-searched">Most Searched</button>
         </nav>
 
         <div id="view-scanner" class="view-section active">
@@ -51,6 +54,7 @@
                             <div class="stat-label" id="result-data-date">As of --</div>
                         </div>
                         <div style="display:flex; align-items:center; gap: 0.75rem;">
+                            <button id="result-star-btn" class="tab-btn" type="button">Star</button>
                             <button id="refresh-data-btn" class="tab-btn" type="button">Refresh data</button>
                             <span class="badge">Finviz & Yahoo</span>
                         </div>
@@ -58,41 +62,10 @@
                     <div class="card-body">
                         <div class="loader hidden" id="loading-spinner"></div>
                         <div class="stats-grid hidden" id="result-stats">
-                            <div class="stat-box">
-                                <span class="stat-label">Adj Margin</span>
-                                <div class="value-display" id="result-margin">--</div>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-label">CY Growth</span>
-                                <div class="value-display" id="result-cyg">--</div>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-label">NY Growth</span>
-                                <div class="value-display" id="result-nyg">--</div>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-label clickable-metric" id="result-gp-3y-growth-label">3Y GP Growth</span>
-                                <div class="value-display" id="result-gp-3y-growth">--</div>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-label">Short Float</span>
-                                <div class="value-display" id="result-value">--</div>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-label">EV/Adj EBIT</span>
-                                <div class="value-display clickable-metric" id="result-ev-ebit">--</div>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-label">EV/CY EBIT</span>
-                                <div class="value-display clickable-metric" id="result-evcy">--</div>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-label">EV/NY EBIT</span>
-                                <div class="value-display clickable-metric" id="result-evny">--</div>
-                            </div>
                         </div>
                     </div>
                 </div>
+                <div id="statement-panel" class="glass-card statement-card hidden"></div>
                 <div id="error-message" class="error-text hidden"></div>
             </section>
         </div> <!-- End view-scanner -->
@@ -131,6 +104,40 @@
                         <!-- populated via js -->
                     </tbody>
                 </table>
+            </section>
+        </div>
+
+        <div id="view-groups" class="view-section hidden">
+            <section class="watchlist-input-section">
+                <form id="groups-form">
+                    <div class="input-group">
+                        <input type="text" id="groups-ticker-input" placeholder="Temporarily add ticker..." autocomplete="off" required>
+                        <button type="submit">Add</button>
+                    </div>
+                </form>
+            </section>
+            <section class="watchlist-table-container glass-card" style="margin-top: 2rem;">
+                <table class="watchlist-table"><thead id="groups-head"></thead><tbody id="groups-body"></tbody></table>
+            </section>
+        </div>
+
+        <div id="view-starred" class="view-section hidden">
+            <section class="watchlist-input-section">
+                <form id="starred-form">
+                    <div class="input-group">
+                        <input type="text" id="starred-ticker-input" placeholder="Add starred ticker..." autocomplete="off" required>
+                        <button type="submit">Add</button>
+                    </div>
+                </form>
+            </section>
+            <section class="watchlist-table-container glass-card" style="margin-top: 2rem;">
+                <table class="watchlist-table"><thead><tr><th>Ticker</th><th>Actions</th></tr></thead><tbody id="starred-body"></tbody></table>
+            </section>
+        </div>
+
+        <div id="view-most-searched" class="view-section hidden">
+            <section class="watchlist-table-container glass-card" style="margin-top: 2rem;">
+                <table class="watchlist-table"><thead><tr><th>Ticker</th><th>Searches</th><th>Action</th></tr></thead><tbody id="most-searched-body"></tbody></table>
             </section>
         </div>
 

@@ -1,386 +1,681 @@
 document.addEventListener('DOMContentLoaded', () => {
-    function parseMoneyFormat(str) {
-        if (!str || str === '--') return 0;
-        let val = parseFloat(str);
-        if (str.includes('T')) return val * 1e12;
-        if (str.includes('B')) return val * 1e9;
-        if (str.includes('M')) return val * 1e6;
-        return val;
-    }
-    function formatMoneyJS(num) {
-        if (!num) return '--';
-        let absVal = Math.abs(num);
-        if (absVal >= 1e12) return (num / 1e12).toPrecision(3) + 'T';
-        if (absVal >= 1e9) return (num / 1e9).toPrecision(3) + 'B';
-        if (absVal >= 1e6) return (num / 1e6).toPrecision(3) + 'M';
-        return num.toPrecision(3);
-    }
-    // Tabs Navigation
-    const tabScanner = document.getElementById('tab-scanner');
-    const tabWatchlist = document.getElementById('tab-watchlist');
-    const viewScanner = document.getElementById('view-scanner');
-    const viewWatchlist = document.getElementById('view-watchlist');
-
-    tabScanner.addEventListener('click', () => {
-        tabScanner.classList.add('active');
-        tabWatchlist.classList.remove('active');
-        viewScanner.classList.remove('hidden');
-        viewWatchlist.classList.add('hidden');
-    });
-
-    tabWatchlist.addEventListener('click', () => {
-        tabWatchlist.classList.add('active');
-        tabScanner.classList.remove('active');
-        viewWatchlist.classList.remove('hidden');
-        viewScanner.classList.add('hidden');
-        renderWatchlist();
-    });
-
-    // Scanner UI
-    const form = document.getElementById('search-form');
-    const input = document.getElementById('ticker-input');
-    const resultContainer = document.getElementById('result-container');
-    const resultTicker = document.getElementById('result-ticker');
-    const resultStats = document.getElementById('result-stats');
-    const resultValue = document.getElementById('result-value');
-    const resultMargin = document.getElementById('result-margin');
-    const resultEvEbit = document.getElementById('result-ev-ebit');
-    const resultCyg = document.getElementById('result-cyg');
-    const resultEvCy = document.getElementById('result-evcy');
-    const resultNyg = document.getElementById('result-nyg');
-    const resultEvNy = document.getElementById('result-evny');
-    const resultGp3yGrowthLabel = document.getElementById('result-gp-3y-growth-label');
-    const resultGp3yGrowth = document.getElementById('result-gp-3y-growth');
-    const resultEv = document.getElementById('result-ev');
-    const resultMarketCap = document.getElementById('result-market-cap');
-    const resultNetDebt = document.getElementById('result-net-debt');
-    const resultDataDate = document.getElementById('result-data-date');
-    const refreshDataBtn = document.getElementById('refresh-data-btn');
-    const errorMessage = document.getElementById('error-message');
-    const spinner = document.getElementById('loading-spinner');
-    const glassCard = document.getElementById('glass-card');
-
-    // Calculation View Logic
-    const viewCalc = document.getElementById('view-calc');
-    const calcBackBtn = document.getElementById('calc-back-btn');
-    const calcTickerBadge = document.getElementById('calc-ticker-badge');
-    const calcTitle = document.getElementById('calc-title');
-    const calcNumeratorLabel = document.getElementById('calc-numerator-label');
-    const calcEvVal = document.getElementById('calc-ev-val');
-    const calcDivisorLabel = document.getElementById('calc-divisor-label');
-    const calcDivisorVal = document.getElementById('calc-divisor-val');
-    const calcResultLabel = document.getElementById('calc-result-label');
-    const calcResultVal = document.getElementById('calc-result-val');
-    const calcBreakdownList = document.getElementById('calc-breakdown-list');
-    
-    let previousView = viewScanner;
-    let latestResultData = null;
-    const watchlistDataByTicker = {};
-
-    function renderCalcBreakdown(items) {
-        if (!calcBreakdownList) return;
-        if (!items || items.length === 0) {
-            calcBreakdownList.innerHTML = '<li><span class="calc-label">Breakdown</span><span class="calc-val">--</span></li>';
-            return;
-        }
-        calcBreakdownList.innerHTML = items.map((item) =>
-            `<li><span class="calc-label">${item.label}</span><span class="calc-val">${item.value || '--'}</span></li>`
-        ).join('');
-    }
-
-    function buildBreakdownFromData(data, metricType) {
-        if (!data) return [];
-        if (metricType === 'adj') {
-            return [
-                { label: 'Revenue', value: data.revenue || '--' },
-                { label: 'Operating Margin', value: data.operating_margin || '--' },
-                { label: 'Operating Income (EBIT)', value: data.income || '--' },
-                { label: 'Depreciation & Amort.', value: data.da || '--' },
-                { label: 'Capex', value: data.capex || '--' },
-                { label: 'Max(0, D&A - Capex)', value: data.da_minus_capex || '--' },
-                { label: 'Adj EBIT', value: data.adj_income || '--' }
-            ];
-        }
-        if (metricType === 'cy') {
-            return [
-                { label: 'CY Revenue Estimate', value: data.cy_revenue || '--' },
-                { label: 'Adj Margin Used', value: data.margin || '--' },
-                { label: 'CY Adj EBIT', value: data.cy_adj_inc || '--' }
-            ];
-        }
-        if (metricType === 'ny') {
-            return [
-                { label: 'NY Revenue Estimate', value: data.ny_revenue || '--' },
-                { label: 'Adj Margin Used', value: data.margin || '--' },
-                { label: 'NY Adj EBIT', value: data.ny_adj_inc || '--' }
-            ];
-        }
-        if (metricType === 'gp_3y_growth') {
-            const basis = data.gp_3y_basis || 'Gross Profit';
-            return [
-                { label: `Starting ${basis}`, value: data.gp_3y_start || '--' },
-                { label: `Latest ${basis}`, value: data.gp_3y_end || '--' },
-                { label: 'Formula', value: '(Latest / Starting - 1) x 100' }
-            ];
-        }
-        return [];
-    }
-
-    function openCalcView(ticker, title, ev, divisorName, divisorVal, result, breakdownItems = [], numeratorLabel = 'Current Enterprise Value', resultLabel = 'Final Valuation Multiple') {
-        calcTickerBadge.textContent = ticker;
-        calcTitle.textContent = title;
-        if (calcNumeratorLabel) calcNumeratorLabel.textContent = numeratorLabel;
-        calcEvVal.textContent = ev || '--';
-        calcDivisorLabel.textContent = divisorName;
-        calcDivisorVal.textContent = divisorVal || '--';
-        if (calcResultLabel) calcResultLabel.textContent = resultLabel;
-        calcResultVal.textContent = result || '--';
-        renderCalcBreakdown(breakdownItems);
-
-        // Track current view to know where to go back
-        if (!viewScanner.classList.contains('hidden')) previousView = viewScanner;
-        else if (!viewWatchlist.classList.contains('hidden')) previousView = viewWatchlist;
-
-        // Hide main views and show calc view
-        viewScanner.classList.add('hidden');
-        viewWatchlist.classList.add('hidden');
-        document.querySelector('.tabs').classList.add('hidden'); // Hide tabs during calc view
-        viewCalc.classList.remove('hidden');
-        window.scrollTo(0, 0); // Scroll to top
-    }
-
-    calcBackBtn.addEventListener('click', () => {
-        viewCalc.classList.add('hidden');
-        previousView.classList.remove('hidden');
-        document.querySelector('.tabs').classList.remove('hidden');
-    });
-
-    const showCalcView = (element, title, divisorName, divisorKey, resultKey) => {
-        const ticker = document.getElementById('result-ticker').textContent;
-        const ev = element.dataset.ev || '--';
-        const divisorVal = element.dataset[divisorKey] || '--';
-        const resultVal = element.dataset[resultKey] || '--';
-        const metricType = element.dataset.metricType || '';
-        const breakdown = buildBreakdownFromData(latestResultData, metricType);
-        openCalcView(ticker, title, ev, divisorName, divisorVal, resultVal, breakdown);
+    const $ = (id) => document.getElementById(id);
+    const state = {
+        activeView: 'scanner',
+        previousScroll: 0,
+        latest: null,
+        dataByTicker: JSON.parse(localStorage.getItem('stock_data_by_ticker') || '{}'),
+        watchlist: JSON.parse(localStorage.getItem('stock_watchlist') || '[]'),
+        starred: JSON.parse(localStorage.getItem('stock_starred_tickers') || '[]'),
+        most: JSON.parse(localStorage.getItem('stock_search_counts') || '{}'),
+        assumptions: JSON.parse(localStorage.getItem('stock_assumptions') || '{}'),
+        statementTab: localStorage.getItem('stock_statement_tab') || 'income',
+        starredAccounts: JSON.parse(localStorage.getItem('stock_starred_accounts') || '{}'),
+        statementToggles: JSON.parse(localStorage.getItem('stock_statement_toggles') || '{}'),
+        groups: [],
+        sort: {},
     };
 
-    resultEvEbit.addEventListener('click', () => showCalcView(resultEvEbit, 'EV / Adj EBIT', 'TTM Adj. Operating Income', 'adj', 'res_adj'));
-    resultEvCy.addEventListener('click', () => showCalcView(resultEvCy, 'EV / CY EBIT', 'CY Adj. EBIT (Estimate)', 'cy', 'res_cy'));
-    resultEvNy.addEventListener('click', () => showCalcView(resultEvNy, 'EV / NY EBIT', 'NY Adj. EBIT (Estimate)', 'ny', 'res_ny'));
-    if (resultGp3yGrowthLabel) {
-        resultGp3yGrowthLabel.addEventListener('click', () => {
-            if (!latestResultData) return;
-            const basis = latestResultData.gp_3y_basis || 'Gross Profit';
-            openCalcView(
-                resultTicker.textContent,
-                `3Y ${basis} Growth`,
-                latestResultData.gp_3y_end || '--',
-                `Starting ${basis}`,
-                latestResultData.gp_3y_start || '--',
-                latestResultData.gp_3y_growth || '--',
-                buildBreakdownFromData(latestResultData, 'gp_3y_growth'),
-                `Latest ${basis}`,
-                'Final Growth Rate'
-            );
+    const views = {
+        scanner: $('view-scanner'),
+        watchlist: $('view-watchlist'),
+        groups: $('view-groups'),
+        starred: $('view-starred'),
+        'most-searched': $('view-most-searched'),
+        calc: $('view-calc'),
+    };
+
+    const tabIds = ['scanner', 'watchlist', 'groups', 'starred', 'most-searched'];
+    tabIds.forEach((name) => {
+        const tab = $(`tab-${name}`);
+        if (!tab) return;
+        tab.addEventListener('click', () => showView(name));
+    });
+
+    function save(key, value) {
+        localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    function saveTickerData() {
+        save('stock_data_by_ticker', state.dataByTicker);
+    }
+
+    function showView(name) {
+        state.activeView = name;
+        Object.entries(views).forEach(([viewName, node]) => {
+            if (!node) return;
+            node.classList.toggle('hidden', viewName !== name);
+        });
+        tabIds.forEach((tabName) => {
+            const tab = $(`tab-${tabName}`);
+            if (tab) tab.classList.toggle('active', tabName === name);
+        });
+        if (name === 'watchlist') renderTickerTable('watchlist');
+        if (name === 'groups') renderTickerTable('groups');
+        if (name === 'starred') renderStarredTickers();
+        if (name === 'most-searched') renderMostSearched();
+    }
+
+    function formatSigned(value) {
+        if (typeof value !== 'string') return value || '--';
+        return value.startsWith('+') ? value.slice(1) : value;
+    }
+
+    function displayDate(data) {
+        const date = data.dataDate || '--';
+        const time = data.pulledAt ? data.pulledAt.split('T')[1] || data.pulledAt.split(' ')[1] || '' : '';
+        const fetches = data.fetchCount === undefined ? '--' : data.fetchCount;
+        return `As of ${date}${time ? ` ${time}` : ''} • Fetch time: ${data.fetchTime || '--'} • Fetches: ${fetches}`;
+    }
+
+    function metric(label, value, calcType = '', editType = '') {
+        const link = calcType ? ' metric-title-link' : '';
+        const edit = editType ? ` data-edit-assumption="${editType}"` : '';
+        return `<div class="stat-box">
+            <span class="stat-label${link}" data-calc="${calcType}"${edit}>${label}</span>
+            <div class="value-display">${formatSigned(value || '--')}</div>
+        </div>`;
+    }
+
+    function metricGroup(title, items) {
+        return `<section class="metric-group">
+            <h3>${title}</h3>
+            <div class="metric-group-grid">${items.join('')}</div>
+        </section>`;
+    }
+
+    function renderStats(data) {
+        data = applyAssumptions(data);
+        const stats = $('result-stats');
+        if (!stats) return;
+        stats.classList.remove('stats-grid');
+        stats.innerHTML = [
+            metricGroup('Margins', [
+                metric('Adj Margin', data.margin, 'adj_margin', 'margin'),
+                metric('Gross Margin', data.grossMargin),
+            ]),
+            metricGroup('Growth', [
+                metric(data.gp_3y_label || '3Y GP Growth', data.gp_3y_growth || '--', 'gp_3y_growth'),
+                metric('CY Growth', data.cy_growth, '', 'cy_growth'),
+                metric('NY Growth', data.ny_growth, '', 'ny_growth'),
+                metric('CY EPS Growth', data.currentYearEpsGrowth),
+                metric('NY EPS Growth', data.nextYearEpsGrowth),
+            ]),
+            metricGroup('Returns', [
+                metric('Adj Op Inc / Gross PP&E', data.adjEbitGrossPpe, 'adj_ebit_gross_ppe'),
+                metric('ROC', data.roc, 'roc'),
+            ]),
+            metricGroup('Spending', [
+                metric('Investment Capex / Adj Op Inc', data.capexAdjIncome, 'capex_adj_income'),
+                metric('R&D / Adj Op Inc', data.rndAdjIncome || '--'),
+            ]),
+            metricGroup('Short Interest', [
+                metric('Short Float', data.shortFloat),
+            ]),
+            metricGroup('Market', [
+                metric('Market Cap', data.marketCap),
+                metric('Net Cash', data.netCash, 'net_cash'),
+                metric('Our EV', data.derivedEnterpriseValue),
+            ]),
+            metricGroup('Valuation', [
+                metric(`${data.valuationPrefix || 'EV'}/Adj Op Inc`, data.ev_adj_ebit, 'ev_adj'),
+                metric(`${data.valuationPrefix || 'EV'}/CY Op Inc`, data.ev_cy_ebit, 'ev_cy'),
+                metric(`${data.valuationPrefix || 'EV'}/NY Op Inc`, data.ev_ny_ebit, 'ev_ny'),
+            ]),
+            metricGroup('P/E', [
+                metric('P/LY EPS', data.priceCurrentEps),
+                metric('P/CY EPS', data.priceCyEps),
+                metric('P/NY EPS', data.priceNyEps),
+            ]),
+            renderAnalystCards(data),
+        ].join('');
+
+        stats.querySelectorAll('[data-calc]').forEach((node) => {
+            node.addEventListener('click', () => openCalc(node.dataset.calc));
+        });
+        stats.querySelectorAll('[data-edit-assumption]').forEach((node) => {
+            node.addEventListener('dblclick', () => editAssumption(node.dataset.editAssumption));
+            node.title = 'Double-click to edit this assumption';
         });
     }
 
-    window.openTableCalcView = function (ticker, title, ev, divisorName, divisorVal, resultVal, metricType = '') {
-        const breakdown = buildBreakdownFromData(watchlistDataByTicker[ticker], metricType);
-        openCalcView(ticker, title, ev, divisorName, divisorVal, resultVal, breakdown);
-    };
+    function applyAssumptions(input) {
+        const data = { ...input };
+        const ticker = (data.ticker || '').toUpperCase();
+        const assumptions = state.assumptions[ticker] || {};
+        const margin = assumptions.margin ?? parsePercentValue(data.margin);
+        const cyGrowth = assumptions.cy_growth ?? parsePercentValue(data.cy_growth);
+        const nyGrowth = assumptions.ny_growth ?? parsePercentValue(data.ny_growth);
+        const revenueRaw = parseMoney(data.revenue);
+        const valuationRaw = parseMoney(data.ev);
+        const grossPpeRaw = parseMoney(data.grossPpe);
+        const investmentCapexRaw = parseMoney(data.investmentCapex);
+        const rocDenomRaw = parseMoney(data.netWorkingCapital) + parseMoney(data.netFixedAssets);
 
-    async function fetchAndRenderTicker(ticker, { refresh = false } = {}) {
+        if (assumptions.margin !== undefined) {
+            const adjRaw = revenueRaw * margin;
+            data.margin = formatPercentDecimal(margin);
+            data.adj_income = formatMoneyFront(adjRaw);
+            data.ev_adj_ebit = valuationRaw && adjRaw ? formatRatio(valuationRaw / adjRaw) : '--';
+            data.adjEbitGrossPpe = grossPpeRaw && adjRaw ? formatPercentDecimal(adjRaw / grossPpeRaw) : '--';
+            data.capexAdjIncome = adjRaw ? formatPercentDecimal(investmentCapexRaw / adjRaw) : '--';
+            data.roc = rocDenomRaw && adjRaw ? formatPercentDecimal(adjRaw / rocDenomRaw) : '--';
+        }
+
+        if (assumptions.cy_growth !== undefined) data.cy_growth = formatPercentDecimal(cyGrowth);
+        if (assumptions.ny_growth !== undefined) data.ny_growth = formatPercentDecimal(nyGrowth);
+
+        const effectiveAdjRaw = revenueRaw * margin;
+        const cyRevenueRaw = assumptions.cy_growth !== undefined && revenueRaw
+            ? revenueRaw * (1 + cyGrowth)
+            : parseMoney(data.cy_revenue);
+        const nyRevenueRaw = assumptions.ny_growth !== undefined && cyRevenueRaw
+            ? cyRevenueRaw * (1 + nyGrowth)
+            : parseMoney(data.ny_revenue);
+        const cyAdjRaw = cyRevenueRaw * margin;
+        const nyAdjRaw = nyRevenueRaw * margin;
+        if (assumptions.margin !== undefined || assumptions.cy_growth !== undefined) {
+            data.cy_revenue = formatMoneyFront(cyRevenueRaw);
+            data.cy_adj_inc = formatMoneyFront(cyAdjRaw);
+            data.ev_cy_ebit = valuationRaw && cyAdjRaw ? formatRatio(valuationRaw / cyAdjRaw) : '--';
+        }
+        if (assumptions.margin !== undefined || assumptions.cy_growth !== undefined || assumptions.ny_growth !== undefined) {
+            data.ny_revenue = formatMoneyFront(nyRevenueRaw);
+            data.ny_adj_inc = formatMoneyFront(nyAdjRaw);
+            data.ev_ny_ebit = valuationRaw && nyAdjRaw ? formatRatio(valuationRaw / nyAdjRaw) : '--';
+        }
+        if (assumptions.margin !== undefined && !effectiveAdjRaw) {
+            data.ev_adj_ebit = '--';
+            data.ev_cy_ebit = '--';
+            data.ev_ny_ebit = '--';
+        }
+        return data;
+    }
+
+    function editAssumption(key) {
+        const ticker = (state.latest?.ticker || '').toUpperCase();
         if (!ticker) return;
+        const label = key === 'margin' ? 'Adj Margin' : key === 'cy_growth' ? 'CY Growth' : 'NY Growth';
+        const current = (state.assumptions[ticker] || {})[key];
+        const fallback = current === undefined ? '' : (current * 100).toFixed(1);
+        const entered = prompt(`Override ${label} % for ${ticker}. Leave blank to clear override.`, fallback);
+        if (entered === null) return;
+        state.assumptions[ticker] = state.assumptions[ticker] || {};
+        if (entered.trim() === '') delete state.assumptions[ticker][key];
+        else state.assumptions[ticker][key] = Number(entered.replace('%', '')) / 100;
+        if (!Object.keys(state.assumptions[ticker]).length) delete state.assumptions[ticker];
+        save('stock_assumptions', state.assumptions);
+        renderStats(state.latest);
+    }
 
-        // Reset state
-        resultContainer.classList.remove('hidden');
-        resultStats.classList.add('hidden');
-        spinner.classList.remove('hidden');
-        errorMessage.classList.add('hidden');
-        resultTicker.textContent = ticker;
-        if (resultDataDate) resultDataDate.textContent = 'As of --';
-        glassCard.style.display = 'block';
+    function renderAnalystCards(data) {
+        const rec = data.analystRecommendations || {};
+        const counts = [
+            ['Strong Buy', rec.strongBuy || 0],
+            ['Buy', rec.buy || 0],
+            ['Hold', rec.hold || 0],
+            ['Sell', rec.sell || 0],
+            ['Strong Sell', rec.strongSell || 0],
+        ];
+        const total = counts.reduce((sum, item) => sum + Number(item[1] || 0), 0);
+        const rating = data.recommendationMean && data.recommendationMean !== '--'
+            ? Math.max(0, 6 - Number(data.recommendationMean)).toFixed(1)
+            : '--';
+        return `<section class="analyst-grid">
+            <div class="metric-group analyst-card">
+                <h3>Analyst Price Target</h3>
+                <div class="target-cases">
+                    ${caseButton('Bear', data.targetLowPrice, data.currentPrice)}
+                    ${caseButton('Base', data.targetMeanPrice, data.currentPrice)}
+                    ${caseButton('Bull', data.targetHighPrice, data.currentPrice)}
+                </div>
+            </div>
+            <div class="metric-group analyst-card">
+                <h3>Analyst Recommendations</h3>
+                <div class="rec-summary">${data.recommendationKey || '--'} • ${rating}/5 stars</div>
+                <div class="rec-grid">${counts.map(([label, count]) => {
+                    const pct = total ? `${Math.round((count / total) * 100)}%` : '0%';
+                    return `<div class="rec-pill"><strong>${count}</strong><span>${label}</span><small>${pct}</small></div>`;
+                }).join('')}</div>
+            </div>
+        </section>`;
+    }
+
+    function caseButton(label, target, current) {
+        const targetRaw = Number(target);
+        const currentRaw = Number(current);
+        const move = targetRaw && currentRaw ? `${((targetRaw / currentRaw - 1) * 100).toFixed(1)}%` : '--';
+        return `<button class="case-btn" type="button" data-case="${label.toLowerCase()}"><span>${label}</span><strong>${move}</strong></button>`;
+    }
+
+    async function fetchTicker(ticker, refresh = false) {
+        const started = performance.now();
+        const url = `/api/short-interest/${ticker}${refresh ? '?refresh=1' : ''}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to fetch data');
+        data.fetchTime = `${((performance.now() - started) / 1000).toFixed(2)}s`;
+        state.dataByTicker[ticker] = data;
+        saveTickerData();
+        return data;
+    }
+
+    async function scanTicker(ticker, refresh = false) {
+        if (!ticker) return;
+        ticker = ticker.toUpperCase();
+        showView('scanner');
+        $('result-container').classList.remove('hidden');
+        $('result-stats').classList.add('hidden');
+        $('statement-panel').classList.add('hidden');
+        $('loading-spinner').classList.remove('hidden');
+        $('error-message').classList.add('hidden');
+        $('glass-card').style.display = 'block';
+        $('result-ticker').textContent = ticker;
+        $('result-data-date').textContent = 'As of --';
+        incrementSearch(ticker);
 
         try {
-            const url = refresh ? `/api/short-interest/${ticker}?refresh=1` : `/api/short-interest/${ticker}`;
-            const response = await fetch(url);
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to fetch data');
+            const data = await fetchTicker(ticker, refresh);
+            state.latest = data;
+            $('loading-spinner').classList.add('hidden');
+            $('result-stats').classList.remove('hidden');
+            $('result-ticker').textContent = data.ticker || ticker;
+            const title = $('result-ticker').parentElement;
+            if (title && !title.querySelector('.company-name')) {
+                title.insertAdjacentHTML('beforeend', '<div class="company-name"></div>');
             }
-
-            // Success state
-            spinner.classList.add('hidden');
-            resultStats.classList.remove('hidden');
-            resultValue.textContent = data.shortFloat;
-            if (resultDataDate) {
-                const asOf = data.dataDate || '--';
-                const pulledAt = data.pulledAt ? data.pulledAt.replace('T', ' ') : '--';
-                resultDataDate.textContent = `As of ${asOf} • pulled ${pulledAt}`;
-            }
-
-            // Back-calculate denominators
-            const evRaw = parseMoneyFormat(data.ev);
-            const cyRatio = parseFloat(data.ev_cy_ebit);
-            const nyRatio = parseFloat(data.ev_ny_ebit);
-            data.cy_adj_inc = data.cy_adj_inc || ((evRaw && cyRatio) ? formatMoneyJS(evRaw / cyRatio) : '--');
-            data.ny_adj_inc = data.ny_adj_inc || ((evRaw && nyRatio) ? formatMoneyJS(evRaw / nyRatio) : '--');
-
-            // Store raw variables for tooltip
-            const setTooltips = (el) => {
-                el.dataset.ev = data.ev || '--';
-                el.dataset.adj = data.adj_income || '--';
-                el.dataset.cy = data.cy_adj_inc || '--';
-                el.dataset.ny = data.ny_adj_inc || '--';
-                el.dataset.res_adj = data.ev_adj_ebit || '--';
-                el.dataset.res_cy = data.ev_cy_ebit || '--';
-                el.dataset.res_ny = data.ev_ny_ebit || '--';
-            };
-            setTooltips(resultEvEbit);
-            setTooltips(resultEvCy);
-            setTooltips(resultEvNy);
-            resultEvEbit.dataset.metricType = 'adj';
-            resultEvCy.dataset.metricType = 'cy';
-            resultEvNy.dataset.metricType = 'ny';
-            latestResultData = data;
-
-            resultEvEbit.textContent = data.ev_adj_ebit;
-            resultMargin.textContent = data.margin;
-            resultCyg.textContent = data.cy_growth;
-            resultEvCy.textContent = data.ev_cy_ebit;
-            resultNyg.textContent = data.ny_growth;
-            if (resultGp3yGrowth) resultGp3yGrowth.textContent = data.gp_3y_growth || '--';
-            if (resultGp3yGrowthLabel) {
-                resultGp3yGrowthLabel.textContent = data.gp_3y_basis === 'Revenue' ? '3Y Revenue Growth' : '3Y GP Growth';
-            }
-            resultEvNy.textContent = data.ev_ny_ebit;
-            if (resultEv) resultEv.textContent = data.ev;
-            if (resultMarketCap) resultMarketCap.textContent = data.marketCap || '--';
-            if (resultNetDebt) resultNetDebt.textContent = data.netDebt || '--';
-
-            // Trigger animation
-            resultStats.classList.remove('pop');
-            void resultStats.offsetWidth; // trigger reflow
-            resultStats.classList.add('pop');
-
-        } catch (error) {
-            // Error state
-            spinner.classList.add('hidden');
-            glassCard.style.display = 'none';
-            errorMessage.textContent = error.message;
-            errorMessage.classList.remove('hidden');
+            const company = title ? title.querySelector('.company-name') : null;
+            if (company) company.textContent = data.companyName || '--';
+            $('result-data-date').textContent = displayDate(data);
+            updateResultStarButton(ticker);
+            renderStats(data);
+            renderStatements(data);
+        } catch (err) {
+            $('loading-spinner').classList.add('hidden');
+            $('glass-card').style.display = 'none';
+            $('error-message').textContent = err.message;
+            $('error-message').classList.remove('hidden');
         }
     }
 
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const ticker = input.value.trim().toUpperCase();
-        await fetchAndRenderTicker(ticker, { refresh: false });
+    function incrementSearch(ticker) {
+        state.most[ticker] = (state.most[ticker] || 0) + 1;
+        save('stock_search_counts', state.most);
+    }
+
+    $('search-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const ticker = $('ticker-input').value.trim().toUpperCase();
+        $('ticker-input').value = '';
+        await scanTicker(ticker);
     });
 
-    if (refreshDataBtn) {
-        refreshDataBtn.addEventListener('click', async () => {
-            const ticker = resultTicker.textContent.trim().toUpperCase();
-            if (!ticker || ticker === '--') return;
-            await fetchAndRenderTicker(ticker, { refresh: true });
+    $('refresh-data-btn').addEventListener('click', () => {
+        const ticker = ($('result-ticker').textContent || '').trim().toUpperCase();
+        if (ticker && ticker !== '--') scanTicker(ticker, true);
+    });
+
+    function updateResultStarButton(ticker) {
+        const btn = $('result-star-btn');
+        if (!btn) return;
+        const isStarred = state.starred.includes(ticker);
+        btn.textContent = isStarred ? 'Starred' : 'Star';
+        btn.classList.toggle('active', isStarred);
+    }
+
+    $('result-star-btn').addEventListener('click', () => {
+        const ticker = ($('result-ticker').textContent || '').trim().toUpperCase();
+        if (!ticker || ticker === '--') return;
+        toggleStarredTicker(ticker);
+        updateResultStarButton(ticker);
+    });
+
+    function toggleStarredTicker(ticker) {
+        if (state.starred.includes(ticker)) {
+            state.starred = state.starred.filter((item) => item !== ticker);
+        } else {
+            state.starred.push(ticker);
+        }
+        save('stock_starred_tickers', state.starred);
+    }
+
+    function tableHeaders() {
+        return `<tr>
+            <th data-sort="ticker">Ticker</th><th data-sort="margin">Adj Margin</th>
+            <th data-sort="grossMargin">Gross Margin</th><th data-sort="cy_growth">CY Growth</th>
+            <th data-sort="ny_growth">NY Growth</th><th data-sort="shortFloat">Short Float</th>
+            <th data-sort="ev_adj_ebit">EV/Adj Op Inc</th><th data-sort="ev_cy_ebit">EV/CY</th>
+            <th data-sort="ev_ny_ebit">EV/NY</th><th>Actions</th>
+        </tr>`;
+    }
+
+    function renderTickerTable(kind) {
+        const list = kind === 'watchlist' ? state.watchlist : state.groups;
+        const body = kind === 'watchlist' ? $('watchlist-body') : $('groups-body');
+        const head = kind === 'watchlist' ? document.querySelector('#watchlist-table thead') : $('groups-head');
+        if (head) head.innerHTML = tableHeaders();
+        if (!list.length) {
+            body.innerHTML = `<tr><td colspan="10">No tickers yet.</td></tr>`;
+            return;
+        }
+        body.innerHTML = sortedTickers(list, kind).map((ticker) => tableRow(ticker, state.dataByTicker[ticker], kind)).join('');
+    }
+
+    function sortedTickers(list, kind) {
+        const sort = state.sort[kind];
+        if (!sort || !sort.key || sort.key === 'ticker') {
+            const sorted = [...list].sort();
+            return sort && sort.direction === 'desc' ? sorted.reverse() : sorted;
+        }
+        return [...list].sort((a, b) => {
+            const av = sortableValue(state.dataByTicker[a]?.[sort.key]);
+            const bv = sortableValue(state.dataByTicker[b]?.[sort.key]);
+            return sort.direction === 'asc' ? av - bv : bv - av;
         });
     }
 
-    // Watchlist Logic
-    const watchlistForm = document.getElementById('watchlist-form');
-    const watchlistInput = document.getElementById('watchlist-ticker-input');
-    const watchlistBody = document.getElementById('watchlist-body');
+    function sortableValue(value) {
+        if (value === null || value === undefined || value === '' || value === '--') return Number.NEGATIVE_INFINITY;
+        let text = String(value).replace(/,/g, '').replace('%', '');
+        let mult = 1;
+        if (text.endsWith('T')) { mult = 1e12; text = text.slice(0, -1); }
+        if (text.endsWith('B')) { mult = 1e9; text = text.slice(0, -1); }
+        if (text.endsWith('M')) { mult = 1e6; text = text.slice(0, -1); }
+        const parsed = Number(text);
+        return Number.isFinite(parsed) ? parsed * mult : Number.NEGATIVE_INFINITY;
+    }
 
-    let watchlist = JSON.parse(localStorage.getItem('stock_watchlist')) || [];
+    function tableRow(ticker, data, kind) {
+        if (!data) return `<tr id="${kind}-row-${ticker}"><td>${ticker}</td><td colspan="8">No cached data. Use Refresh.</td><td>${actionButtons(ticker, kind)}</td></tr>`;
+        data = applyAssumptions(data);
+        return `<tr id="${kind}-row-${ticker}">
+            <td>${ticker}</td><td>${data.margin || '--'}</td><td>${data.grossMargin || '--'}</td>
+            <td>${formatSigned(data.cy_growth)}</td><td>${formatSigned(data.ny_growth)}</td>
+            <td>${data.shortFloat || '--'}</td><td>${data.ev_adj_ebit || '--'}</td>
+            <td>${data.ev_cy_ebit || '--'}</td><td>${data.ev_ny_ebit || '--'}</td>
+            <td>${actionButtons(ticker, kind)}</td>
+        </tr>`;
+    }
 
-    watchlistForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const ticker = watchlistInput.value.trim().toUpperCase();
-        if (ticker && !watchlist.includes(ticker)) {
-            watchlist.push(ticker);
-            localStorage.setItem('stock_watchlist', JSON.stringify(watchlist));
-            watchlistInput.value = '';
-            renderWatchlist();
+    function actionButtons(ticker, kind) {
+        return `<button class="scan-btn" type="button" data-scan="${ticker}">Scan</button>
+            <button class="scan-btn" type="button" data-refresh-row="${ticker}" data-kind="${kind}">Refresh</button>
+            <button class="remove-btn" type="button" data-remove="${ticker}" data-kind="${kind}">Remove</button>`;
+    }
+
+    document.body.addEventListener('click', (event) => {
+        const scan = event.target.closest('[data-scan]');
+        if (scan) scanTicker(scan.dataset.scan);
+        const rowRefresh = event.target.closest('[data-refresh-row]');
+        if (rowRefresh) refreshTableTicker(rowRefresh.dataset.refreshRow, rowRefresh.dataset.kind);
+        const sortHeader = event.target.closest('[data-sort]');
+        if (sortHeader) toggleSort(sortHeader.dataset.sort, sortHeader.closest('table'));
+        const remove = event.target.closest('[data-remove]');
+        if (remove) {
+            const kind = remove.dataset.kind;
+            const ticker = remove.dataset.remove;
+            if (kind === 'watchlist') {
+                state.watchlist = state.watchlist.filter((item) => item !== ticker);
+                save('stock_watchlist', state.watchlist);
+                renderTickerTable('watchlist');
+            } else if (kind === 'groups') {
+                state.groups = state.groups.filter((item) => item !== ticker);
+                renderTickerTable('groups');
+            } else if (kind === 'starred') {
+                toggleStarredTicker(ticker);
+                renderStarredTickers();
+            }
+        }
+        const star = event.target.closest('[data-star-account]');
+        if (star) toggleStarredAccount(star.dataset.statement, star.dataset.starAccount);
+        const toggle = event.target.closest('[data-toggle-ratio]');
+        if (toggle) toggleStatementRatio(toggle.dataset.statement, toggle.dataset.toggleRatio, toggle.dataset.label);
+        const statement = event.target.closest('[data-statement-tab]');
+        if (statement) {
+            state.statementTab = statement.dataset.statementTab;
+            localStorage.setItem('stock_statement_tab', state.statementTab);
+            renderStatements(state.latest);
         }
     });
 
-    window.removeTicker = function (ticker) {
-        watchlist = watchlist.filter(t => t !== ticker);
-        localStorage.setItem('stock_watchlist', JSON.stringify(watchlist));
-        delete watchlistDataByTicker[ticker];
-        renderWatchlist();
+    function bindListForm(formId, inputId, listName, storageKey) {
+        const form = $(formId);
+        if (!form) return;
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const ticker = $(inputId).value.trim().toUpperCase();
+            $(inputId).value = '';
+            if (!ticker || state[listName].includes(ticker)) return;
+            state[listName].push(ticker);
+            if (storageKey) save(storageKey, state[listName]);
+            if (listName === 'starred') renderStarredTickers();
+            else renderTickerTable(listName);
+        });
     }
 
-    function watchlistLoadingRowHtml(ticker) {
-        return `<tr id="watch-row-${ticker}">
-            <td>${ticker}</td>
-            <td colspan="10" style="text-align:center; color: var(--text-secondary);">Loading...</td>
-            <td><button class="remove-btn" onclick="removeTicker('${ticker}')">X</button></td>
-        </tr>`;
-    }
-
-    function watchlistErrorRowHtml(ticker, message) {
-        return `<tr id="watch-row-${ticker}">
-            <td>${ticker}</td>
-            <td colspan="10" style="color:var(--error-color);">${message}</td>
-            <td><button class="remove-btn" onclick="removeTicker('${ticker}')">X</button></td>
-        </tr>`;
-    }
-
-    function watchlistDataRowHtml(ticker, data) {
-        return `<tr id="watch-row-${ticker}">
-            <td>${data.ticker}</td>
-            <td>${data.shortFloat}</td>
-            <td>${data.ev}</td>
-            <td>${data.marketCap || '--'}</td>
-            <td class="clickable-table-metric" onclick="openTableCalcView('${data.ticker}', 'EV / Adj EBIT', '${data.ev}', 'Adj. Operating Income:', '${data.adj_income}', '${data.ev_adj_ebit}', 'adj')">${data.ev_adj_ebit || '--'}</td>
-            <td class="clickable-table-metric" onclick="openTableCalcView('${data.ticker}', 'EV / CY EBIT', '${data.ev}', 'CY Adj. EBIT (Estimate):', '${data.cy_adj_inc}', '${data.ev_cy_ebit}', 'cy')">${data.ev_cy_ebit || '--'}</td>
-            <td class="clickable-table-metric" onclick="openTableCalcView('${data.ticker}', 'EV / NY EBIT', '${data.ev}', 'NY Adj. EBIT (Estimate):', '${data.ny_adj_inc}', '${data.ev_ny_ebit}', 'ny')">${data.ev_ny_ebit || '--'}</td>
-            <td>${data.margin}</td>
-            <td>${data.cy_growth}</td>
-            <td>${data.ny_growth}</td>
-            <td>${data.netDebt || '--'}</td>
-            <td><button class="remove-btn" onclick="removeTicker('${ticker}')">X</button></td>
-        </tr>`;
-    }
-
-    async function renderWatchlist() {
-        if (watchlist.length === 0) {
-            watchlistBody.innerHTML = '<tr><td colspan="12" style="text-align:center; color: var(--text-secondary);">No tickers in watchlist. Add some!</td></tr>';
-            return;
+    async function refreshTableTicker(ticker, kind) {
+        const row = $(`${kind}-row-${ticker}`);
+        if (row) row.innerHTML = `<td>${ticker}</td><td colspan="8">Refreshing...</td><td>${actionButtons(ticker, kind)}</td>`;
+        try {
+            const data = await fetchTicker(ticker, true);
+            const refreshed = $(`${kind}-row-${ticker}`);
+            if (refreshed) refreshed.outerHTML = tableRow(ticker, data, kind);
+        } catch {
+            const failed = $(`${kind}-row-${ticker}`);
+            if (failed) failed.innerHTML = `<td>${ticker}</td><td colspan="8">Refresh failed.</td><td>${actionButtons(ticker, kind)}</td>`;
         }
+    }
 
-        // Render immediately with cached rows where available.
-        watchlistBody.innerHTML = watchlist.map((ticker) => {
-            const cached = watchlistDataByTicker[ticker];
-            return cached ? watchlistDataRowHtml(ticker, cached) : watchlistLoadingRowHtml(ticker);
+    function toggleSort(key, table) {
+        const kind = table && table.id === 'watchlist-table' ? 'watchlist' : 'groups';
+        const current = state.sort[kind] || {};
+        state.sort[kind] = {
+            key,
+            direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+        };
+        renderTickerTable(kind);
+    }
+    bindListForm('watchlist-form', 'watchlist-ticker-input', 'watchlist', 'stock_watchlist');
+    bindListForm('groups-form', 'groups-ticker-input', 'groups', '');
+    bindListForm('starred-form', 'starred-ticker-input', 'starred', 'stock_starred_tickers');
+
+    function renderStarredTickers() {
+        const body = $('starred-body');
+        body.innerHTML = state.starred.length
+            ? state.starred.map((ticker) => `<tr><td>${ticker}</td><td>${actionButtons(ticker, 'starred')}</td></tr>`).join('')
+            : '<tr><td colspan="2">No starred tickers yet.</td></tr>';
+    }
+
+    function renderMostSearched() {
+        const rows = Object.entries(state.most).sort((a, b) => b[1] - a[1]);
+        $('most-searched-body').innerHTML = rows.length
+            ? rows.map(([ticker, count]) => `<tr><td>${ticker}</td><td>${count}</td><td><button class="scan-btn" data-scan="${ticker}">Scan</button></td></tr>`).join('')
+            : '<tr><td colspan="3">No searches yet.</td></tr>';
+    }
+
+    function renderStatements(data) {
+        const panel = $('statement-panel');
+        if (!data) return;
+        panel.classList.remove('hidden');
+        const tabs = [
+            ['income', 'Income Statement'],
+            ['balance', 'Balance Sheet'],
+            ['cash', 'Cash Flow'],
+            ['starred', 'Starred'],
+        ];
+        panel.innerHTML = `<div class="statement-header">
+            <div><h2>${state.statementTab === 'starred' ? 'Starred Statements' : tabs.find(t => t[0] === state.statementTab)[1]}</h2>
+            <p>Annual figures shown in USD-normalized values</p></div>
+            <div class="statement-tabs">${tabs.map(([key, label]) => `<button class="tab-btn ${state.statementTab === key ? 'active' : ''}" data-statement-tab="${key}">${label}</button>`).join('')}</div>
+        </div>
+        ${state.statementTab === 'starred' ? renderStarredStatementTable(data) : renderStatementTable(statementForTab(data, state.statementTab), state.statementTab)}`;
+    }
+
+    function statementForTab(data, tab) {
+        if (tab === 'balance') return data.balanceStatement || {};
+        if (tab === 'cash') return data.cashFlowStatement || {};
+        return data.incomeStatement || {};
+    }
+
+    function starredKey(statement, label) {
+        return `${statement}:${label}`;
+    }
+
+    function toggleStarredAccount(statement, label) {
+        const key = starredKey(statement, label);
+        state.starredAccounts[key] = !state.starredAccounts[key];
+        save('stock_starred_accounts', state.starredAccounts);
+        renderStatements(state.latest);
+    }
+
+    function toggleStatementRatio(statement, type, label) {
+        const key = `${statement}:${type}:${label}`;
+        state.statementToggles[key] = !state.statementToggles[key];
+        save('stock_statement_toggles', state.statementToggles);
+        renderStatements(state.latest);
+    }
+
+    function renderStarredStatementTable(data) {
+        const blocks = [
+            ['income', 'Income Statement', data.incomeStatement || {}],
+            ['balance', 'Balance Sheet', data.balanceStatement || {}],
+            ['cash', 'Cash Flow Statement', data.cashFlowStatement || {}],
+        ].map(([key, label, statement]) => {
+            const rows = (statement.rows || []).filter((row) => state.starredAccounts[starredKey(key, row.label)]);
+            if (!rows.length) return '';
+            return `<h3 class="statement-section-title">${label}</h3>${renderStatementTable({ periods: statement.periods, rows }, key, true)}`;
         }).join('');
-
-        // Fetch each ticker independently so one loading row never blocks others.
-        for (const ticker of watchlist) {
-            try {
-                const response = await fetch(`/api/short-interest/${ticker}`);
-                if (!response.ok) {
-                    const row = document.getElementById(`watch-row-${ticker}`);
-                    if (row) row.outerHTML = watchlistErrorRowHtml(ticker, 'Error');
-                    continue;
-                }
-                const data = await response.json();
-                const evRaw = parseMoneyFormat(data.ev);
-                const cyRatio = parseFloat(data.ev_cy_ebit);
-                const nyRatio = parseFloat(data.ev_ny_ebit);
-                data.cy_adj_inc = data.cy_adj_inc || ((evRaw && cyRatio) ? formatMoneyJS(evRaw / cyRatio) : '--');
-                data.ny_adj_inc = data.ny_adj_inc || ((evRaw && nyRatio) ? formatMoneyJS(evRaw / nyRatio) : '--');
-                watchlistDataByTicker[ticker] = data;
-                const row = document.getElementById(`watch-row-${ticker}`);
-                if (row) row.outerHTML = watchlistDataRowHtml(ticker, data);
-            } catch (err) {
-                const row = document.getElementById(`watch-row-${ticker}`);
-                if (row) row.outerHTML = watchlistErrorRowHtml(ticker, 'Network Error');
-            }
-        }
+        return blocks || '<p class="empty-note">Star accounts from a statement to show them here.</p>';
     }
+
+    function renderStatementTable(statement, statementKey, hideHeader = false) {
+        const periods = statement.periods || [];
+        const rows = statement.rows || [];
+        if (!rows.length) return '<p class="empty-note">No statement data available.</p>';
+        return `<table class="statement-table">
+            ${hideHeader ? '' : `<thead><tr><th>Actions</th><th>Line Item</th>${periods.map(p => `<th>${p}</th>`).join('')}</tr></thead>`}
+            <tbody>${rows.map(row => renderStatementRow(row, periods, statementKey)).join('')}</tbody>
+        </table>`;
+    }
+
+    function renderStatementRow(row, periods, statementKey) {
+        const canMargin = statementKey === 'income' || statementKey === 'cash';
+        const starred = state.starredAccounts[starredKey(statementKey, row.label)];
+        const growthOn = state.statementToggles[`${statementKey}:growth:${row.label}`];
+        const marginOn = state.statementToggles[`${statementKey}:margin:${row.label}`];
+        let html = `<tr><td class="statement-actions">
+            <button class="mini-btn ${starred ? 'on gold' : ''}" data-statement="${statementKey}" data-star-account="${row.label}">${starred ? 'Starred' : 'Star'}</button>
+            <button class="mini-btn ${growthOn ? 'on blue' : ''}" data-statement="${statementKey}" data-toggle-ratio="growth" data-label="${row.label}">Growth</button>
+            ${canMargin ? `<button class="mini-btn ${marginOn ? 'on green' : ''}" data-statement="${statementKey}" data-toggle-ratio="margin" data-label="${row.label}">Margin</button>` : ''}
+        </td><td>${row.label}</td>${(row.values || []).map(value => `<td>${formatSigned(value)}</td>`).join('')}</tr>`;
+        if (growthOn) html += ratioRow('Growth', growthValues(row.values || []));
+        if (marginOn) html += ratioRow('Margin', marginValues(row, periods, statementForTab(state.latest, statementKey)));
+        return html;
+    }
+
+    function ratioRow(label, values) {
+        return `<tr class="ratio-row"><td></td><td>${label}</td>${values.map(v => `<td>${v}</td>`).join('')}</tr>`;
+    }
+
+    function parsePercentBase(value) {
+        if (!value || value === '--') return 0;
+        let n = parseFloat(String(value).replace(/,/g, ''));
+        if (String(value).includes('T')) n *= 1e12;
+        if (String(value).includes('B')) n *= 1e9;
+        if (String(value).includes('M')) n *= 1e6;
+        return n || 0;
+    }
+
+    function parseMoney(value) {
+        return parsePercentBase(value);
+    }
+
+    function parsePercentValue(value) {
+        if (!value || value === '--') return 0;
+        return Number(String(value).replace('%', '').replace('+', '')) / 100 || 0;
+    }
+
+    function formatRatio(value) {
+        if (!Number.isFinite(value) || value === 0) return '--';
+        return value >= 10 ? value.toFixed(1).replace(/\.0$/, '') : value.toFixed(2).replace(/0$/, '').replace(/\.$/, '');
+    }
+
+    function formatPercentDecimal(value) {
+        if (!Number.isFinite(value)) return '--';
+        return `${(value * 100).toFixed(1).replace(/\.0$/, '')}%`;
+    }
+
+    function formatMoneyFront(value) {
+        if (!Number.isFinite(value)) return '--';
+        const abs = Math.abs(value);
+        const sign = value < 0 ? '-' : '';
+        if (abs >= 1e12) return `${sign}${(abs / 1e12).toFixed(2).replace(/\.?0+$/, '')}T`;
+        if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1).replace(/\.0$/, '')}B`;
+        if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1).replace(/\.0$/, '')}M`;
+        return `${sign}${abs.toFixed(2).replace(/\.?0+$/, '')}`;
+    }
+
+    function growthValues(values) {
+        return values.map((value, idx) => {
+            if (idx === 0) return '--';
+            const prev = parsePercentBase(values[idx - 1]);
+            const curr = parsePercentBase(value);
+            return prev ? `${((curr / Math.abs(prev) - 1) * 100).toFixed(1)}%` : '--';
+        });
+    }
+
+    function marginValues(row, periods, statement) {
+        const revenue = (statement.rows || []).find(r => r.label === 'Total Revenue' || r.label === 'Operating Cash Flow');
+        return (row.values || []).map((value, idx) => {
+            const denom = revenue ? parsePercentBase(revenue.values[idx]) : 0;
+            const num = parsePercentBase(value);
+            return denom ? `${((num / denom) * 100).toFixed(1)}%` : '--';
+        });
+    }
+
+    function openCalc(type) {
+        if (!state.latest) return;
+        state.previousScroll = window.scrollY;
+        const data = applyAssumptions(state.latest);
+        const map = {
+            ev_adj: ['EV / Adj Op Inc', data.ev, 'Adj Op Inc', data.adj_income, data.ev_adj_ebit],
+            ev_cy: ['EV / CY Op Inc', data.ev, 'CY Adj Op Inc', data.cy_adj_inc, data.ev_cy_ebit],
+            ev_ny: ['EV / NY Op Inc', data.ev, 'NY Adj Op Inc', data.ny_adj_inc, data.ev_ny_ebit],
+            adj_margin: ['Adj Margin', data.adj_income, 'Revenue', data.revenue, data.margin],
+            gp_3y_growth: ['3Y GP Growth', data.gp_3y_end || '--', 'Starting Value', data.gp_3y_start || '--', data.gp_3y_growth || '--'],
+            net_cash: ['Net Cash', data.netCash, 'Cash - Debt', '', data.netCash],
+            roc: ['ROC', data.adj_income, 'NWC + Net Fixed Assets', '', data.roc],
+            adj_ebit_gross_ppe: ['Adj Op Inc / Gross PP&E', data.adj_income, 'Gross PP&E', data.grossPpe, data.adjEbitGrossPpe],
+            capex_adj_income: ['Investment Capex / Adj Op Inc', data.investmentCapex, 'Adj Op Inc', data.adj_income, data.capexAdjIncome],
+        };
+        const item = map[type];
+        if (!item) return;
+        $('calc-ticker-badge').textContent = data.ticker;
+        $('calc-title').textContent = item[0];
+        $('calc-numerator-label').textContent = item[0].split('/')[0] || item[0];
+        $('calc-ev-val').textContent = item[1] || '--';
+        $('calc-divisor-label').textContent = item[2] || 'Calculation';
+        $('calc-divisor-val').textContent = item[3] || '--';
+        $('calc-result-val').textContent = item[4] || '--';
+        $('calc-breakdown-list').innerHTML = [
+            ['Revenue', data.revenue], ['Operating Income', data.income], ['D&A', data.da],
+            ['Capex', data.capex], ['Adj Op Inc', data.adj_income], ['Market Cap', data.marketCap],
+            ['Net Cash', data.netCash], ['Our EV', data.derivedEnterpriseValue],
+        ].map(([label, value]) => `<li><span class="calc-label">${label}</span><span class="calc-val">${value || '--'}</span></li>`).join('');
+        showView('calc');
+        document.querySelector('.tabs').classList.add('hidden');
+        window.scrollTo(0, 0);
+    }
+
+    $('calc-back-btn').addEventListener('click', () => {
+        document.querySelector('.tabs').classList.remove('hidden');
+        showView('scanner');
+        requestAnimationFrame(() => window.scrollTo(0, state.previousScroll || 0));
+    });
+
+    window.removeTicker = (ticker) => {
+        state.watchlist = state.watchlist.filter((item) => item !== ticker);
+        save('stock_watchlist', state.watchlist);
+        renderTickerTable('watchlist');
+    };
 });

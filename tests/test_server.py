@@ -20,6 +20,11 @@ FETCH_RESULT_FIELDS = [
     "ev_adj_ebit",
     "cy_growth",
     "ny_growth",
+    "gp_3y_growth",
+    "gp_3y_start",
+    "gp_3y_end",
+    "gp_3y_label",
+    "rnd_adj_income",
     "cy_adj_inc",
     "ny_adj_inc",
     "market_cap",
@@ -339,6 +344,45 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(result["investment_capex"], "0")
         self.assertEqual(result["capex_adj_income"], "0%")
 
+    def test_restores_three_year_growth_and_rnd_spending_metrics(self):
+        quote_summary_payload = make_quote_summary_payload()
+        timeseries_payload = make_timeseries_payload()
+        income_statement = {
+            "periods": ["TTM", "2025-12-31", "2024-12-31", "2023-12-31", "2022-12-31"],
+            "rows": [
+                {"label": "Total Revenue", "values": ["100", "100", "90", "80", "70"]},
+                {"label": "Gross Profit", "values": ["56", "56", "48", "44", "40"]},
+                {"label": "Research & Development", "values": ["6", "6", "5", "4", "3"]},
+            ],
+        }
+
+        def counted_open(_opener, url, timeout=3):
+            if "quoteSummary" in url:
+                return FakeResponse(json.dumps(quote_summary_payload))
+            if "fundamentals-timeseries" in url:
+                return FakeResponse(json.dumps(timeseries_payload))
+            raise AssertionError(f"Unexpected URL: {url}")
+
+        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
+             mock.patch("server.urllib.request.install_opener"), \
+             mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
+             mock.patch.object(self.handler, "get_usd_fx_rate", return_value=1.0), \
+             mock.patch.object(self.handler, "_counted_open", side_effect=counted_open), \
+             mock.patch.object(self.handler, "build_income_statement_from_page", return_value=income_statement), \
+             mock.patch.object(self.handler, "build_balance_sheet_from_page", return_value=fake_balance_statement()), \
+             mock.patch.object(self.handler, "build_cash_flow_statement_from_page", return_value=fake_statement("Cash")):
+            result = dict(zip(FETCH_RESULT_FIELDS, self.handler.fetch_yahoo_finance_data(
+                "ACME",
+                finviz_ev_raw=240,
+                finviz_market_cap_raw=180,
+            )))
+
+        self.assertEqual(result["gp_3y_label"], "3Y GP Growth")
+        self.assertEqual(result["gp_3y_start"], "40")
+        self.assertEqual(result["gp_3y_end"], "56")
+        self.assertEqual(result["gp_3y_growth"], "40%")
+        self.assertEqual(result["rnd_adj_income"], "25%")
+
     def test_falls_back_to_actual_annual_eps_when_year_ago_matches_current_year(self):
         quote_summary_payload = make_quote_summary_payload()
         quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"][0]["earningsEstimate"] = {
@@ -593,7 +637,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
 
         fetch_payload = (
             "143B", "46.7%", "68.5%", "18.9", "16.4", "143B", "83.1B", "42.2B", "2.89T", "20.3",
-            "16.4%", "15.4%", "153B", "177B", "2.86T", "31.2B", "2.89T", "305B", "46.7%", "0", "328B",
+            "16.4%", "15.4%", "43.4%", "146B", "209B", "3Y GP Growth", "40.1%", "153B", "177B", "2.86T", "31.2B", "2.89T", "305B", "46.7%", "0", "328B",
             "378B", "323B", "44.1%", "58.3%", "40.9B", "52.2%", "43.1B", "230B", "69.9B", "938M", "27.7B", "USD",
             1.0, "Microsoft Corporation",
             {
@@ -656,7 +700,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
 
         fetch_payload = (
             "83.3B", "41.4%", "82%", "14", "11.9", "83.3B", "69.7B", "18.6B", "1.46T", "17.5",
-            "+25%", "+17.9%", "104B", "123B", "1.45T", "2.65B", "1.45T", "201B", "41.4%", "0", "251B",
+            "+25%", "+17.9%", "23.1%", "134B", "165B", "3Y GP Growth", "68.9%", "104B", "123B", "1.45T", "2.65B", "1.45T", "201B", "41.4%", "0", "251B",
             "296B", "254B", "32.8%", "83.7%", "51.1B", "40.1%", "10.9B", "197B", "19.8B", "--", "8.89B", "USD",
             1.0, "Meta Platforms, Inc.", fake_statement("Income"), fake_statement("Balance"), fake_statement("Cash"),
             "574", "860", "614", "1144", "+49.7%", "1.34", "strong_buy",
@@ -701,7 +745,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
 
         fetch_payload = (
             "83.3B", "41.4%", "82%", "14", "11.9", "83.3B", "69.7B", "18.6B", "--", "17.5",
-            "25%", "17.9%", "104B", "123B", "1.45T", "2.65B", "1.45T", "201B", "41.4%", "0", "251B",
+            "25%", "17.9%", "23.1%", "134B", "165B", "3Y GP Growth", "68.9%", "104B", "123B", "1.45T", "2.65B", "1.45T", "201B", "41.4%", "0", "251B",
             "296B", "254B", "32.8%", "83.7%", "51.1B", "40.1%", "10.9B", "197B", "19.8B", "--", "8.89B", "USD",
             1.0, "Meta Platforms, Inc.", fake_statement("Income"), fake_statement("Balance"), fake_statement("Cash"),
             "574", "860", "614", "1144", "49.7%", "1.34", "strong_buy",
