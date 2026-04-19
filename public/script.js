@@ -64,8 +64,19 @@ document.addEventListener('DOMContentLoaded', () => {
     function displayDate(data) {
         const date = data.dataDate || '--';
         const time = data.pulledAt ? data.pulledAt.split('T')[1] || data.pulledAt.split(' ')[1] || '' : '';
+        return `As of ${date}${time ? ` ${time}` : ''}`;
+    }
+
+    function displayFetchInfo(data) {
         const fetches = data.fetchCount === undefined ? '--' : data.fetchCount;
-        return `As of ${date}${time ? ` ${time}` : ''} • Fetch time: ${data.fetchTime || '--'} • Fetches: ${fetches}`;
+        return `Fetch time: ${data.fetchTime || '--'} • Fetches: ${fetches}`;
+    }
+
+    function displayCurrency(data) {
+        const currency = data.financialCurrency || '--';
+        const rate = Number(data.usdFxRate);
+        const formattedRate = Number.isFinite(rate) ? rate.toFixed(4) : '--';
+        return `Native currency: ${currency} • USD rate: ${formattedRate}`;
     }
 
     function escapeAttr(value) {
@@ -239,11 +250,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderAnalystCards(data) {
         const rec = data.analystRecommendations || {};
         const counts = [
-            ['Strong Buy', rec.strongBuy || 0],
-            ['Buy', rec.buy || 0],
-            ['Hold', rec.hold || 0],
-            ['Sell', rec.sell || 0],
-            ['Strong Sell', rec.strongSell || 0],
+            ['Strong Buy', rec.strongBuy || 0, 'strong-buy'],
+            ['Buy', rec.buy || 0, 'buy'],
+            ['Hold', rec.hold || 0, 'hold'],
+            ['Sell', rec.sell || 0, 'sell'],
+            ['Strong Sell', rec.strongSell || 0, 'strong-sell'],
         ];
         const total = counts.reduce((sum, item) => sum + Number(item[1] || 0), 0);
         const rating = data.recommendationMean && data.recommendationMean !== '--'
@@ -261,9 +272,9 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="metric-group analyst-card">
                 <h3>Analyst Recommendations</h3>
                 <div class="rec-summary">${data.recommendationKey || '--'} • ${rating}/5 stars</div>
-                <div class="rec-grid">${counts.map(([label, count]) => {
+                <div class="rec-grid">${counts.map(([label, count, tone]) => {
                     const pct = total ? `${Math.round((count / total) * 100)}%` : '0%';
-                    return `<div class="rec-pill"><strong>${count}</strong><span>${label}</span><small>${pct}</small></div>`;
+                    return `<div class="rec-pill rec-${tone}"><strong>${count}</strong><span>${label}</span><small>${pct}</small></div>`;
                 }).join('')}</div>
             </div>
         </section>`;
@@ -300,6 +311,8 @@ document.addEventListener('DOMContentLoaded', () => {
         $('glass-card').style.display = 'block';
         $('result-ticker').textContent = ticker;
         $('result-data-date').textContent = 'As of --';
+        $('result-fetch-info').textContent = 'Fetch time: -- • Fetches: --';
+        $('result-currency-info').textContent = 'Native currency: -- • USD rate: --';
         incrementSearch(ticker);
 
         try {
@@ -315,6 +328,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const company = title ? title.querySelector('.company-name') : null;
             if (company) company.textContent = data.companyName || '--';
             $('result-data-date').textContent = displayDate(data);
+            $('result-fetch-info').textContent = displayFetchInfo(data);
+            $('result-currency-info').textContent = displayCurrency(data);
             updateResultStarButton(ticker);
             renderStats(data);
             renderStatements(data);
@@ -617,11 +632,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const starred = state.starredAccounts[starredKey(statementKey, row.label)];
         const growthOn = state.statementToggles[`${statementKey}:growth:${row.label}`];
         const marginOn = state.statementToggles[`${statementKey}:margin:${row.label}`];
-        let html = `<tr><td class="statement-actions">
+        let html = `<tr><td class="statement-action-cell"><div class="statement-actions">
             <button class="mini-btn ${starred ? 'on gold' : ''}" data-statement="${statementKey}" data-star-account="${row.label}">${starred ? 'Starred' : 'Star'}</button>
             <button class="mini-btn ${growthOn ? 'on blue' : ''}" data-statement="${statementKey}" data-toggle-ratio="growth" data-label="${row.label}">Growth</button>
             ${canMargin ? `<button class="mini-btn ${marginOn ? 'on green' : ''}" data-statement="${statementKey}" data-toggle-ratio="margin" data-label="${row.label}">Margin</button>` : ''}
-        </td><td>${row.label}</td>${(row.values || []).map(value => `<td>${formatSigned(value)}</td>`).join('')}</tr>`;
+        </div></td><td class="statement-label-cell">${row.label}</td>${(row.values || []).map(value => `<td>${formatSigned(value)}</td>`).join('')}</tr>`;
         if (growthOn) html += ratioRow('Growth', growthValues(row.values || []));
         if (marginOn) html += ratioRow('Margin', marginValues(row, periods, displayStatement));
         return html;

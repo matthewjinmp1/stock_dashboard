@@ -509,6 +509,8 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["marketCap"], "500B")
         self.assertEqual(payload["netCash"], "20B")
         self.assertEqual(payload["derivedEnterpriseValue"], "480B")
+        self.assertEqual(payload["financialCurrency"], "CNY")
+        self.assertEqual(payload["usdFxRate"], 0.138)
         self.assertEqual(payload["grossMargin"], "60%")
         self.assertEqual(payload["capexAdjIncome"], "6.67%")
         self.assertEqual(payload["priceCyEps"], "10")
