@@ -360,6 +360,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "short_float": self._extract_finviz_metric(html, "Short Float"),
             "market_cap": self._extract_finviz_metric(html, "Market Cap"),
             "enterprise_value": self._extract_finviz_metric(html, "Enterprise Value"),
+            "eps_this_y": self._extract_finviz_metric(html, "EPS this Y"),
+            "eps_next_y": self._extract_finviz_metric(html, "EPS next Y"),
         }
 
     def _latest_row_raw(self, statement, labels):
@@ -618,7 +620,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         rows = [{"label": label, "values": [rows_by_label[label].get(period, "--") for period in periods]} for label in preferred_order]
         return {"periods": periods, "rows": rows}
 
-    def fetch_yahoo_finance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0):
+    def fetch_yahoo_finance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics=None):
+        finviz_metrics = finviz_metrics or {}
         try:
             from http.cookiejar import CookieJar
 
@@ -765,18 +768,40 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             fd = res.get("financialData", {}) or {}
             et = (res.get("earningsTrend", {}) or {}).get("trend", []) or []
+            
+            if not et:
+                try:
+                    analysis_url = f"https://finance.yahoo.com/quote/{ticker}/analyst-insights/"
+                    html = self._counted_open(None, analysis_url, timeout=8).read().decode("utf-8", errors="ignore")
+                    for match in re.finditer(r'<script[^>]*data-sveltekit-fetched[^>]*>(.*?)</script>', html, re.DOTALL):
+                        try:
+                            body = json.loads(match.group(1)).get("body", "{}")
+                            if isinstance(body, str): body = json.loads(body)
+                            et_fallback = body.get("quoteSummary", {}).get("result", [{}])[0].get("earningsTrend", {}).get("trend", [])
+                            if et_fallback:
+                                et = et_fallback
+                                break
+                        except Exception:
+                            pass
+                    if not et:
+                        print("Fallback analysis page: no earningsTrend found in SvelteKit JSON.")
+                except Exception as e:
+                    print("Fallback analysis page error:", e)
+
             dks = res.get("defaultKeyStatistics", {}) or {}
             price = res.get("price", {}) or {}
 
             if not res and not ts_res and not chart_meta:
-                return self._empty_fetch_tuple(ticker)
+                if not income_statement.get("rows") and not balance_statement.get("rows") and not cash_flow_statement.get("rows"):
+                    return self._empty_fetch_tuple(ticker)
 
-            revenue_raw = series_sum("quarterlyTotalRevenue") or self._raw(fd.get("totalRevenue"))
+
+            revenue_raw = series_sum("quarterlyTotalRevenue") or self._raw(fd.get("totalRevenue")) or self._latest_row_raw(income_statement, ["Total Revenue", "Revenue"])
             operating_income_raw = series_sum("quarterlyOperatingIncome") or self._latest_row_raw(income_statement, ["Operating Income"])
             capex_raw = series_sum("quarterlyCapitalExpenditure", absolute=True) or abs(self._latest_row_raw(cash_flow_statement, ["Capital Expenditures", "Capital Expenditure"]))
             da_raw = series_sum("quarterlyDepreciationAndAmortization") or self._latest_row_raw(cash_flow_statement, ["Depreciation And Amortization"])
-            gross_ppe_raw = series_latest("annualGrossPPE") or self._latest_row_raw(balance_statement, ["Gross PP&E", "Gross PPE"])
-            net_fixed_assets_raw = series_latest("annualNetPPE") or self._latest_row_raw(balance_statement, ["Net PP&E", "Net PPE"])
+            gross_ppe_raw = series_latest("annualGrossPPE") or self._latest_row_raw(balance_statement, ["Gross PP&E", "Gross PPE", "Property, Plant & Equipment", "Net PP&E", "Net PPE"])
+            net_fixed_assets_raw = series_latest("annualNetPPE") or self._latest_row_raw(balance_statement, ["Net PP&E", "Net PPE", "Property, Plant & Equipment"])
             receivables_raw = series_latest("annualAccountsReceivable") or self._latest_row_raw(balance_statement, ["Accounts Receivable"])
             inventory_raw = series_latest("annualInventory") or self._latest_row_raw(balance_statement, ["Inventory"])
             accounts_payable_raw = series_latest("annualAccountsPayable") or self._latest_row_raw(balance_statement, ["Accounts Payable"])
@@ -846,6 +871,37 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     ny_growth_raw = self._raw(revenue_est.get("growth"), None)
                     ny_eps_raw = self._eps_value(earnings_est.get("avg"))
                     ny_eps_growth_raw = self._raw(earnings_est.get("growth"), None)
+            if cy_eps_growth_raw is None:
+                finviz_cy_eps = finviz_metrics.get("eps_this_y")
+                if finviz_cy_eps and finviz_cy_eps != "--":
+                    try:
+                        cy_eps_growth_raw = float(finviz_cy_eps.strip('%')) / 100
+                    except Exception:
+                        pass
+            if ny_eps_growth_raw is None:
+                finviz_ny_eps = finviz_metrics.get("eps_next_y")
+                if finviz_ny_eps and finviz_ny_eps != "--":
+                    try:
+                        ny_eps_growth_raw = float(finviz_ny_eps.strip('%')) / 100
+                    except Exception:
+                        pass
+                        
+            if cy_growth_raw is None or ny_growth_raw is None:
+                try:
+                    forecast_url = f"https://stockanalysis.com/stocks/{ticker.lower()}/forecast/"
+                    html = self._counted_open(None, forecast_url, timeout=8).read().decode("utf-8", errors="ignore")
+                    data_match = re.search(r"financialData:\{(.*?)\},map:\[", html, re.DOTALL)
+                    if data_match:
+                        data_str = data_match.group(1)
+                        m_rev = re.search(r"revenueGrowth:\[(.*?)\]", data_str)
+                        if m_rev:
+                            arr = self._stockanalysis_array(m_rev.group(1))
+                            if len(arr) > 0 and cy_growth_raw is None:
+                                cy_growth_raw = arr[0]
+                            if len(arr) > 1 and ny_growth_raw is None:
+                                ny_growth_raw = arr[1]
+                except Exception as e:
+                    print("Fallback StockAnalysis forecast error:", e)
 
             statement_currency = "USD"
             for item in ts_res:
@@ -1053,6 +1109,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ticker,
             finviz_ev_raw=finviz_enterprise_value_raw,
             finviz_market_cap_raw=finviz_market_cap_raw,
+            finviz_metrics=finviz_metrics,
         )))
 
         if result.get("company_name") == ticker and result.get("valuation_basis") == "unavailable":
@@ -1155,6 +1212,6 @@ class ReusableTCPServer(socketserver.TCPServer):
         self.socket.bind(self.server_address)
 
 if __name__ == '__main__':
-    with ReusableTCPServer(("", PORT), Handler) as httpd:
+    with ReusableTCPServer(("127.0.0.1", PORT), Handler) as httpd:
         print("Serving at port", PORT)
         httpd.serve_forever()
