@@ -1,0 +1,26 @@
+::1 - - [25/Mar/2026 19:26:05] "GET / HTTP/1.1" 200 -
+::1 - - [25/Mar/2026 19:26:05] code 404, message File not found
+::1 - - [25/Mar/2026 19:26:05] "GET /favicon.ico HTTP/1.1" 404 -
+::1 - - [25/Mar/2026 19:26:09] "GET /public/ HTTP/1.1" 200 -
+::1 - - [25/Mar/2026 19:26:09] "GET /public/styles.css?v=20 HTTP/1.1" 200 -
+::1 - - [25/Mar/2026 19:26:09] "GET /public/script.js?v=20 HTTP/1.1" 200 -
+::1 - - [25/Mar/2026 19:26:33] code 404, message File not found
+::1 - - [25/Mar/2026 19:26:33] "GET /api/short-interest/AAPL HTTP/1.1" 404 -
+::1 - - [25/Mar/2026 19:26:45] "GET / HTTP/1.1" 200 -
+::1 - - [25/Mar/2026 19:26:54] "GET /public/index.html HTTP/1.1" 200 -
+::1 - - [25/Mar/2026 19:26:54] "GET /public/script.js?v=20 HTTP/1.1" 304 -
+::1 - - [25/Mar/2026 19:27:02] code 404, message File not found
+::1 - - [25/Mar/2026 19:27:02] "GET /api/short-interest/AAPL HTTP/1.1" 404 -
+::1 - - [25/Mar/2026 19:27:15] "GET / HTTP/1.1" 200 -
+::1 - - [25/Mar/2026 19:27:22] "GET /server.log HTTP/1.1" 200 -
+::1 - - [25/Mar/2026 19:27:29] "GET /test.log HTTP/1.1" 200 -
+::1 - - [25/Mar/2026 19:27:39] code 404, message File not found
+::1 - - [25/Mar/2026 19:27:39] "GET /api/quote?ticker=AAPL HTTP/1.1" 404 -
+::1 - - [25/Mar/2026 19:27:55] "GET /server.py HTTP/1.1" 200 -
+::1 - - [25/Mar/2026 19:29:02] "GET /server.py HTTP/1.1" 304 -
+::1 - - [25/Mar/2026 19:29:13] "GET /public/script.js HTTP/1.1" 200 -
+::1 - - [25/Mar/2026 19:29:26] "GET /public/index.html HTTP/1.1" 304 -
+::1 - - [25/Mar/2026 19:29:26] "GET /public/script.js?v=20 HTTP/1.1" 304 -
+::1 - - [25/Mar/2026 19:29:26] "GET /public/styles.css?v=20 HTTP/1.1" 304 -
+::1 - - [25/Mar/2026 19:46:36] code 404, message File not found
+::1 - - [25/Mar/2026 19:46:36] "GET /api/quote?ticker=NVDA HTTP/1.1" 404 -

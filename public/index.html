@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Analysis Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=28">
+</head>
+
+<body>
+    <div class="background-elements">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <main class="container">
+        <header>
+            <h1>Stock Analysis <span>Dashboard</span></h1>
+            <p>Comprehensive real-time stock metrics powered by Finviz & Yahoo Finance.</p>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" id="tab-scanner">Scanner</button>
+            <button class="tab-btn" id="tab-watchlist">Watchlist</button>
+        </nav>
+
+        <div id="view-scanner" class="view-section active">
+            <section class="search-section">
+                <form id="search-form">
+                    <div class="input-group">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            class="search-icon" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" id="ticker-input" placeholder="Enter stock ticker (e.g. AAPL, GME)"
+                            autocomplete="off" required>
+                        <button type="submit" id="search-btn">Scan</button>
+                    </div>
+                </form>
+            </section>
+
+            <section id="result-container" class="hidden">
+                <div class="glass-card result-card" id="glass-card">
+                    <div class="card-header">
+                        <div>
+                            <h2 id="result-ticker">AAPL</h2>
+                            <div class="stat-label" id="result-data-date">As of --</div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap: 0.75rem;">
+                            <button id="refresh-data-btn" class="tab-btn" type="button">Refresh data</button>
+                            <span class="badge">Finviz & Yahoo</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="loader hidden" id="loading-spinner"></div>
+                        <div class="stats-grid hidden" id="result-stats">
+                            <div class="stat-box">
+                                <span class="stat-label">Adj Margin</span>
+                                <div class="value-display" id="result-margin">--</div>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label">CY Growth</span>
+                                <div class="value-display" id="result-cyg">--</div>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label">NY Growth</span>
+                                <div class="value-display" id="result-nyg">--</div>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label clickable-metric" id="result-gp-3y-growth-label">3Y GP Growth</span>
+                                <div class="value-display" id="result-gp-3y-growth">--</div>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label">Short Float</span>
+                                <div class="value-display" id="result-value">--</div>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label">EV/Adj EBIT</span>
+                                <div class="value-display clickable-metric" id="result-ev-ebit">--</div>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label">EV/CY EBIT</span>
+                                <div class="value-display clickable-metric" id="result-evcy">--</div>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label">EV/NY EBIT</span>
+                                <div class="value-display clickable-metric" id="result-evny">--</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="error-message" class="error-text hidden"></div>
+            </section>
+        </div> <!-- End view-scanner -->
+
+        <!-- Watchlist View -->
+        <div id="view-watchlist" class="view-section hidden">
+            <section class="watchlist-input-section">
+                <form id="watchlist-form">
+                    <div class="input-group">
+                        <input type="text" id="watchlist-ticker-input"
+                            placeholder="Add ticker to watchlist (e.g. AAPL)..." autocomplete="off" required>
+                        <button type="submit">Add</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="watchlist-table-container glass-card" style="margin-top: 2rem;">
+                <table class="watchlist-table" id="watchlist-table">
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Short Float</th>
+                            <th>Ent. Value</th>
+                            <th>Mkt Cap</th>
+                            <th>EV/Adj EBIT</th>
+                            <th>EV/CY EBIT</th>
+                            <th>EV/NY EBIT</th>
+                            <th>Adj Margin</th>
+                            <th>CY Growth</th>
+                            <th>NY Growth</th>
+                            <th>Net Debt</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="watchlist-body">
+                        <!-- populated via js -->
+                    </tbody>
+                </table>
+            </section>
+        </div>
+
+        <!-- Dedicated Calculation View -->
+        <div id="view-calc" class="view-section hidden">
+            <div class="flex-between" style="margin-bottom: 1.5rem; align-items: center;">
+                <button id="calc-back-btn" class="tab-btn">&larr; Back to Results</button>
+                <div class="badge" id="calc-ticker-badge">--</div>
+            </div>
+
+            <div class="glass-card calc-detail-card" style="max-width: 600px; margin: 0 auto; padding: 2.5rem;">
+                <div class="card-header" style="margin-bottom: 2rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 1rem;">
+                    <h2 style="margin: 0; font-size: 1.8rem; color: var(--text-primary);">
+                        Valuation <span id="calc-title" style="color: var(--accent-blue);">Breakdown</span>
+                    </h2>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.5rem;">Detailed mathematical derivation of the selected metric.</p>
+                </div>
+                
+                <div class="calc-main-content">
+                    <div class="calc-row-large">
+                        <span class="calc-label" id="calc-numerator-label">Current Enterprise Value</span>
+                        <div class="calc-val-large" id="calc-ev-val">--</div>
+                    </div>
+                    
+                    <div class="calc-math-op">
+                        <div class="divider-line"></div>
+                        <span class="math-operator">DIGESTED BY</span>
+                        <div class="divider-line"></div>
+                    </div>
+
+                    <div class="calc-row-large">
+                        <span class="calc-label" id="calc-divisor-label">Divisor</span>
+                        <div class="calc-val-large" id="calc-divisor-val" style="color: #60a5fa;">--</div>
+                    </div>
+
+                    <div class="calc-math-op">
+                        <div class="divider-line"></div>
+                        <span class="math-operator">EQUALS</span>
+                        <div class="divider-line"></div>
+                    </div>
+                    
+                    <div class="calc-result-box">
+                        <span class="calc-label" id="calc-result-label" style="color: var(--text-primary); font-weight: 700;">Final Valuation Multiple</span>
+                        <div class="calc-result-val" id="calc-result-val">--</div>
+                    </div>
+
+                    <ul class="calc-list" id="calc-breakdown-list" style="margin-top: 1.5rem;">
+                        <li><span class="calc-label">Breakdown</span><span class="calc-val">--</span></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="script.js?v=28"></script>
+</body>
+
+</html>
