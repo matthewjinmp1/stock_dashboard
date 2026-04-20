@@ -1035,6 +1035,30 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     growth = (end / abs(start)) ** (1 / years) - 1
                 return growth, start, end, label
 
+            def latest_annual_growth(statement, labels):
+                def parse_period_date(period):
+                    text = str(period)
+                    for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
+                        try:
+                            return datetime.datetime.strptime(text, fmt).date()
+                        except ValueError:
+                            continue
+                    return None
+
+                points = annual_statement_points(statement, labels)
+                if len(points) < 2:
+                    return None, 0.0
+                dated_points = [
+                    (parse_period_date(period), idx, raw)
+                    for idx, (period, raw) in enumerate(points)
+                ]
+                dated_points.sort(key=lambda point: (point[0] or datetime.date.min, point[1]))
+                _latest_date, _latest_idx, latest = dated_points[-1]
+                _prior_date, _prior_idx, prior = dated_points[-2]
+                if not prior:
+                    return None, latest
+                return (latest / abs(prior)) - 1, latest
+
             gp_3y_growth_raw, gp_3y_start_raw, gp_3y_end_raw, gp_3y_label = three_year_growth(income_statement)
             rnd_raw = self._latest_row_raw(income_statement, ["Research & Development", "Research and Development"])
 
@@ -1087,6 +1111,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 ny_growth_raw = arr[1]
                 except Exception as e:
                     print("Fallback StockAnalysis forecast error:", e)
+
+            if cy_growth_raw is None or ny_growth_raw is None or not cy_revenue_raw or not ny_revenue_raw:
+                revenue_growth_fallback, latest_annual_revenue_raw = latest_annual_growth(
+                    income_statement,
+                    ["Total Revenue", "Revenue"],
+                )
+                revenue_base_raw = latest_annual_revenue_raw or revenue_raw
+                if cy_growth_raw is None:
+                    if cy_revenue_raw and revenue_base_raw:
+                        cy_growth_raw = (cy_revenue_raw / abs(revenue_base_raw)) - 1
+                    elif revenue_growth_fallback is not None:
+                        cy_growth_raw = revenue_growth_fallback
+                if not cy_revenue_raw and revenue_base_raw and cy_growth_raw is not None:
+                    cy_revenue_raw = revenue_base_raw * (1 + cy_growth_raw)
+                if ny_growth_raw is None and ny_revenue_raw and cy_revenue_raw:
+                    ny_growth_raw = (ny_revenue_raw / abs(cy_revenue_raw)) - 1
+                if not ny_revenue_raw and cy_revenue_raw and ny_growth_raw is not None:
+                    ny_revenue_raw = cy_revenue_raw * (1 + ny_growth_raw)
 
             statement_currency = "USD"
             for item in ts_res:

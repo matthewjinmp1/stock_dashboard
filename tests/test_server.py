@@ -383,6 +383,50 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(result["gp_3y_growth"], "11.9%")
         self.assertEqual(result["rnd_adj_income"], "25%")
 
+    def test_fills_forward_revenue_growth_from_annual_history_when_estimates_are_missing(self):
+        quote_summary_payload = make_quote_summary_payload()
+        quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"] = []
+        timeseries_payload = make_timeseries_payload()
+        income_statement = {
+            "periods": ["TTM", "2025-12-31", "2024-12-31", "2023-12-31"],
+            "rows": [
+                {"label": "Total Revenue", "values": ["100", "100", "90", "80"]},
+                {"label": "Operating Income", "values": ["20", "20", "18", "16"]},
+            ],
+        }
+
+        def counted_open(_opener, url, timeout=3):
+            if "quoteSummary" in url:
+                return FakeResponse(json.dumps(quote_summary_payload))
+            if "fundamentals-timeseries" in url:
+                return FakeResponse(json.dumps(timeseries_payload))
+            if "analyst-insights" in url or "stockanalysis.com" in url:
+                return FakeResponse("")
+            raise AssertionError(f"Unexpected URL: {url}")
+
+        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
+             mock.patch("server.urllib.request.install_opener"), \
+             mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
+             mock.patch.object(self.handler, "get_usd_fx_rate", return_value=1.0), \
+             mock.patch.object(self.handler, "_counted_open", side_effect=counted_open), \
+             mock.patch.object(self.handler, "build_income_statement_from_page", return_value=income_statement), \
+             mock.patch.object(self.handler, "build_balance_sheet_from_page", return_value=fake_balance_statement()), \
+             mock.patch.object(self.handler, "build_cash_flow_statement_from_page", return_value=fake_statement("Cash")):
+            result = dict(zip(FETCH_RESULT_FIELDS, self.handler.fetch_yahoo_finance_data(
+                "ACME",
+                finviz_ev_raw=240,
+                finviz_market_cap_raw=180,
+            )))
+
+        self.assertEqual(result["cy_growth"], "11.1%")
+        self.assertEqual(result["ny_growth"], "11.1%")
+        self.assertEqual(result["cy_revenue"], "111")
+        self.assertEqual(result["ny_revenue"], "123")
+        self.assertEqual(result["cy_adj_inc"], "26.7")
+        self.assertEqual(result["ny_adj_inc"], "29.6")
+        self.assertEqual(result["ev_cy_ebit"], "9")
+        self.assertEqual(result["ev_ny_ebit"], "8.1")
+
     def test_falls_back_to_actual_annual_eps_when_year_ago_matches_current_year(self):
         quote_summary_payload = make_quote_summary_payload()
         quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"][0]["earningsEstimate"] = {
