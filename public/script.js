@@ -93,11 +93,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
+    function metricInputWidth(value) {
+        const length = String(value ?? '').length || 2;
+        return `${Math.max(2, Math.min(length, 8))}ch`;
+    }
+
     function metric(label, value, calcType = '', editType = '') {
         const link = calcType ? ' metric-title-link' : '';
         const displayValue = formatSigned(value || '--');
         const editableValue = editType
-            ? `<input class="value-display metric-edit-input" type="text" value="${escapeAttr(displayValue)}" data-edit-assumption="${editType}" data-original-value="${escapeAttr(displayValue)}" aria-label="Edit ${escapeAttr(label)}">`
+            ? `<input class="value-display metric-edit-input" type="text" value="${escapeAttr(displayValue)}" style="--metric-input-width: ${metricInputWidth(displayValue)}" data-edit-assumption="${editType}" data-original-value="${escapeAttr(displayValue)}" aria-label="Edit ${escapeAttr(label)}">`
             : `<div class="value-display">${displayValue}</div>`;
         return `<div class="stat-box">
             <span class="stat-label${link}" data-calc="${calcType}">${label}</span>
@@ -162,10 +167,15 @@ document.addEventListener('DOMContentLoaded', () => {
             node.addEventListener('click', () => openCalc(node.dataset.calc));
         });
         stats.querySelectorAll('[data-edit-assumption]').forEach((node) => {
+            const syncWidth = () => {
+                node.style.setProperty('--metric-input-width', metricInputWidth(node.value || node.dataset.editingOriginalValue || node.dataset.originalValue || '--'));
+            };
             node.addEventListener('focus', () => {
                 node.dataset.editingOriginalValue = node.value;
                 node.value = '';
+                syncWidth();
             });
+            node.addEventListener('input', syncWidth);
             node.addEventListener('blur', () => commitAssumptionInput(node));
             node.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter') {
@@ -756,9 +766,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     $('calc-back-btn').addEventListener('click', () => {
+        document.body.classList.add('instant-view-return');
         document.querySelector('.tabs').classList.remove('hidden');
         showView('scanner');
-        requestAnimationFrame(() => window.scrollTo(0, state.previousScroll || 0));
+        window.scrollTo(0, state.previousScroll || 0);
+        requestAnimationFrame(() => {
+            document.body.classList.remove('instant-view-return');
+        });
     });
 
     window.removeTicker = (ticker) => {
