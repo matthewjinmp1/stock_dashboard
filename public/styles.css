@@ -313,6 +313,16 @@ button:active {
     min-height: 125px;
 }
 
+.metric-group.metric-count-1 .metric-group-grid {
+    grid-template-columns: minmax(160px, 240px);
+    justify-content: center;
+}
+
+.metric-group.metric-count-2 .metric-group-grid {
+    grid-template-columns: repeat(2, minmax(160px, 240px));
+    justify-content: center;
+}
+
 .metric-title-link {
     border-bottom: 2px dashed rgba(148, 163, 184, 0.45);
     cursor: pointer;

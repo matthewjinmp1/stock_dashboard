@@ -111,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function metricGroup(title, items) {
-        return `<section class="metric-group">
+        return `<section class="metric-group metric-count-${items.length}">
             <h3>${title}</h3>
             <div class="metric-group-grid">${items.join('')}</div>
         </section>`;
