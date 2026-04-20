@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(python3 -c ':*)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(awk -F: '$2 < 200 {print}')",
+      "Bash(python3 -m pytest tests/test_server.py::ServerTest::test_restores_three_year_growth_and_rnd_spending_metrics -v)",
+      "Bash(python3 -m pytest tests/test_server.py -k \"three_year\" -v)"
     ]
   }
 }

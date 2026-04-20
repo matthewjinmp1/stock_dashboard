@@ -185,7 +185,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "ev_adj_ebit": "16",
             "cy_growth": "10%",
             "ny_growth": "12%",
-            "gp_3y_growth": "36.4%",
+            "gp_3y_growth": "10.9%",
             "gp_3y_start": "44B",
             "gp_3y_end": "60B",
             "gp_3y_label": "3Y Annual GP Growth",
