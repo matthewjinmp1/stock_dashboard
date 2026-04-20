@@ -118,6 +118,9 @@ def save_cache(cache_data):
         pass
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    _yahoo_crumb_cache = None
+    _yahoo_crumb_cache_at = 0
+
     def build_test_payload(self, pulled_at=None):
         today = datetime.date.today().isoformat()
         pulled_at = pulled_at or datetime.datetime.now().isoformat(timespec="seconds")
@@ -339,8 +342,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return urllib.request.urlopen(url, timeout=timeout)
 
     def get_yahoo_crumb(self, opener=None):
+        cached = getattr(Handler, "_yahoo_crumb_cache", None)
+        cached_at = getattr(Handler, "_yahoo_crumb_cache_at", 0) or 0
+        if cached and time.time() - cached_at < 60 * 60:
+            return cached
         response = self._counted_open(opener, "https://query1.finance.yahoo.com/v1/test/getcrumb", timeout=3)
-        return response.read().decode("utf-8", errors="ignore").strip()
+        crumb = response.read().decode("utf-8", errors="ignore").strip()
+        if crumb:
+            Handler._yahoo_crumb_cache = crumb
+            Handler._yahoo_crumb_cache_at = time.time()
+        return crumb
 
     def get_usd_fx_rate(self, currency, opener=None):
         currency = (currency or "USD").upper()
@@ -631,6 +642,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return self.build_statement_from_timeseries_results(selected_results, CASH_FLOW_STATEMENT_TYPES, formatter or self._format_money)
 
     def _extract_timeseries_results_from_page(self, ticker, page_opener):
+        cache_key = ((ticker or "").upper(), id(page_opener))
+        page_cache = getattr(self, "_yahoo_statement_page_cache", None)
+        if page_cache is None:
+            page_cache = {}
+            self._yahoo_statement_page_cache = page_cache
+        if cache_key in page_cache:
+            return page_cache[cache_key]
         url = f"https://finance.yahoo.com/quote/{ticker}/financials/"
         html = page_opener.open(url, timeout=10).read().decode("utf-8", errors="ignore")
         results = []
@@ -643,6 +661,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 results.extend(body.get("timeseries", {}).get("result", []) or [])
             except Exception:
                 continue
+        page_cache[cache_key] = results
         return results
 
     def build_income_statement_from_page(self, ticker, page_opener=None, _identity_formatter=None, formatter=None):
@@ -858,6 +877,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return opener
 
             data_opener = yahoo_opener()
+            self._yahoo_statement_page_cache = {}
 
             res = {}
             fd = {}
@@ -884,7 +904,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ]
             ts_res = []
             try:
-                chunk_size = 35
+                chunk_size = 70
                 for idx in range(0, len(type_names), chunk_size):
                     ts_types = ",".join(type_names[idx:idx + chunk_size])
                     ts_url = (
@@ -962,15 +982,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             except Exception:
                 pass
 
-            chart_meta = {}
-            try:
-                chart_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=1d"
-                chart = json.loads(self._counted_open(data_opener, chart_url, timeout=3).read().decode("utf-8"))
-                chart_results = (chart.get("chart", {}) or {}).get("result", []) or []
-                chart_meta = chart_results[0].get("meta", {}) if chart_results else {}
-            except Exception:
-                chart_meta = {}
-
             try:
                 quote_opener = yahoo_opener()
                 crumb = self.get_yahoo_crumb(quote_opener)
@@ -989,14 +1000,32 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             fd = res.get("financialData", {}) or {}
             et = (res.get("earningsTrend", {}) or {}).get("trend", []) or []
+
+            analysis_trends_cache = None
+            def yahoo_analysis_trends_once():
+                nonlocal analysis_trends_cache
+                if analysis_trends_cache is None:
+                    analysis_trends_cache = self._fetch_yahoo_analysis_trends(ticker)
+                return analysis_trends_cache
             
             if not et:
-                et = self._fetch_yahoo_analysis_trends(ticker)
+                et = yahoo_analysis_trends_once()
                 if not et:
                     print("Fallback analysis page: no earningsTrend found in SvelteKit JSON.")
 
             dks = res.get("defaultKeyStatistics", {}) or {}
             price = res.get("price", {}) or {}
+
+            chart_meta = {}
+            quote_price_raw = self._raw(price.get("regularMarketPrice")) or self._raw(fd.get("currentPrice"))
+            if not quote_price_raw or not price.get("currency"):
+                try:
+                    chart_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=1d"
+                    chart = json.loads(self._counted_open(data_opener, chart_url, timeout=3).read().decode("utf-8"))
+                    chart_results = (chart.get("chart", {}) or {}).get("result", []) or []
+                    chart_meta = chart_results[0].get("meta", {}) if chart_results else {}
+                except Exception:
+                    chart_meta = {}
 
             if not res and not ts_res and not chart_meta:
                 if not income_statement.get("rows") and not balance_statement.get("rows") and not cash_flow_statement.get("rows"):
@@ -1162,7 +1191,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             apply_estimate_trends(et)
 
             if cy_growth_raw is None or ny_growth_raw is None or not cy_revenue_raw or not ny_revenue_raw:
-                yahoo_analysis_trends = self._fetch_yahoo_analysis_trends(ticker)
+                yahoo_analysis_trends = yahoo_analysis_trends_once()
                 if yahoo_analysis_trends:
                     apply_estimate_trends(yahoo_analysis_trends, overwrite=True)
 
