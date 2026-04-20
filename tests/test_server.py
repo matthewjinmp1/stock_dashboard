@@ -468,7 +468,7 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(result["cy_revenue"], "120")
         self.assertEqual(result["ny_revenue"], "150")
 
-    def test_fills_distinct_forward_growth_from_stockanalysis_forecast_shape(self):
+    def test_uses_stockanalysis_forecast_revenue_without_substituting_growth(self):
         quote_summary_payload = make_quote_summary_payload()
         quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"] = []
         timeseries_payload = make_timeseries_payload()
@@ -510,8 +510,8 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
                 finviz_market_cap_raw=180,
             )))
 
-        self.assertEqual(result["cy_growth"], "30%")
-        self.assertEqual(result["ny_growth"], "15.4%")
+        self.assertEqual(result["cy_growth"], "--")
+        self.assertEqual(result["ny_growth"], "--")
         self.assertEqual(result["cy_revenue"], "130")
         self.assertEqual(result["ny_revenue"], "150")
 
@@ -529,12 +529,20 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         yahoo_trends = [
             {
                 "period": "0y",
-                "revenueEstimate": {"avg": {"raw": 328.27}, "growth": {"raw": 0.1652}},
+                "revenueEstimate": {
+                    "avg": {"raw": 328.27},
+                    "growth": {"raw": 0.188},
+                    "yearAgoRevenue": {"raw": 281.72},
+                },
                 "earningsEstimate": {"avg": {"raw": 29.6}, "yearAgoEps": {"raw": 23.49}},
             },
             {
                 "period": "+1y",
-                "revenueEstimate": {"avg": {"raw": 379.1}, "growth": {"raw": 0.1549}},
+                "revenueEstimate": {
+                    "avg": {"raw": 379.1},
+                    "growth": {"raw": 0.157},
+                    "yearAgoRevenue": {"raw": 328.27},
+                },
                 "earningsEstimate": {"avg": {"raw": 34.38}, "growth": {"raw": 0.1615}},
             },
         ]

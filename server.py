@@ -1105,11 +1105,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             cy_revenue_raw = ny_revenue_raw = 0
             cy_growth_raw = ny_growth_raw = None
+            cy_revenue_from_yahoo = ny_revenue_from_yahoo = False
             cy_eps_raw = ny_eps_raw = year_ago_eps_raw = 0
             cy_eps_growth_raw = ny_eps_growth_raw = None
 
-            def apply_estimate_trends(trends, overwrite=False):
+            def estimate_growth_from_yahoo(revenue_est):
+                revenue_avg = self._raw(revenue_est.get("avg"))
+                year_ago_revenue = (
+                    self._raw(revenue_est.get("yearAgoRevenue"), None)
+                    or self._raw(revenue_est.get("yearAgoSales"), None)
+                )
+                if revenue_avg and year_ago_revenue:
+                    return (revenue_avg / abs(year_ago_revenue)) - 1
+                return self._raw(revenue_est.get("growth"), None)
+
+            def apply_estimate_trends(trends, overwrite=False, source="yahoo"):
                 nonlocal cy_revenue_raw, ny_revenue_raw, cy_growth_raw, ny_growth_raw
+                nonlocal cy_revenue_from_yahoo, ny_revenue_from_yahoo
                 nonlocal cy_eps_raw, ny_eps_raw, year_ago_eps_raw, cy_eps_growth_raw, ny_eps_growth_raw
                 for trend in trends or []:
                     revenue_est = trend.get("revenueEstimate", {}) or {}
@@ -1117,12 +1129,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     period = trend.get("period")
                     if period == "0y":
                         revenue_avg = self._raw(revenue_est.get("avg"))
-                        revenue_growth = self._raw(revenue_est.get("growth"), None)
+                        revenue_growth = estimate_growth_from_yahoo(revenue_est)
                         eps_avg = self._eps_value(earnings_est.get("avg"))
                         year_ago_eps = self._eps_value(earnings_est.get("yearAgoEps"))
                         eps_growth = self._raw(earnings_est.get("growth"), None)
                         if revenue_avg and (overwrite or not cy_revenue_raw):
                             cy_revenue_raw = revenue_avg
+                            cy_revenue_from_yahoo = source == "yahoo"
                         if revenue_growth is not None and (overwrite or cy_growth_raw is None):
                             cy_growth_raw = revenue_growth
                         if eps_avg and (overwrite or not cy_eps_raw):
@@ -1133,11 +1146,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             cy_eps_growth_raw = eps_growth
                     elif period == "+1y":
                         revenue_avg = self._raw(revenue_est.get("avg"))
-                        revenue_growth = self._raw(revenue_est.get("growth"), None)
+                        revenue_growth = estimate_growth_from_yahoo(revenue_est)
                         eps_avg = self._eps_value(earnings_est.get("avg"))
                         eps_growth = self._raw(earnings_est.get("growth"), None)
                         if revenue_avg and (overwrite or not ny_revenue_raw):
                             ny_revenue_raw = revenue_avg
+                            ny_revenue_from_yahoo = source == "yahoo"
                         if revenue_growth is not None and (overwrite or ny_growth_raw is None):
                             ny_growth_raw = revenue_growth
                         if eps_avg and (overwrite or not ny_eps_raw):
@@ -1176,21 +1190,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         cy_revenue_raw = forecast_revenues[0][1]
                     if len(forecast_revenues) > 1 and not ny_revenue_raw:
                         ny_revenue_raw = forecast_revenues[1][1]
-                    forecast_growth = self._stockanalysis_estimate_points(html, "revenueGrowth", percent=True)
-                    if len(forecast_growth) > 0 and cy_growth_raw is None:
-                        cy_growth_raw = forecast_growth[0][1]
-                    if len(forecast_growth) > 1 and ny_growth_raw is None:
-                        ny_growth_raw = forecast_growth[1][1]
                     data_match = re.search(r"financialData:\{(.*?)\},map:\[", html, re.DOTALL)
                     if data_match:
                         data_str = data_match.group(1)
                         m_rev = re.search(r"revenueGrowth:\[(.*?)\]", data_str)
                         if m_rev:
                             arr = self._stockanalysis_array(m_rev.group(1))
-                            if len(arr) > 0 and cy_growth_raw is None:
-                                cy_growth_raw = arr[0]
-                            if len(arr) > 1 and ny_growth_raw is None:
-                                ny_growth_raw = arr[1]
                 except Exception as e:
                     print("Fallback StockAnalysis forecast error:", e)
 
@@ -1201,13 +1206,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 )
                 revenue_base_raw = latest_annual_revenue_raw or revenue_raw
                 if cy_growth_raw is None:
-                    if cy_revenue_raw and revenue_base_raw:
+                    if cy_revenue_from_yahoo and cy_revenue_raw and revenue_base_raw:
                         cy_growth_raw = (cy_revenue_raw / abs(revenue_base_raw)) - 1
-                    elif revenue_growth_fallback is not None:
+                    elif not cy_revenue_raw and revenue_growth_fallback is not None:
                         cy_growth_raw = revenue_growth_fallback
                 if not cy_revenue_raw and revenue_base_raw and cy_growth_raw is not None:
                     cy_revenue_raw = revenue_base_raw * (1 + cy_growth_raw)
-                if ny_growth_raw is None and ny_revenue_raw and cy_revenue_raw:
+                if ny_growth_raw is None and ny_revenue_from_yahoo and cy_revenue_from_yahoo and ny_revenue_raw and cy_revenue_raw:
                     ny_growth_raw = (ny_revenue_raw / abs(cy_revenue_raw)) - 1
                 if not ny_revenue_raw and cy_revenue_raw and ny_growth_raw is not None:
                     ny_revenue_raw = cy_revenue_raw * (1 + ny_growth_raw)
