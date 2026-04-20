@@ -128,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('Gross Margin', data.grossMargin),
             ]),
             metricGroup('Growth', [
-                metric(data.gp_3y_label || '3Y GP Growth', data.gp_3y_growth || '--', 'gp_3y_growth'),
+                metric(data.gp_3y_label || '3Y Annual GP Growth', data.gp_3y_growth || '--', 'gp_3y_growth'),
                 metric('CY Growth', data.cy_growth, '', 'cy_growth'),
                 metric('NY Growth', data.ny_growth, '', 'ny_growth'),
                 metric('CY EPS Growth', data.currentYearEpsGrowth),
@@ -740,7 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ev_cy: ['EV / CY Op Inc', data.ev, 'CY Adj Op Inc', data.cy_adj_inc, data.ev_cy_ebit],
             ev_ny: ['EV / NY Op Inc', data.ev, 'NY Adj Op Inc', data.ny_adj_inc, data.ev_ny_ebit],
             adj_margin: ['Adj Margin', data.adj_income, 'Revenue', data.revenue, data.margin],
-            gp_3y_growth: ['3Y GP Growth', data.gp_3y_end || '--', 'Starting Value', data.gp_3y_start || '--', data.gp_3y_growth || '--'],
+            gp_3y_growth: ['3Y Annual GP Growth', data.gp_3y_end || '--', 'Starting Value', data.gp_3y_start || '--', data.gp_3y_growth || '--'],
             net_cash: ['Net Cash', data.netCash, 'Cash - Debt', '', data.netCash],
             roc: ['ROC', data.adj_income, 'NWC + Net Fixed Assets', '', data.roc],
             adj_ebit_gross_ppe: ['Adj Op Inc / Gross PP&E', data.adj_income, 'Gross PP&E', data.grossPpe, data.adjEbitGrossPpe],

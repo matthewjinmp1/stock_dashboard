@@ -377,7 +377,7 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
                 finviz_market_cap_raw=180,
             )))
 
-        self.assertEqual(result["gp_3y_label"], "3Y GP Growth")
+        self.assertEqual(result["gp_3y_label"], "3Y Annual GP Growth")
         self.assertEqual(result["gp_3y_start"], "40")
         self.assertEqual(result["gp_3y_end"], "56")
         self.assertEqual(result["gp_3y_growth"], "40%")
@@ -668,7 +668,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
 
         fetch_payload = (
             "143B", "46.7%", "68.5%", "18.9", "16.4", "143B", "83.1B", "42.2B", "2.89T", "20.3",
-            "16.4%", "15.4%", "43.4%", "146B", "209B", "3Y GP Growth", "40.1%", "153B", "177B", "2.86T", "31.2B", "2.89T", "305B", "46.7%", "0", "328B",
+            "16.4%", "15.4%", "43.4%", "146B", "209B", "3Y Annual GP Growth", "40.1%", "153B", "177B", "2.86T", "31.2B", "2.89T", "305B", "46.7%", "0", "328B",
             "378B", "323B", "44.1%", "58.3%", "40.9B", "52.2%", "43.1B", "230B", "69.9B", "938M", "27.7B", "USD",
             1.0, "Microsoft Corporation",
             {
@@ -731,7 +731,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
 
         fetch_payload = (
             "83.3B", "41.4%", "82%", "14", "11.9", "83.3B", "69.7B", "18.6B", "1.46T", "17.5",
-            "+25%", "+17.9%", "23.1%", "134B", "165B", "3Y GP Growth", "68.9%", "104B", "123B", "1.45T", "2.65B", "1.45T", "201B", "41.4%", "0", "251B",
+            "+25%", "+17.9%", "23.1%", "134B", "165B", "3Y Annual GP Growth", "68.9%", "104B", "123B", "1.45T", "2.65B", "1.45T", "201B", "41.4%", "0", "251B",
             "296B", "254B", "32.8%", "83.7%", "51.1B", "40.1%", "10.9B", "197B", "19.8B", "--", "8.89B", "USD",
             1.0, "Meta Platforms, Inc.", fake_statement("Income"), fake_statement("Balance"), fake_statement("Cash"),
             "574", "860", "614", "1144", "+49.7%", "1.34", "strong_buy",
@@ -776,7 +776,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
 
         fetch_payload = (
             "83.3B", "41.4%", "82%", "14", "11.9", "83.3B", "69.7B", "18.6B", "--", "17.5",
-            "25%", "17.9%", "23.1%", "134B", "165B", "3Y GP Growth", "68.9%", "104B", "123B", "1.45T", "2.65B", "1.45T", "201B", "41.4%", "0", "251B",
+            "25%", "17.9%", "23.1%", "134B", "165B", "3Y Annual GP Growth", "68.9%", "104B", "123B", "1.45T", "2.65B", "1.45T", "201B", "41.4%", "0", "251B",
             "296B", "254B", "32.8%", "83.7%", "51.1B", "40.1%", "10.9B", "197B", "19.8B", "--", "8.89B", "USD",
             1.0, "Meta Platforms, Inc.", fake_statement("Income"), fake_statement("Balance"), fake_statement("Cash"),
             "574", "860", "614", "1144", "49.7%", "1.34", "strong_buy",

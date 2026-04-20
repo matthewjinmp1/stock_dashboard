@@ -188,7 +188,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "gp_3y_growth": "36.4%",
             "gp_3y_start": "44B",
             "gp_3y_end": "60B",
-            "gp_3y_label": "3Y GP Growth",
+            "gp_3y_label": "3Y Annual GP Growth",
             "rndAdjIncome": "40%",
             "cy_adj_inc": "33B",
             "ny_adj_inc": "37B",
@@ -971,15 +971,34 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             def three_year_growth(statement):
                 gross_points = annual_statement_points(statement, ["Gross Profit"])
                 points = gross_points
-                label = "3Y GP Growth"
+                label = "3Y Annual GP Growth"
                 if len(points) < 2:
                     points = annual_statement_points(statement, ["Total Revenue"])
-                    label = "3Y Sales Growth"
+                    label = "3Y Annual Sales Growth"
                 if len(points) < 2:
                     return None, 0.0, 0.0, label
-                end = points[0][1]
-                start = points[3][1] if len(points) >= 4 else points[-1][1]
-                growth = (end / abs(start) - 1) if start else None
+                def parse_period_date(period):
+                    text = str(period)
+                    for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
+                        try:
+                            return datetime.datetime.strptime(text, fmt).date()
+                        except ValueError:
+                            continue
+                    return None
+
+                dated_points = [
+                    (parse_period_date(period), idx, raw)
+                    for idx, (period, raw) in enumerate(points)
+                ]
+                dated_points.sort(key=lambda point: (point[0] or datetime.date.min, point[1]))
+                end_date, end_idx, end = dated_points[-1]
+                start_date, start_idx, start = dated_points[max(0, len(dated_points) - 4)]
+                if not start:
+                    growth = None
+                else:
+                    years = (end_date - start_date).days / 365.25 if end_date and start_date else end_idx - start_idx
+                    years = years if years > 0 else 1
+                    growth = (end / abs(start)) ** (1 / years) - 1
                 return growth, start, end, label
 
             gp_3y_growth_raw, gp_3y_start_raw, gp_3y_end_raw, gp_3y_label = three_year_growth(income_statement)
