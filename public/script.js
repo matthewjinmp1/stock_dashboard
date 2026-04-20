@@ -61,6 +61,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return value.startsWith('+') ? value.slice(1) : value;
     }
 
+    function formatStatementValue(value) {
+        const display = formatSigned(value);
+        if (display === '--') return display;
+        const raw = String(display).replace(/,/g, '').trim();
+        if (!/^-?\d+(\.\d+)?$/.test(raw)) return display;
+        const number = Number(raw);
+        if (!Number.isFinite(number) || Math.abs(number) < 1e6) return display;
+        return formatMoneyFront(number);
+    }
+
     function displayDate(data) {
         const date = data.dataDate || '--';
         const time = data.pulledAt ? data.pulledAt.split('T')[1] || data.pulledAt.split(' ')[1] || '' : '';
@@ -284,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const targetRaw = Number(target);
         const currentRaw = Number(current);
         const move = targetRaw && currentRaw ? `${((targetRaw / currentRaw - 1) * 100).toFixed(1)}%` : '--';
-        return `<button class="case-btn" type="button" data-case="${label.toLowerCase()}"><span>${label}</span><strong>${move}</strong></button>`;
+        return `<button class="case-btn case-${label.toLowerCase()}" type="button" data-case="${label.toLowerCase()}"><span>${label}</span><strong>${move}</strong></button>`;
     }
 
     async function fetchTicker(ticker, refresh = false) {
@@ -302,23 +312,31 @@ document.addEventListener('DOMContentLoaded', () => {
     async function scanTicker(ticker, refresh = false) {
         if (!ticker) return;
         ticker = ticker.toUpperCase();
+        const hasCurrentResult = refresh
+            && state.latest
+            && (state.latest.ticker || '').toUpperCase() === ticker
+            && !$('result-stats').classList.contains('hidden');
         showView('scanner');
         $('result-container').classList.remove('hidden');
-        $('result-stats').classList.add('hidden');
-        $('statement-panel').classList.add('hidden');
+        if (!hasCurrentResult) {
+            $('result-stats').classList.add('hidden');
+            $('statement-panel').classList.add('hidden');
+            $('result-ticker').textContent = ticker;
+            $('result-data-date').textContent = 'As of --';
+            $('result-fetch-info').textContent = 'Fetch time: -- • Fetches: --';
+            $('result-currency-info').textContent = 'Native currency: -- • USD rate: --';
+        }
+        $('glass-card').classList.toggle('refreshing', hasCurrentResult);
         $('loading-spinner').classList.remove('hidden');
         $('error-message').classList.add('hidden');
         $('glass-card').style.display = 'block';
-        $('result-ticker').textContent = ticker;
-        $('result-data-date').textContent = 'As of --';
-        $('result-fetch-info').textContent = 'Fetch time: -- • Fetches: --';
-        $('result-currency-info').textContent = 'Native currency: -- • USD rate: --';
         incrementSearch(ticker);
 
         try {
             const data = await fetchTicker(ticker, refresh);
             state.latest = data;
             $('loading-spinner').classList.add('hidden');
+            $('glass-card').classList.remove('refreshing');
             $('result-stats').classList.remove('hidden');
             $('result-ticker').textContent = data.ticker || ticker;
             const title = $('result-ticker').parentElement;
@@ -335,7 +353,8 @@ document.addEventListener('DOMContentLoaded', () => {
             renderStatements(data);
         } catch (err) {
             $('loading-spinner').classList.add('hidden');
-            $('glass-card').style.display = 'none';
+            $('glass-card').classList.remove('refreshing');
+            if (!hasCurrentResult) $('glass-card').style.display = 'none';
             $('error-message').textContent = err.message;
             $('error-message').classList.remove('hidden');
         }
@@ -636,7 +655,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <button class="mini-btn ${starred ? 'on gold' : ''}" data-statement="${statementKey}" data-star-account="${row.label}">${starred ? 'Starred' : 'Star'}</button>
             <button class="mini-btn ${growthOn ? 'on blue' : ''}" data-statement="${statementKey}" data-toggle-ratio="growth" data-label="${row.label}">Growth</button>
             ${canMargin ? `<button class="mini-btn ${marginOn ? 'on green' : ''}" data-statement="${statementKey}" data-toggle-ratio="margin" data-label="${row.label}">Margin</button>` : ''}
-        </div></td><td class="statement-label-cell">${row.label}</td>${(row.values || []).map(value => `<td>${formatSigned(value)}</td>`).join('')}</tr>`;
+        </div></td><td class="statement-label-cell">${row.label}</td>${(row.values || []).map(value => `<td>${formatStatementValue(value)}</td>`).join('')}</tr>`;
         if (growthOn) html += ratioRow('Growth', growthValues(row.values || []));
         if (marginOn) html += ratioRow('Margin', marginValues(row, periods, displayStatement));
         return html;
