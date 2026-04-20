@@ -128,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('Gross Margin', data.grossMargin),
             ]),
             metricGroup('Growth', [
-                metric(data.gp_3y_label || '3Y Annual GP Growth', data.gp_3y_growth || '--', 'gp_3y_growth'),
+                metric('3Y Growth', data.gp_3y_growth || '--', 'gp_3y_growth'),
                 metric('CY Growth', data.cy_growth, '', 'cy_growth'),
                 metric('NY Growth', data.ny_growth, '', 'ny_growth'),
             ]),
@@ -137,11 +137,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('NY EPS Growth', data.nextYearEpsGrowth),
             ]),
             metricGroup('Returns', [
-                metric('Adj Op Inc / Gross PP&E', data.adjEbitGrossPpe, 'adj_ebit_gross_ppe'),
+                metric('ROGPPE', data.adjEbitGrossPpe, 'adj_ebit_gross_ppe'),
                 metric('ROC', data.roc, 'roc'),
             ]),
             metricGroup('Spending', [
-                metric('Investment Capex / Adj Op Inc', data.capexAdjIncome, 'capex_adj_income'),
+                metric('Investment Rate', data.capexAdjIncome, 'capex_adj_income'),
                 metric('R&D / Adj Op Inc', data.rndAdjIncome || '--'),
             ]),
             metricGroup('Short Interest', [
@@ -774,7 +774,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalDebt = totalDebtRaw ? formatMoneyFront(totalDebtRaw) : '--';
         const formulaValue = (formula, rows) => compactFormulaRows([['Formula', formula], ...rows]);
         const valuationLabel = data.valuationNumeratorLabel || 'Valuation Numerator';
-        const gpLabel = data.gp_3y_label || '3Y Annual GP Growth';
+        const gpLabel = '3Y Growth';
         return {
             ev_adj: {
                 title: `${data.valuationPrefix || 'EV'} / Adj Op Inc`,
@@ -890,12 +890,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 ]),
             },
             adj_ebit_gross_ppe: {
-                title: 'Adj Op Inc / Gross PP&E',
+                title: 'ROGPPE',
                 numeratorLabel: 'Adj Op Inc',
                 numerator: data.adj_income,
                 divisorLabel: 'Gross PP&E',
                 divisor: data.grossPpe,
-                resultLabel: 'Return on Gross PP&E',
+                resultLabel: 'ROGPPE',
                 result: data.adjEbitGrossPpe,
                 rows: formulaValue('Adj Op Inc / Gross PP&E', [
                     ['Adj Op Inc', data.adj_income],
@@ -904,7 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ]),
             },
             capex_adj_income: {
-                title: 'Investment Capex / Adj Op Inc',
+                title: 'Investment Rate',
                 numeratorLabel: 'Investment Capex',
                 numerator: data.investmentCapex,
                 divisorLabel: 'Adj Op Inc',
