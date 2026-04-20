@@ -131,6 +131,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric(data.gp_3y_label || '3Y Annual GP Growth', data.gp_3y_growth || '--', 'gp_3y_growth'),
                 metric('CY Growth', data.cy_growth, '', 'cy_growth'),
                 metric('NY Growth', data.ny_growth, '', 'ny_growth'),
+            ]),
+            metricGroup('EPS Growth', [
                 metric('CY EPS Growth', data.currentYearEpsGrowth),
                 metric('NY EPS Growth', data.nextYearEpsGrowth),
             ]),
