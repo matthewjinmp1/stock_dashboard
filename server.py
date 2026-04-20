@@ -673,6 +673,30 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except Exception:
             return []
 
+    def _stockanalysis_estimate_points(self, html, metric_key, percent=False):
+        charts_match = re.search(r"estimatesCharts:\{(.*?)\},recommendations:", html, re.DOTALL)
+        if not charts_match:
+            return []
+        charts = charts_match.group(1)
+        if metric_key == "revenueGrowth":
+            section_match = re.search(r"revenueGrowth:\{(.*?)\}\s*$", charts, re.DOTALL)
+        else:
+            section_match = re.search(rf"{re.escape(metric_key)}:\{{(.*?)\}},[A-Za-z]+:", charts, re.DOTALL)
+        if not section_match:
+            return []
+
+        points = []
+        for date, raw_value in re.findall(
+            r'"(\d{4}-\d{2}-\d{2})":\{[^{}]*?avg:([-+]?\d+(?:\.\d+)?)',
+            section_match.group(1),
+        ):
+            try:
+                value = float(raw_value)
+            except Exception:
+                continue
+            points.append((date, value / 100 if percent else value))
+        return sorted(points, key=lambda point: point[0])
+
     def _normalize_stockanalysis_label(self, label):
         replacements = {
             "Revenue": "Total Revenue",
@@ -1095,10 +1119,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     except Exception:
                         pass
                         
-            if cy_growth_raw is None or ny_growth_raw is None:
+            if cy_growth_raw is None or ny_growth_raw is None or not cy_revenue_raw or not ny_revenue_raw:
                 try:
                     forecast_url = f"https://stockanalysis.com/stocks/{ticker.lower()}/forecast/"
                     html = self._counted_open(None, forecast_url, timeout=8).read().decode("utf-8", errors="ignore")
+                    forecast_revenues = self._stockanalysis_estimate_points(html, "revenue")
+                    if len(forecast_revenues) > 0 and not cy_revenue_raw:
+                        cy_revenue_raw = forecast_revenues[0][1]
+                    if len(forecast_revenues) > 1 and not ny_revenue_raw:
+                        ny_revenue_raw = forecast_revenues[1][1]
+                    forecast_growth = self._stockanalysis_estimate_points(html, "revenueGrowth", percent=True)
+                    if len(forecast_growth) > 0 and cy_growth_raw is None:
+                        cy_growth_raw = forecast_growth[0][1]
+                    if len(forecast_growth) > 1 and ny_growth_raw is None:
+                        ny_growth_raw = forecast_growth[1][1]
                     data_match = re.search(r"financialData:\{(.*?)\},map:\[", html, re.DOTALL)
                     if data_match:
                         data_str = data_match.group(1)
@@ -1217,16 +1251,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "gp_3y_end": self._format_money(gp_3y_end_raw) if gp_3y_end_raw else "--",
                 "gp_3y_label": gp_3y_label,
                 "rnd_adj_income": self._format_percent(rnd_raw / adj_income_raw) if rnd_raw and adj_income_raw else "--",
-                "cy_adj_inc": self._format_money(cy_adj_inc_raw),
-                "ny_adj_inc": self._format_money(ny_adj_inc_raw),
+                "cy_adj_inc": self._format_money(cy_adj_inc_raw) if cy_adj_inc_raw else "--",
+                "ny_adj_inc": self._format_money(ny_adj_inc_raw) if ny_adj_inc_raw else "--",
                 "market_cap": self._format_money(market_cap_raw),
                 "net_cash": self._format_money(net_cash_raw),
                 "derived_enterprise_value": self._format_money(derived_enterprise_value_raw),
                 "revenue": self._format_money(revenue_raw),
                 "operating_margin": self._format_percent(operating_margin_ratio) if operating_margin_ratio else "--",
                 "da_minus_capex": self._format_money(da_minus_capex_raw) if da_minus_capex_raw else "0",
-                "cy_revenue": self._format_money(cy_revenue_raw),
-                "ny_revenue": self._format_money(ny_revenue_raw),
+                "cy_revenue": self._format_money(cy_revenue_raw) if cy_revenue_raw else "--",
+                "ny_revenue": self._format_money(ny_revenue_raw) if ny_revenue_raw else "--",
                 "gross_ppe": self._format_money(gross_ppe_raw),
                 "adj_ebit_gross_ppe": self._format_percent(adj_income_raw / gross_ppe_raw) if adj_income_raw and gross_ppe_raw else "--",
                 "capex_adj_income": self._format_percent(investment_capex_raw / adj_income_raw) if adj_income_raw else "--",
