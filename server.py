@@ -1117,7 +1117,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 )
                 if revenue_avg and year_ago_revenue:
                     return (revenue_avg / abs(year_ago_revenue)) - 1
-                return self._raw(revenue_est.get("growth"), None)
+                return None
 
             def apply_estimate_trends(trends, overwrite=False, source="yahoo"):
                 nonlocal cy_revenue_raw, ny_revenue_raw, cy_growth_raw, ny_growth_raw

@@ -430,7 +430,10 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
     def test_derives_distinct_forward_growth_when_revenue_estimates_exist_without_growth(self):
         quote_summary_payload = make_quote_summary_payload()
         for trend in quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"]:
-            trend["revenueEstimate"].pop("growth", None)
+            # Yahoo's raw revenueEstimate.growth can differ from the Analysis
+            # page's displayed Sales Growth (year/est), so derive from the
+            # estimate dollars instead of trusting the raw growth field.
+            trend["revenueEstimate"]["growth"] = {"raw": 0.99}
         timeseries_payload = make_timeseries_payload()
         income_statement = {
             "periods": ["TTM", "2025-12-31", "2024-12-31", "2023-12-31"],
