@@ -166,6 +166,9 @@ document.addEventListener('DOMContentLoaded', () => {
         stats.querySelectorAll('[data-calc]').forEach((node) => {
             node.addEventListener('click', () => openCalc(node.dataset.calc));
         });
+        stats.querySelectorAll('[data-case]').forEach((node) => {
+            node.addEventListener('click', () => openCalc(`target_${node.dataset.case}`));
+        });
         stats.querySelectorAll('[data-edit-assumption]').forEach((node) => {
             const syncWidth = () => {
                 node.style.setProperty('--metric-input-width', metricInputWidth(node.value || node.dataset.editingOriginalValue || node.dataset.originalValue || '--'));
@@ -731,35 +734,251 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function latestStatementValue(statement, labels) {
+        const labelSet = new Set(labels.map((label) => label.toLowerCase()));
+        const rows = statement?.rows || [];
+        const periods = statement?.periods || [];
+        const latestIndex = periods.findIndex((period) => String(period).toUpperCase() === 'TTM' || String(period).toUpperCase() === 'LATEST');
+        for (const row of rows) {
+            if (!labelSet.has(String(row.label || '').toLowerCase())) continue;
+            const values = row.values || [];
+            if (latestIndex >= 0 && latestIndex < values.length && values[latestIndex] && values[latestIndex] !== '--') {
+                return values[latestIndex];
+            }
+            for (let idx = values.length - 1; idx >= 0; idx -= 1) {
+                if (values[idx] && values[idx] !== '--') return values[idx];
+            }
+        }
+        return '--';
+    }
+
+    function compactFormulaRows(rows) {
+        return rows.filter(([label, value]) => label && value !== undefined && value !== null);
+    }
+
+    function targetMove(target, current) {
+        const targetRaw = Number(target);
+        const currentRaw = Number(current);
+        return targetRaw && currentRaw ? formatPercentDecimal(targetRaw / currentRaw - 1) : '--';
+    }
+
+    function calcDefinitions(data) {
+        const cashBucket = latestStatementValue(data.balanceStatement, [
+            'Cash, Equivalents & Short Term Investments',
+            'Cash & Short Term Investments',
+            'Cash Cash Equivalents And Short Term Investments',
+        ]);
+        const totalDebtRaw = Math.max(parseMoney(cashBucket) - parseMoney(data.netCash), 0);
+        const totalDebt = totalDebtRaw ? formatMoneyFront(totalDebtRaw) : '--';
+        const formulaValue = (formula, rows) => compactFormulaRows([['Formula', formula], ...rows]);
+        const valuationLabel = data.valuationNumeratorLabel || 'Valuation Numerator';
+        const gpLabel = data.gp_3y_label || '3Y Annual GP Growth';
+        return {
+            ev_adj: {
+                title: `${data.valuationPrefix || 'EV'} / Adj Op Inc`,
+                numeratorLabel: valuationLabel,
+                numerator: data.ev,
+                divisorLabel: 'Adj Op Inc',
+                divisor: data.adj_income,
+                resultLabel: `${data.valuationPrefix || 'EV'} / Adj Op Inc`,
+                result: data.ev_adj_ebit,
+                rows: formulaValue(`${valuationLabel} / Adj Op Inc`, [
+                    [valuationLabel, data.ev],
+                    ['Revenue', data.revenue],
+                    ['Adj Op Inc Margin', data.margin],
+                    ['Adj Op Inc', data.adj_income],
+                ]),
+            },
+            ev_cy: {
+                title: `${data.valuationPrefix || 'EV'} / CY Op Inc`,
+                numeratorLabel: valuationLabel,
+                numerator: data.ev,
+                divisorLabel: 'CY Adj Op Inc',
+                divisor: data.cy_adj_inc,
+                resultLabel: `${data.valuationPrefix || 'EV'} / CY Op Inc`,
+                result: data.ev_cy_ebit,
+                rows: formulaValue(`${valuationLabel} / (Revenue x (1 + CY Growth) x Adj Op Inc Margin)`, [
+                    [valuationLabel, data.ev],
+                    ['Revenue', data.revenue],
+                    ['CY Growth', data.cy_growth],
+                    ['CY Revenue', data.cy_revenue],
+                    ['Adj Op Inc Margin', data.margin],
+                    ['CY Adj Op Inc', data.cy_adj_inc],
+                ]),
+            },
+            ev_ny: {
+                title: `${data.valuationPrefix || 'EV'} / NY Op Inc`,
+                numeratorLabel: valuationLabel,
+                numerator: data.ev,
+                divisorLabel: 'NY Adj Op Inc',
+                divisor: data.ny_adj_inc,
+                resultLabel: `${data.valuationPrefix || 'EV'} / NY Op Inc`,
+                result: data.ev_ny_ebit,
+                rows: formulaValue(`${valuationLabel} / (CY Revenue x (1 + NY Growth) x Adj Op Inc Margin)`, [
+                    [valuationLabel, data.ev],
+                    ['CY Revenue', data.cy_revenue],
+                    ['NY Growth', data.ny_growth],
+                    ['NY Revenue', data.ny_revenue],
+                    ['Adj Op Inc Margin', data.margin],
+                    ['NY Adj Op Inc', data.ny_adj_inc],
+                ]),
+            },
+            adj_margin: {
+                title: 'Adj Op Inc Margin',
+                numeratorLabel: 'Adj Op Inc',
+                numerator: data.adj_income,
+                divisorLabel: 'Revenue',
+                divisor: data.revenue,
+                resultLabel: 'Margin',
+                result: data.margin,
+                rows: formulaValue('Adj Op Inc / Revenue', [
+                    ['Revenue', data.revenue],
+                    ['Operating Income', data.income],
+                    ['D&A', data.da],
+                    ['Capex', data.capex],
+                    ['D&A Less Capex Addback', data.da_minus_capex],
+                    ['Adj Op Inc', data.adj_income],
+                ]),
+            },
+            gp_3y_growth: {
+                title: gpLabel,
+                numeratorLabel: 'Ending Value',
+                numerator: data.gp_3y_end,
+                divisorLabel: 'Starting Value',
+                divisor: data.gp_3y_start,
+                resultLabel: 'Annual Growth',
+                result: data.gp_3y_growth,
+                rows: formulaValue('(Ending Value / Starting Value) ^ (1 / 3) - 1', [
+                    ['Starting Value', data.gp_3y_start],
+                    ['Ending Value', data.gp_3y_end],
+                    ['Years', '3'],
+                    [gpLabel, data.gp_3y_growth],
+                ]),
+            },
+            net_cash: {
+                title: 'Net Cash',
+                numeratorLabel: 'Cash & Short Term Investments',
+                numerator: cashBucket,
+                divisorLabel: 'Debt',
+                divisor: totalDebt,
+                resultLabel: 'Net Cash',
+                result: data.netCash,
+                rows: formulaValue('Cash & Short Term Investments - Total Debt', [
+                    ['Cash & Short Term Investments', cashBucket],
+                    ['Total Debt', totalDebt],
+                    ['Net Cash', data.netCash],
+                ]),
+            },
+            roc: {
+                title: 'Return on Capital',
+                numeratorLabel: 'Adj Op Inc',
+                numerator: data.adj_income,
+                divisorLabel: 'NWC + Net Fixed Assets',
+                divisor: `${data.netWorkingCapital || '--'} + ${data.netFixedAssets || '--'}`,
+                resultLabel: 'ROC',
+                result: data.roc,
+                rows: formulaValue('Adj Op Inc / (Net Working Capital + Net Fixed Assets)', [
+                    ['Adj Op Inc', data.adj_income],
+                    ['Receivables', data.receivables],
+                    ['Inventory', data.inventory],
+                    ['Accounts Payable', data.accountsPayable],
+                    ['Net Working Capital', data.netWorkingCapital],
+                    ['Net Fixed Assets', data.netFixedAssets],
+                    ['ROC', data.roc],
+                ]),
+            },
+            adj_ebit_gross_ppe: {
+                title: 'Adj Op Inc / Gross PP&E',
+                numeratorLabel: 'Adj Op Inc',
+                numerator: data.adj_income,
+                divisorLabel: 'Gross PP&E',
+                divisor: data.grossPpe,
+                resultLabel: 'Return on Gross PP&E',
+                result: data.adjEbitGrossPpe,
+                rows: formulaValue('Adj Op Inc / Gross PP&E', [
+                    ['Adj Op Inc', data.adj_income],
+                    ['Gross PP&E', data.grossPpe],
+                    ['Result', data.adjEbitGrossPpe],
+                ]),
+            },
+            capex_adj_income: {
+                title: 'Investment Capex / Adj Op Inc',
+                numeratorLabel: 'Investment Capex',
+                numerator: data.investmentCapex,
+                divisorLabel: 'Adj Op Inc',
+                divisor: data.adj_income,
+                resultLabel: 'Investment Rate',
+                result: data.capexAdjIncome,
+                rows: formulaValue('max(Capex - D&A, 0) / Adj Op Inc', [
+                    ['Capex', data.capex],
+                    ['D&A', data.da],
+                    ['Investment Capex', data.investmentCapex],
+                    ['Adj Op Inc', data.adj_income],
+                    ['Investment Rate', data.capexAdjIncome],
+                ]),
+            },
+            target_bear: {
+                title: 'Bear Case Target Move',
+                numeratorLabel: 'Bear Target',
+                numerator: data.targetLowPrice,
+                divisorLabel: 'Current Price',
+                divisor: data.currentPrice,
+                resultLabel: 'Bear Move',
+                result: targetMove(data.targetLowPrice, data.currentPrice),
+                rows: formulaValue('(Bear Target / Current Price) - 1', [
+                    ['Current Price', data.currentPrice],
+                    ['Bear Target', data.targetLowPrice],
+                    ['Bear Move', targetMove(data.targetLowPrice, data.currentPrice)],
+                ]),
+            },
+            target_base: {
+                title: 'Base Case Target Move',
+                numeratorLabel: 'Base Target',
+                numerator: data.targetMeanPrice,
+                divisorLabel: 'Current Price',
+                divisor: data.currentPrice,
+                resultLabel: 'Base Move',
+                result: targetMove(data.targetMeanPrice, data.currentPrice),
+                rows: formulaValue('(Base Target / Current Price) - 1', [
+                    ['Current Price', data.currentPrice],
+                    ['Base Target', data.targetMeanPrice],
+                    ['Base Move', targetMove(data.targetMeanPrice, data.currentPrice)],
+                ]),
+            },
+            target_bull: {
+                title: 'Bull Case Target Move',
+                numeratorLabel: 'Bull Target',
+                numerator: data.targetHighPrice,
+                divisorLabel: 'Current Price',
+                divisor: data.currentPrice,
+                resultLabel: 'Bull Move',
+                result: targetMove(data.targetHighPrice, data.currentPrice),
+                rows: formulaValue('(Bull Target / Current Price) - 1', [
+                    ['Current Price', data.currentPrice],
+                    ['Bull Target', data.targetHighPrice],
+                    ['Bull Move', targetMove(data.targetHighPrice, data.currentPrice)],
+                ]),
+            },
+        };
+    }
+
     function openCalc(type) {
         if (!state.latest) return;
         state.previousScroll = window.scrollY;
         const data = applyAssumptions(state.latest);
-        const map = {
-            ev_adj: ['EV / Adj Op Inc', data.ev, 'Adj Op Inc', data.adj_income, data.ev_adj_ebit],
-            ev_cy: ['EV / CY Op Inc', data.ev, 'CY Adj Op Inc', data.cy_adj_inc, data.ev_cy_ebit],
-            ev_ny: ['EV / NY Op Inc', data.ev, 'NY Adj Op Inc', data.ny_adj_inc, data.ev_ny_ebit],
-            adj_margin: ['Adj Margin', data.adj_income, 'Revenue', data.revenue, data.margin],
-            gp_3y_growth: ['3Y Annual GP Growth', data.gp_3y_end || '--', 'Starting Value', data.gp_3y_start || '--', data.gp_3y_growth || '--'],
-            net_cash: ['Net Cash', data.netCash, 'Cash - Debt', '', data.netCash],
-            roc: ['ROC', data.adj_income, 'NWC + Net Fixed Assets', '', data.roc],
-            adj_ebit_gross_ppe: ['Adj Op Inc / Gross PP&E', data.adj_income, 'Gross PP&E', data.grossPpe, data.adjEbitGrossPpe],
-            capex_adj_income: ['Investment Capex / Adj Op Inc', data.investmentCapex, 'Adj Op Inc', data.adj_income, data.capexAdjIncome],
-        };
-        const item = map[type];
+        const item = calcDefinitions(data)[type];
         if (!item) return;
         $('calc-ticker-badge').textContent = data.ticker;
-        $('calc-title').textContent = item[0];
-        $('calc-numerator-label').textContent = item[0].split('/')[0] || item[0];
-        $('calc-ev-val').textContent = item[1] || '--';
-        $('calc-divisor-label').textContent = item[2] || 'Calculation';
-        $('calc-divisor-val').textContent = item[3] || '--';
-        $('calc-result-val').textContent = item[4] || '--';
-        $('calc-breakdown-list').innerHTML = [
-            ['Revenue', data.revenue], ['Operating Income', data.income], ['D&A', data.da],
-            ['Capex', data.capex], ['Adj Op Inc', data.adj_income], ['Market Cap', data.marketCap],
-            ['Net Cash', data.netCash], ['Our EV', data.derivedEnterpriseValue],
-        ].map(([label, value]) => `<li><span class="calc-label">${label}</span><span class="calc-val">${value || '--'}</span></li>`).join('');
+        $('calc-title').textContent = item.title;
+        $('calc-numerator-label').textContent = item.numeratorLabel || 'Numerator';
+        $('calc-ev-val').textContent = item.numerator || '--';
+        $('calc-divisor-label').textContent = item.divisorLabel || 'Divisor';
+        $('calc-divisor-val').textContent = item.divisor || '--';
+        $('calc-result-label').textContent = item.resultLabel || 'Final Metric Value';
+        $('calc-result-val').textContent = item.result || '--';
+        $('calc-breakdown-list').innerHTML = (item.rows || [])
+            .map(([label, value]) => `<li><span class="calc-label">${label}</span><span class="calc-val">${value || '--'}</span></li>`)
+            .join('');
         showView('calc');
         document.querySelector('.tabs').classList.add('hidden');
         window.scrollTo(0, 0);

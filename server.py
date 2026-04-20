@@ -170,46 +170,80 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 {"label": "Cash Dividends Paid", "values": ["-3B", "-2.8B", "-2.5B", "-2.2B", "-2B"]},
             ],
         }
+        revenue_raw = 100e9
+        gross_profit_raw = 60e9
+        operating_income_raw = 30e9
+        capex_raw = 7e9
+        da_raw = 5e9
+        gross_ppe_raw = 80e9
+        net_fixed_assets_raw = 50e9
+        receivables_raw = 15e9
+        inventory_raw = 10e9
+        accounts_payable_raw = 8e9
+        rnd_raw = 12e9
+        market_cap_raw = 500e9
+        cash_bucket_raw = 45e9
+        total_debt_raw = 25e9
+        cy_growth_raw = 0.10
+        ny_growth_raw = 0.12
+        gp_3y_start_raw = 44e9
+        gp_3y_end_raw = gross_profit_raw
+
+        da_minus_capex_raw = max(da_raw - capex_raw, 0)
+        investment_capex_raw = max(capex_raw - da_raw, 0)
+        adj_income_raw = operating_income_raw + da_minus_capex_raw
+        adj_margin_ratio = adj_income_raw / revenue_raw
+        gross_margin_ratio = gross_profit_raw / revenue_raw
+        cy_revenue_raw = revenue_raw * (1 + cy_growth_raw)
+        ny_revenue_raw = cy_revenue_raw * (1 + ny_growth_raw)
+        cy_adj_inc_raw = cy_revenue_raw * adj_margin_ratio
+        ny_adj_inc_raw = ny_revenue_raw * adj_margin_ratio
+        gp_3y_growth_raw = (gp_3y_end_raw / gp_3y_start_raw) ** (1 / 3) - 1
+        net_cash_raw = cash_bucket_raw - total_debt_raw
+        derived_ev_raw = market_cap_raw - net_cash_raw
+        net_working_capital_raw = receivables_raw + inventory_raw - accounts_payable_raw
+        roc_denominator_raw = net_working_capital_raw + net_fixed_assets_raw
+
         return {
             "ticker": "TEST",
             "shortFloat": "4.2%",
-            "income": "30B",
-            "margin": "30%",
-            "grossMargin": "60%",
-            "ev_cy_ebit": "14.5",
-            "ev_ny_ebit": "12.8",
-            "adj_income": "30B",
-            "capex": "7B",
-            "da": "5B",
-            "ev": "480B",
-            "ev_adj_ebit": "16",
-            "cy_growth": "10%",
-            "ny_growth": "12%",
-            "gp_3y_growth": "10.9%",
-            "gp_3y_start": "44B",
-            "gp_3y_end": "60B",
+            "income": self._format_money(operating_income_raw),
+            "margin": self._format_percent(adj_margin_ratio),
+            "grossMargin": self._format_percent(gross_margin_ratio),
+            "ev_cy_ebit": self._format_3sig(derived_ev_raw / cy_adj_inc_raw),
+            "ev_ny_ebit": self._format_3sig(derived_ev_raw / ny_adj_inc_raw),
+            "adj_income": self._format_money(adj_income_raw),
+            "capex": self._format_money(capex_raw),
+            "da": self._format_money(da_raw),
+            "ev": self._format_money(derived_ev_raw),
+            "ev_adj_ebit": self._format_3sig(derived_ev_raw / adj_income_raw),
+            "cy_growth": self._format_percent(cy_growth_raw),
+            "ny_growth": self._format_percent(ny_growth_raw),
+            "gp_3y_growth": self._format_percent(gp_3y_growth_raw),
+            "gp_3y_start": self._format_money(gp_3y_start_raw),
+            "gp_3y_end": self._format_money(gp_3y_end_raw),
             "gp_3y_label": "3Y Annual GP Growth",
-            "rndAdjIncome": "40%",
-            "cy_adj_inc": "33B",
-            "ny_adj_inc": "37B",
-            "marketCap": "500B",
-            "netCash": "20B",
-            "derivedEnterpriseValue": "480B",
-            "revenue": "100B",
-            "operating_margin": "30%",
-            "da_minus_capex": "-2B",
-            "cy_revenue": "110B",
-            "ny_revenue": "123B",
-            "grossPpe": "80B",
-            "adjEbitGrossPpe": "37.5%",
-            "capexAdjIncome": "6.67%",
-            "investmentCapex": "2B",
-            "roc": "44.8%",
-            "netWorkingCapital": "17B",
-            "netFixedAssets": "50B",
-            "receivables": "15B",
-            "inventory": "10B",
-            "accountsPayable": "8B",
+            "rndAdjIncome": self._format_percent(rnd_raw / adj_income_raw),
+            "cy_adj_inc": self._format_money(cy_adj_inc_raw),
+            "ny_adj_inc": self._format_money(ny_adj_inc_raw),
+            "marketCap": self._format_money(market_cap_raw),
+            "netCash": self._format_money(net_cash_raw),
+            "derivedEnterpriseValue": self._format_money(derived_ev_raw),
+            "revenue": self._format_money(revenue_raw),
+            "operating_margin": self._format_percent(operating_income_raw / revenue_raw),
+            "da_minus_capex": self._format_money(da_minus_capex_raw),
+            "cy_revenue": self._format_money(cy_revenue_raw),
+            "ny_revenue": self._format_money(ny_revenue_raw),
+            "grossPpe": self._format_money(gross_ppe_raw),
+            "adjEbitGrossPpe": self._format_percent(adj_income_raw / gross_ppe_raw),
+            "capexAdjIncome": self._format_percent(investment_capex_raw / adj_income_raw),
+            "investmentCapex": self._format_money(investment_capex_raw),
+            "roc": self._format_percent(adj_income_raw / roc_denominator_raw),
+            "netWorkingCapital": self._format_money(net_working_capital_raw),
+            "netFixedAssets": self._format_money(net_fixed_assets_raw),
+            "receivables": self._format_money(receivables_raw),
+            "inventory": self._format_money(inventory_raw),
+            "accountsPayable": self._format_money(accounts_payable_raw),
             "financialCurrency": "CNY",
             "usdFxRate": 0.138,
             "companyName": "Test Fixture Corporation",
