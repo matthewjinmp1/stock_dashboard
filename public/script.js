@@ -766,13 +766,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     $('calc-back-btn').addEventListener('click', () => {
-        document.body.classList.add('instant-view-return');
         document.querySelector('.tabs').classList.remove('hidden');
         showView('scanner');
         window.scrollTo(0, state.previousScroll || 0);
-        requestAnimationFrame(() => {
-            document.body.classList.remove('instant-view-return');
-        });
     });
 
     window.removeTicker = (ticker) => {

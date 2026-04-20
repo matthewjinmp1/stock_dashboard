@@ -116,7 +116,6 @@ header p {
 
 .search-section {
     margin-bottom: 2rem;
-    animation: fadeInUp 0.8s ease-out 0.2s backwards;
 }
 
 .input-group {
@@ -181,14 +180,11 @@ button:active {
 }
 
 #result-container {
-    animation: fadeInUp 0.8s ease-out 0.4s backwards;
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    transition: none;
 }
 
 #result-container.hidden {
     display: none;
-    opacity: 0;
-    transform: translateY(20px);
     pointer-events: none;
 }
 
