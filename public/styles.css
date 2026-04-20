@@ -188,18 +188,6 @@ button:active {
     pointer-events: none;
 }
 
-.instant-view-return #view-scanner,
-.instant-view-return #view-scanner *,
-.instant-view-return #result-container {
-    animation: none !important;
-    transition: none !important;
-}
-
-.instant-view-return #result-container {
-    opacity: 1 !important;
-    transform: none !important;
-}
-
 .glass-card {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
@@ -680,6 +668,9 @@ button:active {
     width: var(--metric-input-width, auto);
     min-width: 2ch;
     max-width: 7ch;
+    background-color: transparent;
+    appearance: none;
+    -webkit-appearance: none;
     border: 0;
     border-bottom: 2px dashed rgba(148, 163, 184, 0.35);
     border-radius: 0;
