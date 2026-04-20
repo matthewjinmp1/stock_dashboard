@@ -400,7 +400,7 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
                 return FakeResponse(json.dumps(quote_summary_payload))
             if "fundamentals-timeseries" in url:
                 return FakeResponse(json.dumps(timeseries_payload))
-            if "analyst-insights" in url or "stockanalysis.com" in url:
+            if "/analysis/" in url or "analyst-insights" in url or "stockanalysis.com" in url:
                 return FakeResponse("")
             raise AssertionError(f"Unexpected URL: {url}")
 
@@ -445,7 +445,7 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
                 return FakeResponse(json.dumps(quote_summary_payload))
             if "fundamentals-timeseries" in url:
                 return FakeResponse(json.dumps(timeseries_payload))
-            if "analyst-insights" in url or "stockanalysis.com" in url:
+            if "/analysis/" in url or "analyst-insights" in url or "stockanalysis.com" in url:
                 return FakeResponse("")
             raise AssertionError(f"Unexpected URL: {url}")
 
@@ -492,7 +492,7 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
                 return FakeResponse(json.dumps(timeseries_payload))
             if "stockanalysis.com" in url:
                 return FakeResponse(forecast_html)
-            if "analyst-insights" in url:
+            if "/analysis/" in url or "analyst-insights" in url:
                 return FakeResponse("")
             raise AssertionError(f"Unexpected URL: {url}")
 
@@ -514,6 +514,83 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(result["ny_growth"], "15.4%")
         self.assertEqual(result["cy_revenue"], "130")
         self.assertEqual(result["ny_revenue"], "150")
+
+    def test_prefers_yahoo_analysis_sales_growth_before_stockanalysis_forecast(self):
+        quote_summary_payload = make_quote_summary_payload()
+        quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"] = []
+        timeseries_payload = make_timeseries_payload()
+        income_statement = {
+            "periods": ["TTM", "2025-12-31", "2024-12-31", "2023-12-31"],
+            "rows": [
+                {"label": "Total Revenue", "values": ["281.72", "281.72", "245.12", "211.92"]},
+                {"label": "Operating Income", "values": ["128.53", "128.53", "109.43", "88.52"]},
+            ],
+        }
+        yahoo_trends = [
+            {
+                "period": "0y",
+                "revenueEstimate": {"avg": {"raw": 328.27}, "growth": {"raw": 0.1652}},
+                "earningsEstimate": {"avg": {"raw": 29.6}, "yearAgoEps": {"raw": 23.49}},
+            },
+            {
+                "period": "+1y",
+                "revenueEstimate": {"avg": {"raw": 379.1}, "growth": {"raw": 0.1549}},
+                "earningsEstimate": {"avg": {"raw": 34.38}, "growth": {"raw": 0.1615}},
+            },
+        ]
+        analysis_payload = {
+            "quoteSummary": {
+                "result": [
+                    {
+                        "earningsTrend": {
+                            "trend": yahoo_trends,
+                        },
+                    },
+                ],
+            },
+        }
+        analysis_html = (
+            '<script data-sveltekit-fetched>'
+            + json.dumps({"body": json.dumps(analysis_payload)})
+            + "</script>"
+        )
+        stockanalysis_html = """
+        <script>
+        estimatesCharts:{eps:{},revenue:{"2026-12-31":{avg:335,low:320,high:350},"2027-12-31":{avg:387,low:360,high:400}},epsGrowth:{},revenueGrowth:{"2026-12-31":{avg:18.8,low:10,high:20},"2027-12-31":{avg:15.7,low:10,high:20}}},recommendations:[]
+        </script>
+        """
+
+        def counted_open(_opener, url, timeout=3):
+            if "quoteSummary" in url:
+                return FakeResponse(json.dumps(quote_summary_payload))
+            if "fundamentals-timeseries" in url:
+                return FakeResponse(json.dumps(timeseries_payload))
+            if "/analysis/" in url:
+                return FakeResponse(analysis_html)
+            if "analyst-insights" in url:
+                return FakeResponse("")
+            if "stockanalysis.com" in url:
+                return FakeResponse(stockanalysis_html)
+            raise AssertionError(f"Unexpected URL: {url}")
+
+        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
+             mock.patch("server.urllib.request.install_opener"), \
+             mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
+             mock.patch.object(self.handler, "get_usd_fx_rate", return_value=1.0), \
+             mock.patch.object(self.handler, "_counted_open", side_effect=counted_open), \
+             mock.patch.object(self.handler, "build_income_statement_from_page", return_value=income_statement), \
+             mock.patch.object(self.handler, "build_balance_sheet_from_page", return_value=fake_balance_statement()), \
+             mock.patch.object(self.handler, "build_cash_flow_statement_from_page", return_value=fake_statement("Cash")):
+            result = dict(zip(FETCH_RESULT_FIELDS, self.handler.fetch_yahoo_finance_data(
+                "MSFT",
+                finviz_ev_raw=240,
+                finviz_market_cap_raw=180,
+            )))
+
+        self.assertEqual(result["cy_growth"], "16.5%")
+        self.assertEqual(result["ny_growth"], "15.5%")
+        self.assertEqual(result["cy_revenue"], "328")
+        self.assertEqual(result["ny_revenue"], "379")
 
     def test_falls_back_to_actual_annual_eps_when_year_ago_matches_current_year(self):
         quote_summary_payload = make_quote_summary_payload()

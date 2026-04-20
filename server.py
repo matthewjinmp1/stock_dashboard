@@ -309,6 +309,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._request_fetch_count += 1
         if isinstance(url, str) and (
             url.startswith("https://query1.finance.yahoo.com/")
+            or url.startswith("https://finance.yahoo.com/")
             or url.startswith("https://stockanalysis.com/")
         ):
             try:
@@ -697,6 +698,36 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             points.append((date, value / 100 if percent else value))
         return sorted(points, key=lambda point: point[0])
 
+    def _extract_yahoo_analysis_trends_from_html(self, html):
+        for match in re.finditer(r'<script[^>]*data-sveltekit-fetched[^>]*>(.*?)</script>', html, re.DOTALL):
+            try:
+                body = json.loads(match.group(1)).get("body", "{}")
+                if isinstance(body, str):
+                    body = json.loads(body)
+                trends = (
+                    body.get("quoteSummary", {})
+                    .get("result", [{}])[0]
+                    .get("earningsTrend", {})
+                    .get("trend", [])
+                )
+                if trends:
+                    return trends
+            except Exception:
+                continue
+        return []
+
+    def _fetch_yahoo_analysis_trends(self, ticker):
+        for page in ("analysis", "analyst-insights"):
+            try:
+                url = f"https://finance.yahoo.com/quote/{ticker}/{page}/"
+                html = self._counted_open(None, url, timeout=8).read().decode("utf-8", errors="ignore")
+                trends = self._extract_yahoo_analysis_trends_from_html(html)
+                if trends:
+                    return trends
+            except Exception as e:
+                print(f"Yahoo analysis page warning ({page}):", e)
+        return []
+
     def _normalize_stockanalysis_label(self, label):
         replacements = {
             "Revenue": "Total Revenue",
@@ -960,23 +991,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             et = (res.get("earningsTrend", {}) or {}).get("trend", []) or []
             
             if not et:
-                try:
-                    analysis_url = f"https://finance.yahoo.com/quote/{ticker}/analyst-insights/"
-                    html = self._counted_open(None, analysis_url, timeout=8).read().decode("utf-8", errors="ignore")
-                    for match in re.finditer(r'<script[^>]*data-sveltekit-fetched[^>]*>(.*?)</script>', html, re.DOTALL):
-                        try:
-                            body = json.loads(match.group(1)).get("body", "{}")
-                            if isinstance(body, str): body = json.loads(body)
-                            et_fallback = body.get("quoteSummary", {}).get("result", [{}])[0].get("earningsTrend", {}).get("trend", [])
-                            if et_fallback:
-                                et = et_fallback
-                                break
-                        except Exception:
-                            pass
-                    if not et:
-                        print("Fallback analysis page: no earningsTrend found in SvelteKit JSON.")
-                except Exception as e:
-                    print("Fallback analysis page error:", e)
+                et = self._fetch_yahoo_analysis_trends(ticker)
+                if not et:
+                    print("Fallback analysis page: no earningsTrend found in SvelteKit JSON.")
 
             dks = res.get("defaultKeyStatistics", {}) or {}
             price = res.get("price", {}) or {}
@@ -1090,20 +1107,51 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             cy_growth_raw = ny_growth_raw = None
             cy_eps_raw = ny_eps_raw = year_ago_eps_raw = 0
             cy_eps_growth_raw = ny_eps_growth_raw = None
-            for trend in et:
-                revenue_est = trend.get("revenueEstimate", {}) or {}
-                earnings_est = trend.get("earningsEstimate", {}) or {}
-                if trend.get("period") == "0y":
-                    cy_revenue_raw = self._raw(revenue_est.get("avg"))
-                    cy_growth_raw = self._raw(revenue_est.get("growth"), None)
-                    cy_eps_raw = self._eps_value(earnings_est.get("avg"))
-                    year_ago_eps_raw = self._eps_value(earnings_est.get("yearAgoEps"))
-                    cy_eps_growth_raw = self._raw(earnings_est.get("growth"), None)
-                elif trend.get("period") == "+1y":
-                    ny_revenue_raw = self._raw(revenue_est.get("avg"))
-                    ny_growth_raw = self._raw(revenue_est.get("growth"), None)
-                    ny_eps_raw = self._eps_value(earnings_est.get("avg"))
-                    ny_eps_growth_raw = self._raw(earnings_est.get("growth"), None)
+
+            def apply_estimate_trends(trends, overwrite=False):
+                nonlocal cy_revenue_raw, ny_revenue_raw, cy_growth_raw, ny_growth_raw
+                nonlocal cy_eps_raw, ny_eps_raw, year_ago_eps_raw, cy_eps_growth_raw, ny_eps_growth_raw
+                for trend in trends or []:
+                    revenue_est = trend.get("revenueEstimate", {}) or {}
+                    earnings_est = trend.get("earningsEstimate", {}) or {}
+                    period = trend.get("period")
+                    if period == "0y":
+                        revenue_avg = self._raw(revenue_est.get("avg"))
+                        revenue_growth = self._raw(revenue_est.get("growth"), None)
+                        eps_avg = self._eps_value(earnings_est.get("avg"))
+                        year_ago_eps = self._eps_value(earnings_est.get("yearAgoEps"))
+                        eps_growth = self._raw(earnings_est.get("growth"), None)
+                        if revenue_avg and (overwrite or not cy_revenue_raw):
+                            cy_revenue_raw = revenue_avg
+                        if revenue_growth is not None and (overwrite or cy_growth_raw is None):
+                            cy_growth_raw = revenue_growth
+                        if eps_avg and (overwrite or not cy_eps_raw):
+                            cy_eps_raw = eps_avg
+                        if year_ago_eps and (overwrite or not year_ago_eps_raw):
+                            year_ago_eps_raw = year_ago_eps
+                        if eps_growth is not None and (overwrite or cy_eps_growth_raw is None):
+                            cy_eps_growth_raw = eps_growth
+                    elif period == "+1y":
+                        revenue_avg = self._raw(revenue_est.get("avg"))
+                        revenue_growth = self._raw(revenue_est.get("growth"), None)
+                        eps_avg = self._eps_value(earnings_est.get("avg"))
+                        eps_growth = self._raw(earnings_est.get("growth"), None)
+                        if revenue_avg and (overwrite or not ny_revenue_raw):
+                            ny_revenue_raw = revenue_avg
+                        if revenue_growth is not None and (overwrite or ny_growth_raw is None):
+                            ny_growth_raw = revenue_growth
+                        if eps_avg and (overwrite or not ny_eps_raw):
+                            ny_eps_raw = eps_avg
+                        if eps_growth is not None and (overwrite or ny_eps_growth_raw is None):
+                            ny_eps_growth_raw = eps_growth
+
+            apply_estimate_trends(et)
+
+            if cy_growth_raw is None or ny_growth_raw is None or not cy_revenue_raw or not ny_revenue_raw:
+                yahoo_analysis_trends = self._fetch_yahoo_analysis_trends(ticker)
+                if yahoo_analysis_trends:
+                    apply_estimate_trends(yahoo_analysis_trends, overwrite=True)
+
             if cy_eps_growth_raw is None:
                 finviz_cy_eps = finviz_metrics.get("eps_this_y")
                 if finviz_cy_eps and finviz_cy_eps != "--":
