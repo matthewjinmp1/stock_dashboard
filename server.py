@@ -4,6 +4,7 @@ import urllib.request
 import re
 import json
 import os
+import sqlite3
 import datetime
 import time
 import io
@@ -12,7 +13,8 @@ from urllib.parse import urlparse, parse_qs
 from urllib.error import URLError, HTTPError
 
 PORT = int(os.environ.get("PORT", "3000"))
-CACHE_FILE = 'cache.json'
+CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
+LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 PAYLOAD_VERSION = 6
 YAHOO_USER_AGENT = (
@@ -101,21 +103,110 @@ CASH_FLOW_STATEMENT_TYPES = {
     "CashDividendsPaid": "Cash Dividends Paid",
 }
 
-def load_cache():
-    if os.path.exists(CACHE_FILE):
+def init_cache_db(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ticker_cache (
+            ticker TEXT PRIMARY KEY,
+            data_date TEXT NOT NULL,
+            pulled_at TEXT,
+            payload_version INTEGER,
+            payload_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ticker_cache_data_date ON ticker_cache(data_date)"
+    )
+
+
+def load_legacy_cache():
+    if os.path.exists(LEGACY_CACHE_FILE):
         try:
-            with open(CACHE_FILE, 'r') as f:
+            with open(LEGACY_CACHE_FILE, "r") as f:
                 return json.load(f)
-        except:
+        except Exception:
             pass
     return {}
 
+
+def migrate_legacy_cache_if_needed(conn):
+    try:
+        row = conn.execute("SELECT COUNT(*) FROM ticker_cache").fetchone()
+        if row and row[0]:
+            return
+        legacy_cache = load_legacy_cache()
+        if legacy_cache:
+            write_cache_rows(conn, legacy_cache)
+    except Exception:
+        pass
+
+
+def write_cache_rows(conn, cache_data):
+    now = datetime.datetime.now().isoformat()
+    rows = []
+    for ticker, entry in (cache_data or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        payload = entry.get("data", {})
+        rows.append(
+            (
+                str(ticker).upper(),
+                entry.get("date") or datetime.date.today().isoformat(),
+                entry.get("pulledAt"),
+                payload.get("payloadVersion") if isinstance(payload, dict) else None,
+                json.dumps(payload),
+                now,
+            )
+        )
+
+    conn.executemany(
+        """
+        INSERT OR REPLACE INTO ticker_cache
+            (ticker, data_date, pulled_at, payload_version, payload_json, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        rows,
+    )
+
+
+def load_cache():
+    try:
+        with sqlite3.connect(CACHE_DB_FILE) as conn:
+            init_cache_db(conn)
+            migrate_legacy_cache_if_needed(conn)
+            cache = {}
+            for ticker, data_date, pulled_at, payload_json in conn.execute(
+                """
+                SELECT ticker, data_date, pulled_at, payload_json
+                FROM ticker_cache
+                ORDER BY ticker
+                """
+            ):
+                try:
+                    payload = json.loads(payload_json)
+                except Exception:
+                    payload = {}
+                cache[ticker] = {
+                    "date": data_date,
+                    "pulledAt": pulled_at,
+                    "data": payload,
+                }
+            return cache
+    except Exception as exc:
+        print(f"Cache DB read failed: {exc}")
+        return {}
+
+
 def save_cache(cache_data):
     try:
-        with open(CACHE_FILE, 'w') as f:
-            json.dump(cache_data, f)
-    except:
-        pass
+        with sqlite3.connect(CACHE_DB_FILE) as conn:
+            init_cache_db(conn)
+            conn.execute("DELETE FROM ticker_cache")
+            write_cache_rows(conn, cache_data)
+    except Exception as exc:
+        print(f"Cache DB write failed: {exc}")
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     _yahoo_crumb_cache = None

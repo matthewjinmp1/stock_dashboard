@@ -1,4 +1,7 @@
 import json
+import os
+import sqlite3
+import tempfile
 import threading
 import unittest
 from unittest import mock
@@ -217,6 +220,68 @@ def fake_balance_statement():
             {"label": "Other Short Term Investments", "values": ["5"]},
         ],
     }
+
+
+class CacheDatabaseTests(unittest.TestCase):
+    def test_cache_round_trips_through_sqlite(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "cache.db")
+            legacy_path = os.path.join(tmpdir, "cache.json")
+            cache_payload = {
+                "MSFT": {
+                    "date": "2026-04-20",
+                    "pulledAt": "2026-04-20T13:00:00",
+                    "data": {
+                        "ticker": "MSFT",
+                        "companyName": "Microsoft Corporation",
+                        "payloadVersion": server.PAYLOAD_VERSION,
+                    },
+                }
+            }
+
+            with mock.patch.object(server, "CACHE_DB_FILE", db_path), \
+                 mock.patch.object(server, "LEGACY_CACHE_FILE", legacy_path):
+                server.save_cache(cache_payload)
+
+                self.assertTrue(os.path.exists(db_path))
+                self.assertEqual(server.load_cache(), cache_payload)
+
+                with sqlite3.connect(db_path) as conn:
+                    row = conn.execute(
+                        """
+                        SELECT ticker, data_date, pulled_at, payload_version, payload_json
+                        FROM ticker_cache
+                        """
+                    ).fetchone()
+
+            self.assertEqual(row[0], "MSFT")
+            self.assertEqual(row[1], "2026-04-20")
+            self.assertEqual(row[2], "2026-04-20T13:00:00")
+            self.assertEqual(row[3], server.PAYLOAD_VERSION)
+            self.assertEqual(json.loads(row[4])["companyName"], "Microsoft Corporation")
+
+    def test_legacy_json_cache_is_imported_when_database_is_empty(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "cache.db")
+            legacy_path = os.path.join(tmpdir, "cache.json")
+            legacy_payload = {
+                "TEST": {
+                    "date": "2026-04-20",
+                    "pulledAt": "2026-04-20T14:00:00",
+                    "data": {"ticker": "TEST", "payloadVersion": server.PAYLOAD_VERSION},
+                }
+            }
+            with open(legacy_path, "w") as f:
+                json.dump(legacy_payload, f)
+
+            with mock.patch.object(server, "CACHE_DB_FILE", db_path), \
+                 mock.patch.object(server, "LEGACY_CACHE_FILE", legacy_path):
+                self.assertEqual(server.load_cache(), legacy_payload)
+
+                with sqlite3.connect(db_path) as conn:
+                    count = conn.execute("SELECT COUNT(*) FROM ticker_cache").fetchone()[0]
+
+            self.assertEqual(count, 1)
 
 
 def fake_income_statement_with_eps(ttm_value, annual_value):
