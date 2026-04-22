@@ -630,10 +630,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const periods = statement.periods || [];
         const rows = statement.rows || [];
         if (!rows.length) return '<p class="empty-note">No statement data available.</p>';
-        return `<table class="statement-table">
-            ${hideHeader ? '' : `<thead><tr><th>Actions</th><th>Line Item</th>${periods.map(p => `<th>${p}</th>`).join('')}</tr></thead>`}
-            <tbody>${rows.map(row => renderStatementRow(row, periods, statementKey, statement)).join('')}</tbody>
-        </table>`;
+        return `<div class="statement-table-wrapper">
+            <table class="statement-table">
+                ${hideHeader ? '' : `<thead><tr><th>Actions</th><th>Line Item</th>${periods.map(p => `<th>${p}</th>`).join('')}</tr></thead>`}
+                <tbody>${rows.map(row => renderStatementRow(row, periods, statementKey, statement)).join('')}</tbody>
+            </table>
+        </div>`;
     }
 
     function statementForDisplay(statement) {

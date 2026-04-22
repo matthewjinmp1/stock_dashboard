@@ -516,10 +516,15 @@ button:active {
     white-space: nowrap;
 }
 
+.statement-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
 .statement-table {
     width: 100%;
     border-collapse: collapse;
-    table-layout: fixed;
+    table-layout: auto;
 }
 
 .statement-table th,
