@@ -620,7 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ].map(([key, label, statement]) => {
             const rows = (statement.rows || []).filter((row) => state.starredAccounts[starredKey(key, row.label)]);
             if (!rows.length) return '';
-            return `<h3 class="statement-section-title">${label}</h3>${renderStatementTable({ periods: statement.periods, rows }, key, true)}`;
+            return `<h3 class="statement-section-title">${label}</h3>${renderStatementTable({ periods: statement.periods, rows }, key, false)}`;
         }).join('');
         return blocks || '<p class="empty-note">Star accounts from a statement to show them here.</p>';
     }
