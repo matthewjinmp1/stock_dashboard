@@ -1624,8 +1624,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     ),
                 )
                 return
-            self._send_response(404, {"error": "Data not found for this ticker."})
-            return
+
 
         payload = {
             "ticker": ticker,
