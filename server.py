@@ -538,6 +538,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return self._parse_finviz_abbrev_to_raw(str(value))
 
     def _empty_fetch_tuple(self, ticker):
+        empty_stmt = {"annual": {"periods": [], "rows": []}, "quarterly": {"periods": [], "rows": []}}
         values = {key: "--" for key in FETCH_RESULT_FIELDS}
         values.update({
             "valuation_basis": "unavailable",
@@ -546,9 +547,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "company_name": ticker,
             "financial_currency": "USD",
             "usd_fx_rate": 1.0,
-            "income_statement": {"periods": [], "rows": []},
-            "balance_statement": {"periods": [], "rows": []},
-            "cash_flow_statement": {"periods": [], "rows": []},
+            "income_statement": empty_stmt,
+            "balance_statement": {**empty_stmt},
+            "cash_flow_statement": {**empty_stmt},
             "analyst_recommendations": {},
         })
         return tuple(values[key] for key in FETCH_RESULT_FIELDS)
@@ -634,9 +635,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "eps_next_y": self._extract_finviz_metric(html, "EPS next Y"),
         }
 
+    def _unwrap_annual(self, statement):
+        """Get the annual sub-object from a nested statement, or the statement itself if flat."""
+        s = statement or {}
+        if "annual" in s:
+            return s["annual"] or {}
+        return s
+
     def _latest_row_raw(self, statement, labels):
+        flat = self._unwrap_annual(statement)
         labels_lower = {label.lower() for label in labels}
-        for row in (statement or {}).get("rows", []):
+        for row in flat.get("rows", []):
             if row.get("label", "").lower() in labels_lower:
                 for value in row.get("values", []):
                     raw = self._parse_money_to_raw(value)
@@ -645,8 +654,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return 0.0
 
     def _statement_latest_value(self, statement, labels):
+        flat = self._unwrap_annual(statement)
         labels_lower = {label.lower() for label in labels}
-        for row in (statement or {}).get("rows", []):
+        for row in flat.get("rows", []):
             if row.get("label", "").lower() in labels_lower:
                 for value in row.get("values", []):
                     if value not in (None, "", "--"):
@@ -1143,17 +1153,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             balance_statement = self.build_balance_sheet_from_timeseries_results(ts_res)
             cash_flow_statement = self.build_cash_flow_statement_from_timeseries_results(ts_res)
 
-            if not income_statement.get("rows"):
+            if not self._unwrap_annual(income_statement).get("rows"):
                 try:
                     income_statement = self.build_statement_from_stockanalysis_page(ticker, "income")
                 except Exception as e:
                     print("StockAnalysis income warning:", e)
-            if not balance_statement.get("rows"):
+            if not self._unwrap_annual(balance_statement).get("rows"):
                 try:
                     balance_statement = self.build_statement_from_stockanalysis_page(ticker, "balance")
                 except Exception as e:
                     print("StockAnalysis balance warning:", e)
-            if not cash_flow_statement.get("rows"):
+            if not self._unwrap_annual(cash_flow_statement).get("rows"):
                 try:
                     cash_flow_statement = self.build_statement_from_stockanalysis_page(ticker, "cash")
                 except Exception as e:
@@ -1227,7 +1237,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     chart_meta = {}
 
             if not res and not ts_res and not chart_meta:
-                if not income_statement.get("rows") and not balance_statement.get("rows") and not cash_flow_statement.get("rows"):
+                if not self._unwrap_annual(income_statement).get("rows") and not self._unwrap_annual(balance_statement).get("rows") and not self._unwrap_annual(cash_flow_statement).get("rows"):
                     return self._empty_fetch_tuple(ticker)
 
 
@@ -1253,9 +1263,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 gross_margin_ratio = gross_profit_raw / revenue_raw if gross_profit_raw else 0
 
             def annual_statement_points(statement, labels):
+                flat = self._unwrap_annual(statement)
                 labels_lower = {label.lower() for label in labels}
-                periods = statement.get("periods", []) or []
-                for row in statement.get("rows", []) or []:
+                periods = flat.get("periods", []) or []
+                for row in flat.get("rows", []) or []:
                     if row.get("label", "").lower() not in labels_lower:
                         continue
                     points = []

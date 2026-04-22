@@ -370,9 +370,14 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             $('loading-spinner').classList.add('hidden');
             $('glass-card').classList.remove('refreshing');
-            if (!hasCurrentResult) $('glass-card').style.display = 'none';
             $('error-message').textContent = err.message;
             $('error-message').classList.remove('hidden');
+            // Still show dashboard with whatever data we have
+            $('result-stats').classList.remove('hidden');
+            const emptyData = { ticker, companyName: ticker, incomeStatement: {}, balanceStatement: {}, cashFlowStatement: {} };
+            const data = state.latest && (state.latest.ticker || '').toUpperCase() === ticker ? state.latest : emptyData;
+            renderStats(data);
+            renderStatements(data);
         }
     }
 
