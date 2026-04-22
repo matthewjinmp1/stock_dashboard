@@ -668,7 +668,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const starred = state.starredAccounts[starredKey(statementKey, row.label)];
         const growthOn = state.statementToggles[`${statementKey}:growth:${row.label}`];
         const marginOn = state.statementToggles[`${statementKey}:margin:${row.label}`];
-        let html = `<tr><td class="statement-action-cell"><div class="statement-actions">
+        let html = `<tr${starred ? ' class="starred-row"' : ''}><td class="statement-action-cell"><div class="statement-actions">
             <button class="mini-btn ${starred ? 'on gold' : ''}" data-statement="${statementKey}" data-star-account="${row.label}">${starred ? 'Starred' : 'Star'}</button>
             <button class="mini-btn ${growthOn ? 'on blue' : ''}" data-statement="${statementKey}" data-toggle-ratio="growth" data-label="${row.label}">Growth</button>
             ${canMargin ? `<button class="mini-btn ${marginOn ? 'on green' : ''}" data-statement="${statementKey}" data-toggle-ratio="margin" data-label="${row.label}">Margin</button>` : ''}

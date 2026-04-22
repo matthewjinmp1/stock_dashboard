@@ -530,7 +530,7 @@ button:active {
 .statement-table th,
 .statement-table td {
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 1rem 0.8rem;
+    padding: 1rem 0.5rem;
     text-align: right;
     font-weight: 700;
     vertical-align: middle;
@@ -560,7 +560,7 @@ button:active {
 
 .statement-table th:nth-child(n + 3),
 .statement-table td:nth-child(n + 3) {
-    min-width: 118px;
+    min-width: 90px;
 }
 
 .statement-actions {
@@ -1022,4 +1022,8 @@ button:active {
     font-size: 0.8rem;
     font-weight: 700;
     border: 1px solid rgba(14, 165, 233, 0.2);
+}
+
+.starred-row {
+    background-color: rgba(245, 158, 11, 0.08);
 }
