@@ -448,7 +448,7 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(result["gp_3y_growth"], "11.9%")
         self.assertEqual(result["rnd_adj_income"], "25%")
 
-    def test_fills_forward_revenue_growth_from_annual_history_when_estimates_are_missing(self):
+    def test_does_not_fill_forward_revenue_growth_from_annual_history_when_estimates_are_missing(self):
         quote_summary_payload = make_quote_summary_payload()
         quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"] = []
         timeseries_payload = make_timeseries_payload()
@@ -483,21 +483,20 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
                 finviz_market_cap_raw=180,
             )))
 
-        self.assertEqual(result["cy_growth"], "11.1%")
+        self.assertEqual(result["cy_growth"], "--")
         self.assertEqual(result["ny_growth"], "--")
-        self.assertEqual(result["cy_revenue"], "111")
+        self.assertEqual(result["cy_revenue"], "--")
         self.assertEqual(result["ny_revenue"], "--")
-        self.assertEqual(result["cy_adj_inc"], "26.7")
+        self.assertEqual(result["cy_adj_inc"], "--")
         self.assertEqual(result["ny_adj_inc"], "--")
-        self.assertEqual(result["ev_cy_ebit"], "9")
+        self.assertEqual(result["ev_cy_ebit"], "--")
         self.assertEqual(result["ev_ny_ebit"], "--")
 
-    def test_derives_distinct_forward_growth_when_revenue_estimates_exist_without_growth(self):
+    def test_uses_yahoo_revenue_growth_field_without_deriving_from_estimates(self):
         quote_summary_payload = make_quote_summary_payload()
         for trend in quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"]:
-            # Yahoo's raw revenueEstimate.growth can differ from the Analysis
-            # page's displayed Sales Growth (year/est), so derive from the
-            # estimate dollars instead of trusting the raw growth field.
+            # These intentionally disagree with the implied estimate growth.
+            # Display Yahoo's reported growth field instead of deriving one.
             trend["revenueEstimate"]["growth"] = {"raw": 0.99}
         timeseries_payload = make_timeseries_payload()
         income_statement = {
@@ -531,12 +530,12 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
                 finviz_market_cap_raw=180,
             )))
 
-        self.assertEqual(result["cy_growth"], "20%")
-        self.assertEqual(result["ny_growth"], "25%")
+        self.assertEqual(result["cy_growth"], "99%")
+        self.assertEqual(result["ny_growth"], "99%")
         self.assertEqual(result["cy_revenue"], "120")
         self.assertEqual(result["ny_revenue"], "150")
 
-    def test_uses_stockanalysis_forecast_revenue_and_growth_when_yahoo_trends_are_missing(self):
+    def test_uses_stockanalysis_forecast_revenue_without_filling_growth(self):
         quote_summary_payload = make_quote_summary_payload()
         quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"] = []
         timeseries_payload = make_timeseries_payload()
@@ -578,8 +577,8 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
                 finviz_market_cap_raw=180,
             )))
 
-        self.assertEqual(result["cy_growth"], "30%")
-        self.assertEqual(result["ny_growth"], "15.4%")
+        self.assertEqual(result["cy_growth"], "--")
+        self.assertEqual(result["ny_growth"], "--")
         self.assertEqual(result["cy_revenue"], "130")
         self.assertEqual(result["ny_revenue"], "150")
 
@@ -663,8 +662,8 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
                 finviz_market_cap_raw=180,
             )))
 
-        self.assertEqual(result["cy_growth"], "16.5%")
-        self.assertEqual(result["ny_growth"], "15.5%")
+        self.assertEqual(result["cy_growth"], "18.8%")
+        self.assertEqual(result["ny_growth"], "15.7%")
         self.assertEqual(result["cy_revenue"], "328")
         self.assertEqual(result["ny_revenue"], "379")
 

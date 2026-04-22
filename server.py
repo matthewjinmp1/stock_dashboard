@@ -1196,30 +1196,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     growth = (end / abs(start)) ** (1 / years) - 1
                 return growth, start, end, label
 
-            def latest_annual_growth(statement, labels):
-                def parse_period_date(period):
-                    text = str(period)
-                    for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
-                        try:
-                            return datetime.datetime.strptime(text, fmt).date()
-                        except ValueError:
-                            continue
-                    return None
-
-                points = annual_statement_points(statement, labels)
-                if len(points) < 2:
-                    return None, 0.0
-                dated_points = [
-                    (parse_period_date(period), idx, raw)
-                    for idx, (period, raw) in enumerate(points)
-                ]
-                dated_points.sort(key=lambda point: (point[0] or datetime.date.min, point[1]))
-                _latest_date, _latest_idx, latest = dated_points[-1]
-                _prior_date, _prior_idx, prior = dated_points[-2]
-                if not prior:
-                    return None, latest
-                return (latest / abs(prior)) - 1, latest
-
             gp_3y_growth_raw, gp_3y_start_raw, gp_3y_end_raw, gp_3y_label = three_year_growth(income_statement)
             rnd_raw = self._latest_row_raw(income_statement, ["Research & Development", "Research and Development"])
 
@@ -1229,15 +1205,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             cy_eps_raw = ny_eps_raw = year_ago_eps_raw = 0
             cy_eps_growth_raw = ny_eps_growth_raw = None
 
-            def estimate_growth_from_yahoo(revenue_est):
-                revenue_avg = self._raw(revenue_est.get("avg"))
-                year_ago_revenue = (
-                    self._raw(revenue_est.get("yearAgoRevenue"), None)
-                    or self._raw(revenue_est.get("yearAgoSales"), None)
-                )
-                if revenue_avg and year_ago_revenue:
-                    return (revenue_avg / abs(year_ago_revenue)) - 1
-                return None
+            def yahoo_revenue_growth(revenue_est):
+                # Use Yahoo's reported Sales Growth field only. If it is absent,
+                # leave the metric empty rather than estimating or backfilling it.
+                return self._raw(revenue_est.get("growth"), None)
 
             def apply_estimate_trends(trends, overwrite=False, source="yahoo"):
                 nonlocal cy_revenue_raw, ny_revenue_raw, cy_growth_raw, ny_growth_raw
@@ -1249,7 +1220,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     period = trend.get("period")
                     if period == "0y":
                         revenue_avg = self._raw(revenue_est.get("avg"))
-                        revenue_growth = estimate_growth_from_yahoo(revenue_est)
+                        revenue_growth = yahoo_revenue_growth(revenue_est)
                         eps_avg = self._eps_value(earnings_est.get("avg"))
                         year_ago_eps = self._eps_value(earnings_est.get("yearAgoEps"))
                         eps_growth = self._raw(earnings_est.get("growth"), None)
@@ -1266,7 +1237,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             cy_eps_growth_raw = eps_growth
                     elif period == "+1y":
                         revenue_avg = self._raw(revenue_est.get("avg"))
-                        revenue_growth = estimate_growth_from_yahoo(revenue_est)
+                        revenue_growth = yahoo_revenue_growth(revenue_est)
                         eps_avg = self._eps_value(earnings_est.get("avg"))
                         eps_growth = self._raw(earnings_est.get("growth"), None)
                         if revenue_avg and (overwrite or not ny_revenue_raw):
@@ -1301,46 +1272,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     except Exception:
                         pass
                         
-            if cy_growth_raw is None or ny_growth_raw is None or not cy_revenue_raw or not ny_revenue_raw:
+            if not cy_revenue_raw or not ny_revenue_raw:
                 try:
                     forecast_url = f"https://stockanalysis.com/stocks/{ticker.lower()}/forecast/"
                     html = self._counted_open(None, forecast_url, timeout=8).read().decode("utf-8", errors="ignore")
                     forecast_revenues = self._stockanalysis_estimate_points(html, "revenue")
-                    forecast_growth = self._stockanalysis_estimate_points(html, "revenueGrowth", percent=True)
                     if len(forecast_revenues) > 0 and not cy_revenue_raw:
                         cy_revenue_raw = forecast_revenues[0][1]
                     if len(forecast_revenues) > 1 and not ny_revenue_raw:
                         ny_revenue_raw = forecast_revenues[1][1]
-                    if len(forecast_growth) > 0 and cy_growth_raw is None:
-                        cy_growth_raw = forecast_growth[0][1]
-                    if len(forecast_growth) > 1 and ny_growth_raw is None:
-                        ny_growth_raw = forecast_growth[1][1]
-                    data_match = re.search(r"financialData:\{(.*?)\},map:\[", html, re.DOTALL)
-                    if data_match:
-                        data_str = data_match.group(1)
-                        m_rev = re.search(r"revenueGrowth:\[(.*?)\]", data_str)
-                        if m_rev:
-                            arr = self._stockanalysis_array(m_rev.group(1))
                 except Exception as e:
                     print("Fallback StockAnalysis forecast error:", e)
-
-            if cy_growth_raw is None or ny_growth_raw is None or not cy_revenue_raw or not ny_revenue_raw:
-                revenue_growth_fallback, latest_annual_revenue_raw = latest_annual_growth(
-                    income_statement,
-                    ["Total Revenue", "Revenue"],
-                )
-                revenue_base_raw = latest_annual_revenue_raw or revenue_raw
-                if cy_growth_raw is None:
-                    if cy_revenue_raw and revenue_base_raw:
-                        cy_growth_raw = (cy_revenue_raw / abs(revenue_base_raw)) - 1
-                    elif not cy_revenue_raw and revenue_growth_fallback is not None:
-                        cy_growth_raw = revenue_growth_fallback
-                if not cy_revenue_raw and revenue_base_raw and cy_growth_raw is not None:
-                    cy_revenue_raw = revenue_base_raw * (1 + cy_growth_raw)
-                if ny_growth_raw is None and ny_revenue_raw and cy_revenue_raw:
-                    ny_growth_raw = (ny_revenue_raw / abs(cy_revenue_raw)) - 1
-                if not ny_revenue_raw and cy_revenue_raw and ny_growth_raw is not None:
-                    ny_revenue_raw = cy_revenue_raw * (1 + ny_growth_raw)
 
             statement_currency = "USD"
             for item in ts_res:
