@@ -536,7 +536,7 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(result["cy_revenue"], "120")
         self.assertEqual(result["ny_revenue"], "150")
 
-    def test_uses_stockanalysis_forecast_revenue_without_substituting_growth(self):
+    def test_uses_stockanalysis_forecast_revenue_and_growth_when_yahoo_trends_are_missing(self):
         quote_summary_payload = make_quote_summary_payload()
         quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"] = []
         timeseries_payload = make_timeseries_payload()
@@ -578,8 +578,8 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
                 finviz_market_cap_raw=180,
             )))
 
-        self.assertEqual(result["cy_growth"], "--")
-        self.assertEqual(result["ny_growth"], "--")
+        self.assertEqual(result["cy_growth"], "30%")
+        self.assertEqual(result["ny_growth"], "15.4%")
         self.assertEqual(result["cy_revenue"], "130")
         self.assertEqual(result["ny_revenue"], "150")
 

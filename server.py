@@ -1306,10 +1306,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     forecast_url = f"https://stockanalysis.com/stocks/{ticker.lower()}/forecast/"
                     html = self._counted_open(None, forecast_url, timeout=8).read().decode("utf-8", errors="ignore")
                     forecast_revenues = self._stockanalysis_estimate_points(html, "revenue")
+                    forecast_growth = self._stockanalysis_estimate_points(html, "revenueGrowth", percent=True)
                     if len(forecast_revenues) > 0 and not cy_revenue_raw:
                         cy_revenue_raw = forecast_revenues[0][1]
                     if len(forecast_revenues) > 1 and not ny_revenue_raw:
                         ny_revenue_raw = forecast_revenues[1][1]
+                    if len(forecast_growth) > 0 and cy_growth_raw is None:
+                        cy_growth_raw = forecast_growth[0][1]
+                    if len(forecast_growth) > 1 and ny_growth_raw is None:
+                        ny_growth_raw = forecast_growth[1][1]
                     data_match = re.search(r"financialData:\{(.*?)\},map:\[", html, re.DOTALL)
                     if data_match:
                         data_str = data_match.group(1)
@@ -1326,13 +1331,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 )
                 revenue_base_raw = latest_annual_revenue_raw or revenue_raw
                 if cy_growth_raw is None:
-                    if cy_revenue_from_yahoo and cy_revenue_raw and revenue_base_raw:
+                    if cy_revenue_raw and revenue_base_raw:
                         cy_growth_raw = (cy_revenue_raw / abs(revenue_base_raw)) - 1
                     elif not cy_revenue_raw and revenue_growth_fallback is not None:
                         cy_growth_raw = revenue_growth_fallback
                 if not cy_revenue_raw and revenue_base_raw and cy_growth_raw is not None:
                     cy_revenue_raw = revenue_base_raw * (1 + cy_growth_raw)
-                if ny_growth_raw is None and ny_revenue_from_yahoo and cy_revenue_from_yahoo and ny_revenue_raw and cy_revenue_raw:
+                if ny_growth_raw is None and ny_revenue_raw and cy_revenue_raw:
                     ny_growth_raw = (ny_revenue_raw / abs(cy_revenue_raw)) - 1
                 if not ny_revenue_raw and cy_revenue_raw and ny_growth_raw is not None:
                     ny_revenue_raw = cy_revenue_raw * (1 + ny_growth_raw)
