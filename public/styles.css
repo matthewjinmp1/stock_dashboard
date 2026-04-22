@@ -540,19 +540,20 @@ button:active {
 .statement-table th {
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.08em;
     font-size: 0.8rem;
 }
 
 .statement-table th:first-child,
 .statement-table td:first-child {
-    width: 300px;
+    width: 250px;
     text-align: left;
 }
 
 .statement-table th:nth-child(2),
 .statement-table td:nth-child(2) {
     width: 260px;
+    min-width: 200px;
     text-align: left;
     white-space: normal;
 }
