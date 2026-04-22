@@ -17,7 +17,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 6
+PAYLOAD_VERSION = 7
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -678,6 +678,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         quarterly_rows = {}
         period_dates = set()
 
+        quarterly_period_dates = set()
         for item in selected_results or []:
             type_name = self._statement_type_name(item)
             prefix = "annual" if type_name.startswith("annual") else "quarterly" if type_name.startswith("quarterly") else ""
@@ -697,10 +698,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         period_dates.add(point["date"])
             else:
                 quarterly_rows[label] = sorted(points, key=lambda p: p["date"], reverse=True)
+                for point in points:
+                    if not point["date"].startswith("idx-"):
+                        quarterly_period_dates.add(point["date"])
 
         sorted_periods = sorted(period_dates, reverse=True)
         periods = ["TTM"] + sorted_periods
         rows = []
+
+        q_sorted_periods = sorted(quarterly_period_dates, reverse=True)
+        q_periods = ["LATEST"] + q_sorted_periods
+        q_rows_out = []
 
         ordered_labels = [label for label in type_map.values() if label in annual_rows or label in quarterly_rows]
         for lbl in annual_rows.keys():
@@ -714,6 +722,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             annual_points = annual_rows.get(label, [])
             annual_by_date = {p["date"]: p["raw"] for p in annual_points}
             quarter_points = quarterly_rows.get(label, [])
+            quarter_by_date = {p["date"]: p["raw"] for p in quarter_points}
 
             ttm_raw = None
             if len(quarter_points) >= 4:
@@ -728,7 +737,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 values.append(formatter(raw) if raw is not None else "--")
             rows.append({"label": label, "values": values})
 
-        return {"periods": periods if rows else [], "rows": rows}
+            q_latest_raw = quarter_points[0]["raw"] if quarter_points else None
+            q_values = [formatter(q_latest_raw) if q_latest_raw is not None else "--"]
+            for period in q_sorted_periods:
+                raw = quarter_by_date.get(period)
+                q_values.append(formatter(raw) if raw is not None else "--")
+            q_rows_out.append({"label": label, "values": q_values})
+
+        return {
+            "annual": {"periods": periods if rows else [], "rows": rows},
+            "quarterly": {"periods": q_periods if q_rows_out else [], "rows": q_rows_out}
+        }
 
     def build_income_statement_from_timeseries_results(self, selected_results, _identity_formatter=None, formatter=None):
         formatter = formatter or self._format_money
@@ -817,6 +836,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return sorted(points, key=lambda point: point[0])
 
     def _extract_yahoo_analysis_trends_from_html(self, html):
+        json_trends = []
         for match in re.finditer(r'<script[^>]*data-sveltekit-fetched[^>]*>(.*?)</script>', html, re.DOTALL):
             try:
                 body = json.loads(match.group(1)).get("body", "{}")
@@ -828,14 +848,42 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     .get("earningsTrend", {})
                     .get("trend", [])
                 )
-                if trends:
-                    return trends
+                if trends and not json_trends:
+                    json_trends = trends
             except Exception:
                 continue
 
         table_trends = self._extract_yahoo_sales_growth_from_analysis_text(html)
         if table_trends:
-            return table_trends
+            if not json_trends:
+                return table_trends
+
+            by_period = {}
+            order = []
+            for trend in json_trends:
+                period = trend.get("period")
+                if not period:
+                    continue
+                by_period[period] = dict(trend)
+                order.append(period)
+
+            for table_trend in table_trends:
+                period = table_trend.get("period")
+                if not period:
+                    continue
+                merged = dict(by_period.get(period, {"period": period}))
+                revenue_estimate = dict(merged.get("revenueEstimate", {}) or {})
+                table_revenue_estimate = table_trend.get("revenueEstimate", {}) or {}
+                if "growth" in table_revenue_estimate:
+                    revenue_estimate["growth"] = table_revenue_estimate["growth"]
+                merged["revenueEstimate"] = revenue_estimate
+                if period not in by_period:
+                    order.append(period)
+                by_period[period] = merged
+
+            return [by_period[period] for period in order if period in by_period]
+        if json_trends:
+            return json_trends
         return []
 
     def _extract_yahoo_sales_growth_from_analysis_text(self, html):
@@ -934,12 +982,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         }
         url = paths.get(statement_kind)
         if not url:
-            return {"periods": [], "rows": []}
+            return {"annual": {"periods": [], "rows": []}, "quarterly": {"periods": [], "rows": []}}
         html = self._counted_open(None, url, timeout=8).read().decode("utf-8", errors="ignore")
         data_match = re.search(r"financialData:\{(.*?)\},map:\[", html, re.DOTALL)
         map_match = re.search(r"\},map:\[(.*?)\],full_count", html, re.DOTALL)
         if not data_match or not map_match:
-            return {"periods": [], "rows": []}
+            return {"annual": {"periods": [], "rows": []}, "quarterly": {"periods": [], "rows": []}}
 
         field_values = {}
         for match in re.finditer(r"([A-Za-z_][A-Za-z0-9_]*):\[(.*?)\](?=,[A-Za-z_][A-Za-z0-9_]*:|$)", data_match.group(1), re.DOTALL):
@@ -965,47 +1013,51 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             values = [self._format_stockanalysis_value(value, fmt) for value in raw_values[:len(periods)]]
             rows.append({"label": label, "values": values})
 
-        return {"periods": periods if rows else [], "rows": rows}
+        return {
+            "annual": {"periods": periods if rows else [], "rows": rows},
+            "quarterly": {"periods": [], "rows": []}
+        }
 
     def _merge_statement_rows(self, primary, secondary):
-        primary = primary or {"periods": [], "rows": []}
-        secondary = secondary or {"periods": [], "rows": []}
-        periods = []
-        for period in primary.get("periods", []) + secondary.get("periods", []):
-            if period not in periods:
-                periods.append(period)
+        def _merge(p, s):
+            p = p or {"periods": [], "rows": []}
+            s = s or {"periods": [], "rows": []}
+            periods = []
+            for period in p.get("periods", []) + s.get("periods", []):
+                if period not in periods:
+                    periods.append(period)
 
-        labels = []
-        rows_by_label = {}
-        for statement in (primary, secondary):
-            source_periods = statement.get("periods", [])
-            for row in statement.get("rows", []):
-                label = row.get("label")
-                if not label:
-                    continue
-                if label not in labels:
-                    labels.append(label)
-                target = rows_by_label.setdefault(label, {period: "--" for period in periods})
-                for idx, value in enumerate(row.get("values", [])):
-                    if idx >= len(source_periods):
+            labels = []
+            rows_by_label = {}
+            for statement in (p, s):
+                source_periods = statement.get("periods", [])
+                for row in statement.get("rows", []):
+                    label = row.get("label")
+                    if not label:
                         continue
-                    period = source_periods[idx]
-                    if period not in target:
-                        target[period] = "--"
-                    if target.get(period) in (None, "", "--") and value not in (None, "", "--"):
-                        target[period] = value
+                    if label not in labels:
+                        labels.append(label)
+                    target = rows_by_label.setdefault(label, {period: "--" for period in periods})
+                    for idx, value in enumerate(row.get("values", [])):
+                        if idx >= len(source_periods):
+                            continue
+                        p_val = source_periods[idx]
+                        if value and value != "--":
+                            target[p_val] = value
 
-        preferred_order = []
-        for mapping in (INCOME_STATEMENT_TYPES, BALANCE_STATEMENT_TYPES, CASH_FLOW_STATEMENT_TYPES):
-            for label in mapping.values():
-                if label in labels and label not in preferred_order:
-                    preferred_order.append(label)
-        for label in labels:
-            if label not in preferred_order:
-                preferred_order.append(label)
+            sorted_rows = []
+            for label in labels:
+                target = rows_by_label[label]
+                sorted_rows.append({"label": label, "values": [target[period] for period in periods]})
+            return {"periods": periods, "rows": sorted_rows}
 
-        rows = [{"label": label, "values": [rows_by_label[label].get(period, "--") for period in periods]} for label in preferred_order]
-        return {"periods": periods, "rows": rows}
+        if "annual" in (primary or {}) or "quarterly" in (primary or {}) or "annual" in (secondary or {}):
+            return {
+                "annual": _merge((primary or {}).get("annual"), (secondary or {}).get("annual")),
+                "quarterly": _merge((primary or {}).get("quarterly"), (secondary or {}).get("quarterly"))
+            }
+        else:
+            return _merge(primary, secondary)
 
     def fetch_yahoo_finance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics=None):
         finviz_metrics = finviz_metrics or {}
@@ -1488,6 +1540,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         today = datetime.date.today().isoformat()
         now_dt = datetime.datetime.now()
         pulled_at = now_dt.isoformat(timespec="seconds")
+        previous_cache_entry = cache.get(ticker)
+        previous_payload = (
+            previous_cache_entry.get("data", {})
+            if isinstance(previous_cache_entry, dict)
+            else {}
+        )
 
         if ticker.upper() == "TEST":
             self._send_response(200, self.build_test_payload(pulled_at=pulled_at))
@@ -1517,23 +1575,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 and not cache_has_missing_ttm_anchor(payload)
             )
 
+        def enrich_cached_payload(cached_payload, cached_entry, fetch_count=0, refresh_error=False):
+            cached_entry = cached_entry if isinstance(cached_entry, dict) else {}
+            payload = dict(cached_payload)
+            if "dataDate" not in payload:
+                payload["dataDate"] = cached_entry.get("date", today)
+            if not payload.get("pulledAt"):
+                payload["pulledAt"] = cached_entry.get("pulledAt")
+            payload["fetchCount"] = fetch_count
+            if refresh_error:
+                payload["staleDueToRefreshError"] = True
+                payload["refreshError"] = "Data refresh failed; showing cached data."
+            return payload
+
         if not refresh and ticker in cache and cache[ticker].get('date') == today:
             cached_payload = cache[ticker].get('data', {})
             if cache_is_usable(cached_payload):
-                if 'dataDate' not in cached_payload:
-                    cached_payload = {**cached_payload, "dataDate": cache[ticker].get('date', today)}
-                if 'pulledAt' not in cached_payload or not cached_payload.get('pulledAt'):
-                    cached_payload = {**cached_payload, "pulledAt": cache[ticker].get('pulledAt')}
-                cached_payload = {**cached_payload, "fetchCount": 0}
-                self._send_response(200, cached_payload)
+                self._send_response(200, enrich_cached_payload(cached_payload, cache[ticker], fetch_count=0))
                 return
-        elif refresh and ticker in cache:
-            # Force refresh: drop cached entry so a new fetch overwrites it.
-            try:
-                del cache[ticker]
-                save_cache(cache)
-            except Exception:
-                pass
 
         finviz_metrics = {"short_float": "--", "market_cap": "--", "enterprise_value": "--"}
         try:
@@ -1554,6 +1613,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         )))
 
         if result.get("company_name") == ticker and result.get("valuation_basis") == "unavailable":
+            if cache_is_usable(previous_payload):
+                self._send_response(
+                    200,
+                    enrich_cached_payload(
+                        previous_payload,
+                        previous_cache_entry,
+                        fetch_count=getattr(self, "_request_fetch_count", 0),
+                        refresh_error=refresh,
+                    ),
+                )
+                return
             self._send_response(404, {"error": "Data not found for this ticker."})
             return
 

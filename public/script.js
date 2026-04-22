@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
         most: JSON.parse(localStorage.getItem('stock_search_counts') || '{}'),
         assumptions: JSON.parse(localStorage.getItem('stock_assumptions') || '{}'),
         statementTab: localStorage.getItem('stock_statement_tab') || 'income',
+        periodicity: localStorage.getItem('stock_periodicity') || 'annual',
         starredAccounts: JSON.parse(localStorage.getItem('stock_starred_accounts') || '{}'),
         statementToggles: JSON.parse(localStorage.getItem('stock_statement_toggles') || '{}'),
         groups: [],
@@ -507,6 +508,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (star) toggleStarredAccount(star.dataset.statement, star.dataset.starAccount);
         const toggle = event.target.closest('[data-toggle-ratio]');
         if (toggle) toggleStatementRatio(toggle.dataset.statement, toggle.dataset.toggleRatio, toggle.dataset.label);
+        const periodicityBtn = event.target.closest('[data-periodicity]');
+        if (periodicityBtn) {
+            state.periodicity = periodicityBtn.dataset.periodicity;
+            localStorage.setItem('stock_periodicity', state.periodicity);
+            renderStatements(state.latest);
+        }
         const statement = event.target.closest('[data-statement-tab]');
         if (statement) {
             state.statementTab = statement.dataset.statementTab;
@@ -581,17 +588,27 @@ document.addEventListener('DOMContentLoaded', () => {
             ['starred', 'Starred'],
         ];
         panel.innerHTML = `<div class="statement-header">
-            <div><h2>${state.statementTab === 'starred' ? 'Starred Statements' : tabs.find(t => t[0] === state.statementTab)[1]}</h2>
-            <p>Annual figures shown in USD-normalized values</p></div>
+            <div>
+                <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 0.5rem;">
+                    <h2>${state.statementTab === 'starred' ? 'Starred Statements' : tabs.find(t => t[0] === state.statementTab)[1]}</h2>
+                    <div class="statement-actions" style="margin-left: 1rem;">
+                        <button class="mini-btn ${state.periodicity === 'annual' ? 'on blue' : ''}" data-periodicity="annual">Annual</button>
+                        <button class="mini-btn ${state.periodicity === 'quarterly' ? 'on blue' : ''}" data-periodicity="quarterly">Quarterly</button>
+                    </div>
+                </div>
+                <p>${state.periodicity === 'annual' ? 'Annual' : 'Quarterly'} figures shown in USD-normalized values</p>
+            </div>
             <div class="statement-tabs">${tabs.map(([key, label]) => `<button class="tab-btn ${state.statementTab === key ? 'active' : ''}" data-statement-tab="${key}">${label}</button>`).join('')}</div>
         </div>
         ${state.statementTab === 'starred' ? renderStarredStatementTable(data) : renderStatementTable(statementForTab(data, state.statementTab), state.statementTab)}`;
     }
 
     function statementForTab(data, tab) {
-        if (tab === 'balance') return data.balanceStatement || {};
-        if (tab === 'cash') return data.cashFlowStatement || {};
-        return data.incomeStatement || {};
+        let stmt = {};
+        if (tab === 'balance') stmt = data.balanceStatement || {};
+        else if (tab === 'cash') stmt = data.cashFlowStatement || {};
+        else stmt = data.incomeStatement || {};
+        return stmt[state.periodicity || 'annual'] || {};
     }
 
     function starredKey(statement, label) {
@@ -613,10 +630,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderStarredStatementTable(data) {
+        const p = state.periodicity || 'annual';
         const blocks = [
-            ['income', 'Income Statement', data.incomeStatement || {}],
-            ['balance', 'Balance Sheet', data.balanceStatement || {}],
-            ['cash', 'Cash Flow Statement', data.cashFlowStatement || {}],
+            ['income', 'Income Statement', (data.incomeStatement || {})[p] || {}],
+            ['balance', 'Balance Sheet', (data.balanceStatement || {})[p] || {}],
+            ['cash', 'Cash Flow Statement', (data.cashFlowStatement || {})[p] || {}],
         ].map(([key, label, statement]) => {
             const rows = (statement.rows || []).filter((row) => state.starredAccounts[starredKey(key, row.label)]);
             if (!rows.length) return '';
@@ -768,7 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function calcDefinitions(data) {
-        const cashBucket = latestStatementValue(data.balanceStatement, [
+        const cashBucket = latestStatementValue((data.balanceStatement || {}).annual, [
             'Cash, Equivalents & Short Term Investments',
             'Cash & Short Term Investments',
             'Cash Cash Equivalents And Short Term Investments',

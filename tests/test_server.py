@@ -698,6 +698,36 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(trends[1]["period"], "+1y")
         self.assertAlmostEqual(trends[1]["revenueEstimate"]["growth"]["raw"], 0.1546)
 
+    def test_merges_visible_yahoo_sales_growth_when_svelte_trends_lack_growth(self):
+        body = {
+            "quoteSummary": {
+                "result": [{
+                    "earningsTrend": {
+                        "trend": [
+                            {"period": "0y", "revenueEstimate": {"avg": {"raw": 328250000000}}},
+                            {"period": "+1y", "revenueEstimate": {"avg": {"raw": 379000000000}}},
+                        ]
+                    }
+                }]
+            }
+        }
+        analysis_html = f"""
+        <html><body>
+          <script data-sveltekit-fetched>{json.dumps({"body": json.dumps(body)})}</script>
+          <table>
+            <tr><td>Sales Growth (year/est)</td><td>16.17%</td><td>14.63%</td><td>16.52%</td><td>15.46%</td></tr>
+          </table>
+        </body></html>
+        """
+
+        trends = self.handler._extract_yahoo_analysis_trends_from_html(analysis_html)
+        by_period = {trend["period"]: trend for trend in trends}
+
+        self.assertEqual(by_period["0y"]["revenueEstimate"]["avg"]["raw"], 328250000000)
+        self.assertAlmostEqual(by_period["0y"]["revenueEstimate"]["growth"]["raw"], 0.1652)
+        self.assertEqual(by_period["+1y"]["revenueEstimate"]["avg"]["raw"], 379000000000)
+        self.assertAlmostEqual(by_period["+1y"]["revenueEstimate"]["growth"]["raw"], 0.1546)
+
     def test_falls_back_to_actual_annual_eps_when_year_ago_matches_current_year(self):
         quote_summary_payload = make_quote_summary_payload()
         quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"][0]["earningsEstimate"] = {
@@ -844,6 +874,55 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["cashFlowStatement"]["rows"][1]["label"], "Capital Expenditures")
         mock_finviz.assert_not_called()
         mock_yahoo.assert_not_called()
+
+    def test_refresh_failure_preserves_existing_cached_payload(self):
+        handler = make_handler()
+        captured = {}
+        cached_payload = {
+            "ticker": "MSFT",
+            "companyName": "Microsoft Corporation",
+            "marketCap": "3.14T",
+            "payloadVersion": server.PAYLOAD_VERSION,
+            "incomeStatement": {
+                "periods": ["TTM"],
+                "rows": [
+                    {"label": "Total Revenue", "values": ["305B"]},
+                    {"label": "Gross Profit", "values": ["209B"]},
+                    {"label": "Operating Income", "values": ["143B"]},
+                ],
+            },
+            "balanceStatement": fake_statement("Balance"),
+            "cashFlowStatement": fake_statement("Cash"),
+        }
+        cached_entry = {
+            "date": "2026-04-20",
+            "pulledAt": "2026-04-20T10:00:00",
+            "data": cached_payload,
+        }
+
+        def fake_send_response(status, payload):
+            captured["status"] = status
+            captured["payload"] = payload
+
+        with mock.patch("server.load_cache", return_value={"MSFT": cached_entry}), \
+             mock.patch("server.save_cache") as mock_save, \
+             mock.patch.object(handler, "fetch_finviz_snapshot_metrics", return_value={
+                 "short_float": "--",
+                 "market_cap": "--",
+                 "enterprise_value": "--",
+             }), \
+             mock.patch.object(handler, "fetch_yahoo_finance_data", return_value=handler._empty_fetch_tuple("MSFT")), \
+             mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
+            handler.handle_api_request("MSFT", refresh=True)
+
+        self.assertEqual(captured["status"], 200)
+        self.assertEqual(captured["payload"]["ticker"], "MSFT")
+        self.assertEqual(captured["payload"]["marketCap"], "3.14T")
+        self.assertEqual(captured["payload"]["dataDate"], "2026-04-20")
+        self.assertEqual(captured["payload"]["pulledAt"], "2026-04-20T10:00:00")
+        self.assertTrue(captured["payload"]["staleDueToRefreshError"])
+        self.assertIn("refreshError", captured["payload"])
+        mock_save.assert_not_called()
 
     def test_same_day_cache_is_reused_even_if_pulled_at_is_old(self):
         handler = make_handler()

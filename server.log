@@ -1,8 +1,8 @@
 Traceback (most recent call last):
-  File "/Users/matthewjohnson/Documents/stock_analysis/server.py", line 1196, in <module>
+  File "/Users/matthewjohnson/Documents/stock_analysis/server.py", line 1708, in <module>
     with ReusableTCPServer(("127.0.0.1", PORT), Handler) as httpd:
   File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/socketserver.py", line 452, in __init__
     self.server_bind()
-  File "/Users/matthewjohnson/Documents/stock_analysis/server.py", line 1193, in server_bind
+  File "/Users/matthewjohnson/Documents/stock_analysis/server.py", line 1705, in server_bind
     self.socket.bind(self.server_address)
 PermissionError: [Errno 1] Operation not permitted
