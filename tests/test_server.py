@@ -667,6 +667,37 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(result["cy_revenue"], "328")
         self.assertEqual(result["ny_revenue"], "379")
 
+    def test_extracts_visible_yahoo_sales_growth_row_when_quote_summary_trends_are_missing(self):
+        analysis_html = """
+        <html><body>
+          <section>
+            <h2>Revenue Estimate</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Currency in USD</th>
+                  <th>Current Qtr. (Mar 2026)</th>
+                  <th>Next Qtr. (Jun 2026)</th>
+                  <th>Current Year (2026)</th>
+                  <th>Next Year (2027)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Avg. Estimate</td><td>81.4B</td><td>87.62B</td><td>328.25B</td><td>379B</td></tr>
+                <tr><td>Sales Growth (year/est)</td><td>16.17%</td><td>14.63%</td><td>16.52%</td><td>15.46%</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </body></html>
+        """
+
+        trends = self.handler._extract_yahoo_analysis_trends_from_html(analysis_html)
+
+        self.assertEqual(trends[0]["period"], "0y")
+        self.assertAlmostEqual(trends[0]["revenueEstimate"]["growth"]["raw"], 0.1652)
+        self.assertEqual(trends[1]["period"], "+1y")
+        self.assertAlmostEqual(trends[1]["revenueEstimate"]["growth"]["raw"], 0.1546)
+
     def test_falls_back_to_actual_annual_eps_when_year_ago_matches_current_year(self):
         quote_summary_payload = make_quote_summary_payload()
         quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"][0]["earningsEstimate"] = {
