@@ -530,7 +530,7 @@ button:active {
 .statement-table th,
 .statement-table td {
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 1rem 0.5rem;
+    padding: 0.85rem 0.4rem;
     text-align: right;
     font-weight: 700;
     vertical-align: middle;
@@ -540,27 +540,27 @@ button:active {
 .statement-table th {
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    font-size: 0.75rem;
 }
 
 .statement-table th:first-child,
 .statement-table td:first-child {
-    width: 250px;
+    width: 200px;
     text-align: left;
 }
 
 .statement-table th:nth-child(2),
 .statement-table td:nth-child(2) {
-    width: 260px;
-    min-width: 200px;
+    width: 240px;
+    min-width: 180px;
     text-align: left;
     white-space: normal;
 }
 
 .statement-table th:nth-child(n + 3),
 .statement-table td:nth-child(n + 3) {
-    min-width: 90px;
+    min-width: 75px;
 }
 
 .statement-actions {
