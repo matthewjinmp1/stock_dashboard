@@ -686,7 +686,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             base_key = type_name[len(prefix):]
             label = type_map.get(base_key)
             if not label:
-                continue
+                label = self._camel_to_label(base_key)
             points = self._series_points(item, type_name)
             if not points:
                 continue
@@ -703,6 +703,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         rows = []
 
         ordered_labels = [label for label in type_map.values() if label in annual_rows or label in quarterly_rows]
+        for lbl in annual_rows.keys():
+            if lbl not in ordered_labels:
+                ordered_labels.append(lbl)
+        for lbl in quarterly_rows.keys():
+            if lbl not in ordered_labels:
+                ordered_labels.append(lbl)
+
         for label in ordered_labels:
             annual_points = annual_rows.get(label, [])
             annual_by_date = {p["date"]: p["raw"] for p in annual_points}
