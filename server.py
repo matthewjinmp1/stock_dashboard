@@ -9,6 +9,7 @@ import datetime
 import time
 import io
 import subprocess
+import html as html_lib
 from urllib.parse import urlparse, parse_qs
 from urllib.error import URLError, HTTPError
 
@@ -822,6 +823,54 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 )
                 if trends:
                     return trends
+            except Exception:
+                continue
+
+        table_trends = self._extract_yahoo_sales_growth_from_analysis_text(html)
+        if table_trends:
+            return table_trends
+        return []
+
+    def _extract_yahoo_sales_growth_from_analysis_text(self, html):
+        text_sources = [html]
+        for match in re.finditer(r'<script[^>]*data-sveltekit-fetched[^>]*>(.*?)</script>', html, re.DOTALL):
+            try:
+                body = json.loads(match.group(1)).get("body", "")
+                if isinstance(body, str):
+                    text_sources.append(body)
+            except Exception:
+                continue
+
+        for source in text_sources:
+            text = html_lib.unescape(str(source))
+            text = re.sub(r"<[^>]+>", " ", text)
+            text = re.sub(r"\\u0025", "%", text)
+            text = re.sub(r"\\u002F", "/", text)
+            text = re.sub(r"\\+", " ", text)
+            text = re.sub(r"\s+", " ", text).strip()
+
+            label_match = re.search(r"Sales\s+Growth\s*\(\s*year\s*/\s*est\s*\)", text, re.IGNORECASE)
+            if not label_match:
+                continue
+
+            segment = text[label_match.end():label_match.end() + 320]
+            percent_values = re.findall(r"[+\-\u2212]?\d+(?:\.\d+)?\s*%", segment)
+            if len(percent_values) >= 4:
+                cy_growth, ny_growth = percent_values[2], percent_values[3]
+            elif len(percent_values) >= 2:
+                cy_growth, ny_growth = percent_values[-2], percent_values[-1]
+            else:
+                continue
+
+            def to_raw(value):
+                value = value.replace("\u2212", "-").replace("%", "").strip()
+                return float(value) / 100
+
+            try:
+                return [
+                    {"period": "0y", "revenueEstimate": {"growth": {"raw": to_raw(cy_growth)}}},
+                    {"period": "+1y", "revenueEstimate": {"growth": {"raw": to_raw(ny_growth)}}},
+                ]
             except Exception:
                 continue
         return []
