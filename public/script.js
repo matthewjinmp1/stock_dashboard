@@ -337,6 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!hasCurrentResult) {
             $('result-stats').classList.add('hidden');
             $('statement-panel').classList.add('hidden');
+            state.latest = null;
             $('result-ticker').textContent = ticker;
             $('result-data-date').textContent = 'As of --';
             $('result-fetch-info').textContent = 'Fetch time: -- • Fetches: --';

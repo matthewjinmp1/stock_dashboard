@@ -272,7 +272,7 @@ button:active {
     gap: 1.5rem;
 }
 
-#result-stats.hidden {
+#result-stats.hidden, #statement-panel.hidden {
     display: none;
 }
 

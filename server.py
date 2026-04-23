@@ -1027,10 +1027,36 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 q_values.append(formatter(raw) if raw is not None else "--")
             q_rows_out.append({"label": label, "values": q_values})
 
-        return {
+        def _prune(stmt):
+            periods = stmt.get("periods") or []
+            rows = stmt.get("rows") or []
+            if not periods or not rows:
+                return stmt
+            
+            # Count non-empty values for each column index
+            # Index 0 is TTM/LATEST, we usually keep that.
+            valid_indices = [0]
+            for i in range(1, len(periods)):
+                non_empty_count = sum(1 for row in rows if i < len(row["values"]) and row["values"][i] != "--")
+                # Prune if less than 10% of rows have data
+                if non_empty_count >= 1 and (non_empty_count / len(rows)) >= 0.10:
+                    valid_indices.append(i)
+            
+            if len(valid_indices) == len(periods):
+                return stmt
+                
+            return {
+                "periods": [periods[i] for i in valid_indices],
+                "rows": [{"label": r["label"], "values": [r["values"][i] for i in valid_indices]} for r in rows]
+            }
+
+        res = {
             "annual": {"periods": periods if rows else [], "rows": rows},
             "quarterly": {"periods": q_periods if q_rows_out else [], "rows": q_rows_out}
         }
+        res["annual"] = _prune(res["annual"])
+        res["quarterly"] = _prune(res["quarterly"])
+        return res
 
     def build_income_statement_from_timeseries_results(self, selected_results, _identity_formatter=None, formatter=None):
         formatter = formatter or self._format_money
