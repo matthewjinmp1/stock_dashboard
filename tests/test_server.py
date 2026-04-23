@@ -11,6 +11,7 @@ import server
 
 
 FETCH_RESULT_FIELDS = server.FETCH_RESULT_FIELDS
+server.HAS_YFINANCE = False
 
 
 class DummyOpener:
