@@ -1385,9 +1385,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if df is None or df.empty:
             return {"periods": [], "rows": []}
         import pandas as pd
-        # Columns are dates, sort descending; drop columns with ALL NaN
+        # Columns are dates, sort descending; drop mostly-empty columns
         cols = sorted(df.columns, reverse=True)
-        cols = [c for c in cols if df[c].notna().any()]
+        min_fill = max(1, len(df) * 0.25)
+        cols = [c for c in cols if df[c].notna().sum() >= min_fill]
         if not cols:
             return {"periods": [], "rows": []}
         periods = [ttm_label] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
@@ -1395,7 +1396,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         ordered_index = self._ordered_df_index(df, order_map)
         for label in ordered_index:
             raw_values = df.loc[label, cols].tolist()
-            ttm_val = raw_values[0] if raw_values else None
+            # Skip rows where the most recent period has no data (discontinued items)
+            if not raw_values or pd.isna(raw_values[0]):
+                continue
+            ttm_val = raw_values[0]
             formatted = [formatter(ttm_val) if pd.notna(ttm_val) else "--"]
             for v in raw_values:
                 formatted.append(formatter(v) if pd.notna(v) else "--")
@@ -1409,9 +1413,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if df is None or df.empty:
             return {"periods": [], "rows": []}
         import pandas as pd
-        # Columns are dates, sort descending; drop columns with ALL NaN
+        # Columns are dates, sort descending; drop mostly-empty columns
         cols = sorted(df.columns, reverse=True)
-        cols = [c for c in cols if df[c].notna().any()]
+        min_fill = max(1, len(df) * 0.25)
+        cols = [c for c in cols if df[c].notna().sum() >= min_fill]
         if not cols:
             return {"periods": [], "rows": []}
         periods = ["LATEST"] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
@@ -1419,7 +1424,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         ordered_index = self._ordered_df_index(df, order_map)
         for label in ordered_index:
             raw_values = df.loc[label, cols].tolist()
-            latest_val = raw_values[0] if raw_values else None
+            # Skip rows where the most recent period has no data (discontinued items)
+            if not raw_values or pd.isna(raw_values[0]):
+                continue
+            latest_val = raw_values[0]
             formatted = [formatter(latest_val) if pd.notna(latest_val) else "--"]
             for v in raw_values:
                 formatted.append(formatter(v) if pd.notna(v) else "--")
