@@ -1136,26 +1136,43 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return list(df.index)
         ordered_keys = list(order_map.keys())
         index_list = list(df.index)
-        # Build ordered result: items that match order_map keys first, in map order
+        # Build a lowercase-no-spaces lookup for matching
+        normalized_index = {lbl.replace(" ", "").lower(): lbl for lbl in index_list}
         seen = set()
         result = []
         for key in ordered_keys:
-            # yfinance may use CamelCase or spaced labels — check both
+            key_norm = key.lower()
+            # Direct match
             if key in index_list:
                 result.append(key)
                 seen.add(key)
-            else:
-                # Try matching with spaces removed
-                for idx_label in index_list:
-                    if idx_label.replace(" ", "") == key and idx_label not in seen:
-                        result.append(idx_label)
-                        seen.add(idx_label)
-                        break
+            elif key_norm in normalized_index:
+                lbl = normalized_index[key_norm]
+                if lbl not in seen:
+                    result.append(lbl)
+                    seen.add(lbl)
         # Append remaining items not in order_map
         for idx_label in index_list:
             if idx_label not in seen:
                 result.append(idx_label)
         return result
+
+    def _resolve_display_label(self, label, order_map):
+        """Get the display label for a DataFrame index label, using order_map if available."""
+        if order_map:
+            # Direct match
+            if label in order_map:
+                return order_map[label]
+            # Match by removing spaces (case-insensitive)
+            label_norm = label.replace(" ", "").lower()
+            for key, display in order_map.items():
+                if key.lower() == label_norm:
+                    return display
+        # Already contains spaces = already human-readable from yfinance, use as-is
+        if " " in str(label):
+            return str(label)
+        # CamelCase → spaced (only for true CamelCase labels)
+        return re.sub(r"(?<!^)(?=[A-Z])", " ", str(label)).replace("And", "and")
 
     def _df_to_statement(self, df, formatter=None, ttm_label="TTM", order_map=None):
         """Convert a pandas DataFrame (rows=line items, columns=dates) to our statement format."""
@@ -1170,16 +1187,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         ordered_index = self._ordered_df_index(df, order_map)
         for label in ordered_index:
             raw_values = df.loc[label, cols].tolist()
-            # TTM = most recent value (for annual) or just repeat latest
             ttm_val = raw_values[0] if raw_values else None
             formatted = [formatter(ttm_val) if pd.notna(ttm_val) else "--"]
             for v in raw_values:
                 formatted.append(formatter(v) if pd.notna(v) else "--")
-            # Use order_map display label if available, otherwise convert CamelCase
-            camel_key = str(label).replace(" ", "")
-            display_label = (order_map or {}).get(label) or (order_map or {}).get(camel_key)
-            if not display_label:
-                display_label = re.sub(r"(?<!^)(?=[A-Z])", " ", str(label)).replace("And", "and")
+            display_label = self._resolve_display_label(label, order_map)
             rows.append({"label": display_label, "values": formatted})
         return {"periods": periods, "rows": rows}
 
@@ -1199,10 +1211,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             formatted = [formatter(latest_val) if pd.notna(latest_val) else "--"]
             for v in raw_values:
                 formatted.append(formatter(v) if pd.notna(v) else "--")
-            camel_key = str(label).replace(" ", "")
-            display_label = (order_map or {}).get(label) or (order_map or {}).get(camel_key)
-            if not display_label:
-                display_label = re.sub(r"(?<!^)(?=[A-Z])", " ", str(label)).replace("And", "and")
+            display_label = self._resolve_display_label(label, order_map)
             rows.append({"label": display_label, "values": formatted})
         return {"periods": periods, "rows": rows}
 
