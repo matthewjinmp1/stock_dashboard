@@ -697,7 +697,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <button class="mini-btn ${growthOn ? 'on blue' : ''}" data-statement="${statementKey}" data-toggle-ratio="growth" data-label="${row.label}">Growth</button>
             ${canMargin ? `<button class="mini-btn ${marginOn ? 'on green' : ''}" data-statement="${statementKey}" data-toggle-ratio="margin" data-label="${row.label}">Margin</button>` : ''}
         </div></td><td class="statement-label-cell">${row.label}</td>${(row.values || []).map(value => `<td>${formatStatementValue(value)}</td>`).join('')}</tr>`;
-        if (growthOn) html += ratioRow('Growth', growthValues(row.values || []));
+        if (growthOn) html += ratioRow('Growth', growthValues(row.values || [], periods));
         if (marginOn) html += ratioRow('Margin', marginValues(row, periods, displayStatement));
         return html;
     }
@@ -744,12 +744,35 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${sign}${abs.toFixed(2).replace(/\.?0+$/, '')}`;
     }
 
-    function growthValues(values) {
+    function growthValues(values, periods) {
+        const lookback = state.periodicity === 'quarterly' ? 4 : 1;
         return values.map((value, idx) => {
-            if (idx === 0) return '--';
-            const prev = parsePercentBase(values[idx - 1]);
+            if (idx < lookback) return '--';
+            
+            // Try to find the actual YoY index by period label if quarterly
+            let prevIdx = idx - lookback;
+            if (state.periodicity === 'quarterly') {
+                const currentPeriod = periods[idx];
+                const currentDate = Date.parse(currentPeriod);
+                if (!isNaN(currentDate)) {
+                    const targetDate = new Date(currentDate);
+                    targetDate.setFullYear(targetDate.getFullYear() - 1);
+                    const targetTime = targetDate.getTime();
+                    
+                    // Search for a period that matches this date
+                    for (let i = idx - 1; i >= 0; i--) {
+                        if (Math.abs(Date.parse(periods[i]) - targetTime) < 15 * 86400000) { // 15 day tolerance
+                            prevIdx = i;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (prevIdx < 0) return '--';
+            const prev = parsePercentBase(values[prevIdx]);
             const curr = parsePercentBase(value);
-            return prev ? `${((curr / Math.abs(prev) - 1) * 100).toFixed(1)}%` : '--';
+            return (prev && prev !== 0) ? `${((curr / Math.abs(prev) - 1) * 100).toFixed(1)}%` : '--';
         });
     }
 

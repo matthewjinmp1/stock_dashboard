@@ -1371,6 +1371,50 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertNotIn("Gross PP&E", labels)
         self.assertNotIn("Capital Expenditures", labels)
 
+    def test_build_statement_separates_annual_and_quarterly_correctly(self):
+        selected_results = [
+            {
+                "meta": {"type": ["annualTotalRevenue"]},
+                "annualTotalRevenue": [{"asOfDate": "2025-12-31", "reportedValue": {"raw": 1000}}],
+            },
+            {
+                "meta": {"type": ["quarterlyTotalRevenue"]},
+                "quarterlyTotalRevenue": [
+                    {"asOfDate": "2025-12-31", "reportedValue": {"raw": 300}},
+                    {"asOfDate": "2025-09-30", "reportedValue": {"raw": 250}},
+                    {"asOfDate": "2025-06-30", "reportedValue": {"raw": 220}},
+                    {"asOfDate": "2025-03-31", "reportedValue": {"raw": 230}},
+                    {"asOfDate": "2024-12-31", "reportedValue": {"raw": 280}},
+                ],
+            },
+            # Test deduplication: secondary key for same label
+            {
+                "meta": {"type": ["quarterlyRevenue"]},
+                "quarterlyRevenue": [{"asOfDate": "2025-12-31", "reportedValue": {"raw": 300}}],
+            }
+        ]
+
+        statement = self.handler.build_income_statement_from_timeseries_results(
+            selected_results,
+            lambda value: value,
+            lambda value: str(int(value)),
+        )
+
+        # Check Annual
+        self.assertEqual(statement["annual"]["periods"], ["TTM", "2025-12-31"])
+        self.assertEqual(statement["annual"]["rows"][0]["values"], ["1000", "1000"])
+
+        # Check Quarterly
+        q_stmt = statement["quarterly"]
+        self.assertEqual(q_stmt["periods"], ["LATEST", "2025-12-31", "2025-09-30", "2025-06-30", "2025-03-31", "2024-12-31"])
+        
+        revenue_row = next(row for row in q_stmt["rows"] if row["label"] == "Total Revenue")
+        # LATEST should match the most recent quarter (idx 1)
+        self.assertEqual(revenue_row["values"], ["300", "300", "250", "220", "230", "280"])
+
+        # Verify only one Total Revenue row (deduplication check)
+        labels = [row["label"] for row in q_stmt["rows"]]
+        self.assertEqual(labels.count("Total Revenue"), 1)
 
 if __name__ == "__main__":
     unittest.main()
