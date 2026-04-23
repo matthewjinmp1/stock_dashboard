@@ -299,9 +299,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 <h3>Analyst Recommendations</h3>
                 <div class="rec-summary">${data.recommendationKey || '--'} • ${rating}/5 stars</div>
                 <div class="rec-grid">${counts.map(([label, count, tone]) => {
-                    const pct = total ? `${Math.round((count / total) * 100)}%` : '0%';
-                    return `<div class="rec-pill rec-${tone}"><strong>${count}</strong><span>${label}</span><small>${pct}</small></div>`;
-                }).join('')}</div>
+            const pct = total ? `${Math.round((count / total) * 100)}%` : '0%';
+            return `<div class="rec-pill rec-${tone}"><strong>${count}</strong><span>${label}</span><small>${pct}</small></div>`;
+        }).join('')}</div>
             </div>
         </section>`;
     }

@@ -963,20 +963,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             base_key = type_name[len(prefix):]
             label = type_map.get(base_key)
             if not label:
-                label = self._camel_to_label(base_key)
+                continue
             points = self._series_points(item, type_name)
             if not points:
                 continue
             if prefix == "annual":
-                annual_rows[label] = sorted(points, key=lambda p: p["date"], reverse=True)
-                for point in points:
-                    if not point["date"].startswith("idx-"):
-                        period_dates.add(point["date"])
+                if label not in annual_rows:
+                    annual_rows[label] = sorted(points, key=lambda p: p["date"], reverse=True)
+                    for point in points:
+                        if not point["date"].startswith("idx-"):
+                            period_dates.add(point["date"])
             else:
-                quarterly_rows[label] = sorted(points, key=lambda p: p["date"], reverse=True)
-                for point in points:
-                    if not point["date"].startswith("idx-"):
-                        quarterly_period_dates.add(point["date"])
+                if label not in quarterly_rows:
+                    quarterly_rows[label] = sorted(points, key=lambda p: p["date"], reverse=True)
+                    for point in points:
+                        if not point["date"].startswith("idx-"):
+                            quarterly_period_dates.add(point["date"])
 
         sorted_periods = sorted(period_dates, reverse=True)
         periods = ["TTM"] + sorted_periods
@@ -986,13 +988,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         q_periods = ["LATEST"] + q_sorted_periods
         q_rows_out = []
 
-        ordered_labels = [label for label in type_map.values() if label in annual_rows or label in quarterly_rows]
-        for lbl in annual_rows.keys():
-            if lbl not in ordered_labels:
+        seen_labels = set()
+        ordered_labels = []
+        for label in type_map.values():
+            if label in seen_labels:
+                continue
+            if label in annual_rows or label in quarterly_rows:
+                ordered_labels.append(label)
+                seen_labels.add(label)
+        for lbl in list(annual_rows.keys()) + list(quarterly_rows.keys()):
+            if lbl not in seen_labels:
                 ordered_labels.append(lbl)
-        for lbl in quarterly_rows.keys():
-            if lbl not in ordered_labels:
-                ordered_labels.append(lbl)
+                seen_labels.add(lbl)
 
         for label in ordered_labels:
             annual_points = annual_rows.get(label, [])
@@ -1319,7 +1326,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             continue
                         p_val = source_periods[idx]
                         if value and value != "--":
-                            target[p_val] = value
+                            if target[p_val] == "--":
+                                target[p_val] = value
 
             sorted_rows = []
             for label in labels:
@@ -2137,7 +2145,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             year_ago_eps_raw *= eps_fx
 
             if cy_eps_raw and year_ago_eps_raw and abs(cy_eps_raw - year_ago_eps_raw) < 1e-9:
-                eps_row = next((row for row in income_statement.get("rows", []) if row.get("label") in ("Diluted EPS", "Basic EPS")), None)
+                eps_row = next((row for row in self._unwrap_annual(income_statement).get("rows", []) if row.get("label") in ("Diluted EPS", "Basic EPS")), None)
                 if eps_row and len(eps_row.get("values", [])) > 1:
                     fallback = self._parse_money_to_raw(eps_row["values"][1])
                     if fallback:
@@ -2270,11 +2278,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         def cache_has_missing_ttm_anchor(payload):
             statement = payload.get("incomeStatement") or {}
-            periods = statement.get("periods") or []
+            flat = self._unwrap_annual(statement)
+            periods = flat.get("periods") or []
             if not periods or periods[0] != "TTM":
                 return False
             labels = {"Total Revenue", "Gross Profit", "Operating Income"}
-            for row in statement.get("rows", []):
+            for row in flat.get("rows", []):
                 if row.get("label") in labels:
                     values = row.get("values") or []
                     if values and values[0] in (None, "", "--"):

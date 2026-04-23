@@ -10,70 +10,7 @@ from urllib.error import HTTPError
 import server
 
 
-FETCH_RESULT_FIELDS = [
-    "income",
-    "margin",
-    "gross_margin",
-    "ev_cy_ebit",
-    "ev_ny_ebit",
-    "adj_income",
-    "capex",
-    "da",
-    "ev",
-    "ev_adj_ebit",
-    "cy_growth",
-    "ny_growth",
-    "gp_3y_growth",
-    "gp_3y_start",
-    "gp_3y_end",
-    "gp_3y_label",
-    "rnd_adj_income",
-    "cy_adj_inc",
-    "ny_adj_inc",
-    "market_cap",
-    "net_cash",
-    "derived_enterprise_value",
-    "revenue",
-    "operating_margin",
-    "da_minus_capex",
-    "cy_revenue",
-    "ny_revenue",
-    "gross_ppe",
-    "adj_ebit_gross_ppe",
-    "capex_adj_income",
-    "investment_capex",
-    "roc",
-    "net_working_capital",
-    "net_fixed_assets",
-    "receivables",
-    "inventory",
-    "accounts_payable",
-    "financial_currency",
-    "usd_fx_rate",
-    "company_name",
-    "income_statement",
-    "balance_statement",
-    "cash_flow_statement",
-    "current_price",
-    "target_mean_price",
-    "target_low_price",
-    "target_high_price",
-    "target_move",
-    "recommendation_mean",
-    "recommendation_key",
-    "analyst_recommendations",
-    "valuation_basis",
-    "valuation_prefix",
-    "valuation_numerator_label",
-    "current_year_eps",
-    "next_year_eps",
-    "year_ago_eps",
-    "current_year_eps_growth",
-    "next_year_eps_growth",
-    "price_current_eps",
-    "price_cy_eps",
-    "price_ny_eps",
-]
+FETCH_RESULT_FIELDS = server.FETCH_RESULT_FIELDS
 
 
 class DummyOpener:
@@ -207,11 +144,12 @@ def make_timeseries_payload():
 
 
 def fake_statement(label):
-    return {"periods": ["TTM"], "rows": [{"label": label, "values": ["1"]}]}
+    s = {"periods": ["TTM"], "rows": [{"label": label, "values": ["1"]}]}
+    return {"annual": s, "quarterly": s}
 
 
 def fake_balance_statement():
-    return {
+    s = {
         "periods": ["MRQ"],
         "rows": [
             {"label": "Current Debt", "values": ["10"]},
@@ -220,6 +158,7 @@ def fake_balance_statement():
             {"label": "Other Short Term Investments", "values": ["5"]},
         ],
     }
+    return {"annual": s, "quarterly": s}
 
 
 class CacheDatabaseTests(unittest.TestCase):
@@ -285,12 +224,13 @@ class CacheDatabaseTests(unittest.TestCase):
 
 
 def fake_income_statement_with_eps(ttm_value, annual_value):
-    return {
+    s = {
         "periods": ["TTM", "2025-12-31"],
         "rows": [
             {"label": "Diluted EPS", "values": [ttm_value, annual_value]},
         ],
     }
+    return {"annual": s, "quarterly": s}
 
 
 class FetchYahooFinanceDataTests(unittest.TestCase):
@@ -377,6 +317,7 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
                 {"label": "Long Term Debt", "values": ["40.2B", "40.2B"]},
             ],
         }
+        balance_statement = {"annual": balance_statement, "quarterly": balance_statement}
 
         def counted_open(_opener, url, timeout=3):
             if "quoteSummary" in url:
@@ -420,6 +361,7 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
                 {"label": "Research & Development", "values": ["6", "6", "5", "4", "3"]},
             ],
         }
+        income_statement = {"annual": income_statement, "quarterly": income_statement}
 
         def counted_open(_opener, url, timeout=3):
             if "quoteSummary" in url:
@@ -869,9 +811,9 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["ev_cy_ebit"], "14.5")
         self.assertEqual(payload["ev_ny_ebit"], "13")
         self.assertEqual(payload["priceCyEps"], "10")
-        self.assertEqual(payload["incomeStatement"]["rows"][0]["label"], "Total Revenue")
-        self.assertEqual(payload["balanceStatement"]["rows"][2]["label"], "Cash, Equivalents & Short Term Investments")
-        self.assertEqual(payload["cashFlowStatement"]["rows"][1]["label"], "Capital Expenditures")
+        self.assertEqual(payload["incomeStatement"]["annual"]["rows"][0]["label"], "Total Revenue")
+        self.assertEqual(payload["balanceStatement"]["annual"]["rows"][2]["label"], "Cash, Equivalents & Short Term Investments")
+        self.assertEqual(payload["cashFlowStatement"]["annual"]["rows"][1]["label"], "Capital Expenditures")
         mock_finviz.assert_not_called()
         mock_yahoo.assert_not_called()
 
@@ -1053,20 +995,29 @@ class HandleApiRequestContractTests(unittest.TestCase):
             "evSource": "finviz",
             "marketCapSource": "yahoo",
             "incomeStatement": {
-                "periods": ["TTM", "2025-06-30", "2024-06-30", "2023-06-30", "2022-06-30"],
-                "rows": [
-                    {"label": "Total Revenue", "values": ["--", "282B", "245B", "212B", "198B"]},
-                    {"label": "Gross Profit", "values": ["--", "194B", "171B", "146B", "136B"]},
-                    {"label": "Operating Income", "values": ["--", "129B", "109B", "88.5B", "83.4B"]},
-                ],
+                "annual": {
+                    "periods": ["TTM", "2025-06-30", "2024-06-30", "2023-06-30", "2022-06-30"],
+                    "rows": [
+                        {"label": "Total Revenue", "values": ["--", "282B", "245B", "212B", "198B"]},
+                        {"label": "Gross Profit", "values": ["--", "194B", "171B", "146B", "136B"]},
+                        {"label": "Operating Income", "values": ["--", "129B", "109B", "88.5B", "83.4B"]},
+                    ],
+                },
+                "quarterly": {"periods": [], "rows": []}
             },
             "balanceStatement": {
-                "periods": ["MRQ", "2025-06-30"],
-                "rows": [{"label": "Total Assets", "values": ["619B", "619B"]}],
+                "annual": {
+                    "periods": ["MRQ", "2025-06-30"],
+                    "rows": [{"label": "Total Assets", "values": ["619B", "619B"]}],
+                },
+                "quarterly": {"periods": [], "rows": []}
             },
             "cashFlowStatement": {
-                "periods": ["TTM", "2025-06-30"],
-                "rows": [{"label": "Operating Cash Flow", "values": ["136B", "119B"]}],
+                "annual": {
+                    "periods": ["TTM", "2025-06-30"],
+                    "rows": [{"label": "Operating Cash Flow", "values": ["136B", "119B"]}],
+                },
+                "quarterly": {"periods": [], "rows": []}
             },
         }
 
@@ -1076,15 +1027,18 @@ class HandleApiRequestContractTests(unittest.TestCase):
             "378B", "323B", "44.1%", "58.3%", "40.9B", "52.2%", "43.1B", "230B", "69.9B", "938M", "27.7B", "USD",
             1.0, "Microsoft Corporation",
             {
-                "periods": ["TTM", "2025-06-30", "2024-06-30", "2023-06-30", "2022-06-30"],
-                "rows": [
-                    {"label": "Total Revenue", "values": ["305B", "282B", "245B", "212B", "198B"]},
-                    {"label": "Gross Profit", "values": ["209B", "194B", "171B", "146B", "136B"]},
-                    {"label": "Operating Income", "values": ["143B", "129B", "109B", "88.5B", "83.4B"]},
-                ],
+                "annual": {
+                    "periods": ["TTM", "2025-06-30", "2024-06-30", "2023-06-30", "2022-06-30"],
+                    "rows": [
+                        {"label": "Total Revenue", "values": ["305B", "282B", "245B", "212B", "198B"]},
+                        {"label": "Gross Profit", "values": ["209B", "194B", "171B", "146B", "136B"]},
+                        {"label": "Operating Income", "values": ["143B", "129B", "109B", "88.5B", "83.4B"]},
+                    ],
+                },
+                "quarterly": {"periods": [], "rows": []}
             },
-            {"periods": ["MRQ", "2025-06-30"], "rows": [{"label": "Total Assets", "values": ["619B", "619B"]}]},
-            {"periods": ["TTM", "2025-06-30"], "rows": [{"label": "Operating Cash Flow", "values": ["136B", "119B"]}]},
+            {"annual": {"periods": ["MRQ", "2025-06-30"], "rows": [{"label": "Total Assets", "values": ["619B", "619B"]}]}, "quarterly": {"periods": [], "rows": []}},
+            {"annual": {"periods": ["TTM", "2025-06-30"], "rows": [{"label": "Operating Cash Flow", "values": ["136B", "119B"]}]}, "quarterly": {"periods": [], "rows": []}},
             "384", "585", "392", "730", "52.3%", "1.28", "strong_buy",
             {"period": "0m", "strongBuy": 10, "buy": 45, "hold": 3, "sell": 0, "strongSell": 0},
             "enterpriseValue", "EV", "Current Enterprise Value", "16.7", "18.8", "13.6", "22.5%", "12.7%", "28.3", "23", "20.4",
@@ -1112,7 +1066,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
             handler.handle_api_request("MSFT", refresh=False)
 
         self.assertEqual(captured["status"], 200)
-        self.assertEqual(captured["payload"]["incomeStatement"]["rows"][0]["values"][0], "305B")
+        self.assertEqual(captured["payload"]["incomeStatement"]["annual"]["rows"][0]["values"][0], "305B")
         mock_finviz.assert_called_once()
         mock_yahoo.assert_called_once()
 
@@ -1232,11 +1186,11 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(merged["periods"], ["TTM", "2025-06-30"])
         self.assertEqual(
             [row["label"] for row in merged["rows"]],
-            ["Total Revenue", "Gross Profit", "Operating Income"],
+            ["Total Revenue", "Operating Income", "Gross Profit"],
         )
         self.assertEqual(merged["rows"][0]["values"], ["305B", "282B"])
-        self.assertEqual(merged["rows"][1]["values"], ["194B", "194B"])
-        self.assertEqual(merged["rows"][2]["values"], ["143B", "129B"])
+        self.assertEqual(merged["rows"][1]["values"], ["143B", "129B"])
+        self.assertEqual(merged["rows"][2]["values"], ["194B", "194B"])
 
     def test_merge_statement_rows_preserves_union_of_periods(self):
         primary = {
@@ -1344,8 +1298,8 @@ class StatementPageBuilderTests(unittest.TestCase):
             lambda value: str(int(value)),
         )
 
-        self.assertEqual(statement["periods"][0], "TTM")
-        operating_income_row = next(row for row in statement["rows"] if row["label"] == "Operating Income")
+        self.assertEqual(statement["annual"]["periods"][0], "TTM")
+        operating_income_row = next(row for row in statement["annual"]["rows"] if row["label"] == "Operating Income")
         self.assertEqual(operating_income_row["values"][0], "142559000000")
         self.assertEqual(operating_income_row["values"][1], "129000000000")
 
@@ -1372,8 +1326,8 @@ class StatementPageBuilderTests(unittest.TestCase):
             lambda value: str(int(value)),
         )
 
-        revenue_row = next(row for row in statement["rows"] if row["label"] == "Total Revenue")
-        self.assertEqual(statement["periods"][:2], ["TTM", "2025-12-31"])
+        revenue_row = next(row for row in statement["annual"]["rows"] if row["label"] == "Total Revenue")
+        self.assertEqual(statement["annual"]["periods"][:2], ["TTM", "2025-12-31"])
         self.assertEqual(revenue_row["values"][:2], ["751766000000", "751766000000"])
 
     def test_income_statement_timeseries_ignores_balance_sheet_and_cash_flow_rows(self):
@@ -1410,7 +1364,7 @@ class StatementPageBuilderTests(unittest.TestCase):
             lambda value: str(int(value)),
         )
 
-        labels = [row["label"] for row in statement["rows"]]
+        labels = [row["label"] for row in statement["annual"]["rows"]]
         self.assertEqual(labels, ["Total Revenue"])
         self.assertNotIn("Accounts Payable", labels)
         self.assertNotIn("Gross PP&E", labels)
