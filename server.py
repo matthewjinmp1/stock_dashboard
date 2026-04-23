@@ -1385,8 +1385,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if df is None or df.empty:
             return {"periods": [], "rows": []}
         import pandas as pd
-        # Columns are dates, sort descending
+        # Columns are dates, sort descending; drop columns with ALL NaN
         cols = sorted(df.columns, reverse=True)
+        cols = [c for c in cols if df[c].notna().any()]
+        if not cols:
+            return {"periods": [], "rows": []}
         periods = [ttm_label] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
         rows = []
         ordered_index = self._ordered_df_index(df, order_map)
@@ -1406,7 +1409,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if df is None or df.empty:
             return {"periods": [], "rows": []}
         import pandas as pd
+        # Columns are dates, sort descending; drop columns with ALL NaN
         cols = sorted(df.columns, reverse=True)
+        cols = [c for c in cols if df[c].notna().any()]
+        if not cols:
+            return {"periods": [], "rows": []}
         periods = ["LATEST"] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
         rows = []
         ordered_index = self._ordered_df_index(df, order_map)
