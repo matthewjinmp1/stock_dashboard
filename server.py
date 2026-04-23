@@ -1385,20 +1385,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if df is None or df.empty:
             return {"periods": [], "rows": []}
         import pandas as pd
-        # Columns are dates, sort descending; drop mostly-empty columns
-        cols = sorted(df.columns, reverse=True)
-        min_fill = max(1, len(df) * 0.25)
-        cols = [c for c in cols if df[c].notna().sum() >= min_fill]
+        all_cols = sorted(df.columns, reverse=True)
+        if not all_cols:
+            return {"periods": [], "rows": []}
+        # Determine active rows: most recent column has data
+        ordered_index = self._ordered_df_index(df, order_map)
+        active_labels = [lbl for lbl in ordered_index if pd.notna(df.loc[lbl, all_cols[0]])]
+        if not active_labels:
+            return {"periods": [], "rows": []}
+        # Filter columns: keep only those where active rows have data
+        active_df = df.loc[active_labels]
+        cols = [c for c in all_cols if active_df[c].notna().any()]
         if not cols:
             return {"periods": [], "rows": []}
         periods = [ttm_label] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
         rows = []
-        ordered_index = self._ordered_df_index(df, order_map)
-        for label in ordered_index:
+        for label in active_labels:
             raw_values = df.loc[label, cols].tolist()
-            # Skip rows where the most recent period has no data (discontinued items)
-            if not raw_values or pd.isna(raw_values[0]):
-                continue
             ttm_val = raw_values[0]
             formatted = [formatter(ttm_val) if pd.notna(ttm_val) else "--"]
             for v in raw_values:
@@ -1413,20 +1416,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if df is None or df.empty:
             return {"periods": [], "rows": []}
         import pandas as pd
-        # Columns are dates, sort descending; drop mostly-empty columns
-        cols = sorted(df.columns, reverse=True)
-        min_fill = max(1, len(df) * 0.25)
-        cols = [c for c in cols if df[c].notna().sum() >= min_fill]
+        all_cols = sorted(df.columns, reverse=True)
+        if not all_cols:
+            return {"periods": [], "rows": []}
+        # Determine active rows: most recent column has data
+        ordered_index = self._ordered_df_index(df, order_map)
+        active_labels = [lbl for lbl in ordered_index if pd.notna(df.loc[lbl, all_cols[0]])]
+        if not active_labels:
+            return {"periods": [], "rows": []}
+        # Filter columns: keep only those where active rows have data
+        active_df = df.loc[active_labels]
+        cols = [c for c in all_cols if active_df[c].notna().any()]
         if not cols:
             return {"periods": [], "rows": []}
         periods = ["LATEST"] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
         rows = []
-        ordered_index = self._ordered_df_index(df, order_map)
-        for label in ordered_index:
+        for label in active_labels:
             raw_values = df.loc[label, cols].tolist()
-            # Skip rows where the most recent period has no data (discontinued items)
-            if not raw_values or pd.isna(raw_values[0]):
-                continue
             latest_val = raw_values[0]
             formatted = [formatter(latest_val) if pd.notna(latest_val) else "--"]
             for v in raw_values:
