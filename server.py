@@ -1478,14 +1478,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             stock = yf.Ticker(ticker)
             info = stock.info or {}
+            self._request_fetch_count = getattr(self, "_request_fetch_count", 0) + 1
 
-            # Financial statements
+            # Financial statements (each property triggers HTTP calls internally)
             annual_income = stock.financials
+            self._request_fetch_count += 1
             quarterly_income = stock.quarterly_financials
+            self._request_fetch_count += 1
             annual_balance = stock.balance_sheet
+            self._request_fetch_count += 1
             quarterly_balance = stock.quarterly_balance_sheet
+            self._request_fetch_count += 1
             annual_cashflow = stock.cashflow
+            self._request_fetch_count += 1
             quarterly_cashflow = stock.quarterly_cashflow
+            self._request_fetch_count += 1
 
             income_statement = {
                 "annual": self._df_to_statement(annual_income, order_map=INCOME_STATEMENT_TYPES),
@@ -1577,6 +1584,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # Try earnings_estimate for better estimates
             try:
                 ee = stock.earnings_estimate
+                self._request_fetch_count += 1
                 if ee is not None and not ee.empty:
                     if "0y" in ee.index:
                         if "avg" in ee.columns and pd.notna(ee.loc["0y", "avg"]):
@@ -1596,6 +1604,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # Try revenue_estimate for better revenue forecasts
             try:
                 re_est = stock.revenue_estimate
+                self._request_fetch_count += 1
                 if re_est is not None and not re_est.empty:
                     if "0y" in re_est.index:
                         if "avg" in re_est.columns and pd.notna(re_est.loc["0y", "avg"]):
@@ -1673,6 +1682,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             analyst_recommendations = {}
             try:
                 recs = stock.recommendations
+                self._request_fetch_count += 1
                 if recs is not None and not recs.empty:
                     latest = recs.iloc[-1] if len(recs) > 0 else {}
                     analyst_recommendations = {
