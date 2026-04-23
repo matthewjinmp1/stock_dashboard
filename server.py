@@ -13,11 +13,17 @@ import html as html_lib
 from urllib.parse import urlparse, parse_qs
 from urllib.error import URLError, HTTPError
 
+try:
+    import yfinance as yf
+    HAS_YFINANCE = True
+except ImportError:
+    HAS_YFINANCE = False
+
 PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 7
+PAYLOAD_VERSION = 8
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -1124,7 +1130,372 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             return _merge(primary, secondary)
 
+    def _df_to_statement(self, df, formatter=None, ttm_label="TTM"):
+        """Convert a pandas DataFrame (rows=line items, columns=dates) to our statement format."""
+        formatter = formatter or self._format_money
+        if df is None or df.empty:
+            return {"periods": [], "rows": []}
+        import pandas as pd
+        # Columns are dates, sort descending
+        cols = sorted(df.columns, reverse=True)
+        periods = [ttm_label] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
+        rows = []
+        for label in df.index:
+            raw_values = df.loc[label, cols].tolist()
+            # TTM = most recent value (for annual) or just repeat latest
+            ttm_val = raw_values[0] if raw_values else None
+            formatted = [formatter(ttm_val) if pd.notna(ttm_val) else "--"]
+            for v in raw_values:
+                formatted.append(formatter(v) if pd.notna(v) else "--")
+            # Convert index label from CamelCase to readable
+            display_label = re.sub(r"(?<!^)(?=[A-Z])", " ", str(label)).replace("And", "and")
+            rows.append({"label": display_label, "values": formatted})
+        return {"periods": periods, "rows": rows}
+
+    def _df_to_quarterly_statement(self, df, formatter=None):
+        """Convert a quarterly DataFrame to our statement format with LATEST anchor."""
+        formatter = formatter or self._format_money
+        if df is None or df.empty:
+            return {"periods": [], "rows": []}
+        import pandas as pd
+        cols = sorted(df.columns, reverse=True)
+        periods = ["LATEST"] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
+        rows = []
+        for label in df.index:
+            raw_values = df.loc[label, cols].tolist()
+            latest_val = raw_values[0] if raw_values else None
+            formatted = [formatter(latest_val) if pd.notna(latest_val) else "--"]
+            for v in raw_values:
+                formatted.append(formatter(v) if pd.notna(v) else "--")
+            display_label = re.sub(r"(?<!^)(?=[A-Z])", " ", str(label)).replace("And", "and")
+            rows.append({"label": display_label, "values": formatted})
+        return {"periods": periods, "rows": rows}
+
+    def _df_raw_value(self, df, row_labels, col_index=0):
+        """Get a raw numeric value from a DataFrame by row label and column index."""
+        if df is None or df.empty:
+            return 0.0
+        import pandas as pd
+        for label in row_labels:
+            if label in df.index:
+                cols = sorted(df.columns, reverse=True)
+                if col_index < len(cols):
+                    val = df.loc[label, cols[col_index]]
+                    if pd.notna(val):
+                        return float(val)
+        return 0.0
+
+    def _df_ttm_value(self, quarterly_df, annual_df, row_labels, absolute=False):
+        """Calculate TTM from last 4 quarters, falling back to latest annual."""
+        import pandas as pd
+        if quarterly_df is not None and not quarterly_df.empty:
+            cols = sorted(quarterly_df.columns, reverse=True)
+            for label in row_labels:
+                if label in quarterly_df.index:
+                    vals = [quarterly_df.loc[label, c] for c in cols[:4]]
+                    valid = [float(v) for v in vals if pd.notna(v)]
+                    if len(valid) >= 4:
+                        total = sum(valid)
+                        return abs(total) if absolute else total
+        # Fallback to latest annual
+        val = self._df_raw_value(annual_df, row_labels, 0)
+        return abs(val) if absolute else val
+
+    def fetch_yfinance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics=None):
+        """Fetch all data using yfinance package. Returns the same tuple as fetch_yahoo_finance_data."""
+        import pandas as pd
+        finviz_metrics = finviz_metrics or {}
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info or {}
+
+            # Financial statements
+            annual_income = stock.financials
+            quarterly_income = stock.quarterly_financials
+            annual_balance = stock.balance_sheet
+            quarterly_balance = stock.quarterly_balance_sheet
+            annual_cashflow = stock.cashflow
+            quarterly_cashflow = stock.quarterly_cashflow
+
+            income_statement = {
+                "annual": self._df_to_statement(annual_income),
+                "quarterly": self._df_to_quarterly_statement(quarterly_income),
+            }
+            balance_statement = {
+                "annual": self._df_to_statement(annual_balance, ttm_label="MRQ"),
+                "quarterly": self._df_to_quarterly_statement(quarterly_balance),
+            }
+            cash_flow_statement = {
+                "annual": self._df_to_statement(annual_cashflow),
+                "quarterly": self._df_to_quarterly_statement(quarterly_cashflow),
+            }
+
+            # Core metrics from DataFrames (TTM using quarterly sums)
+            revenue_raw = self._df_ttm_value(quarterly_income, annual_income, ["Total Revenue", "TotalRevenue"]) or info.get("totalRevenue", 0) or 0
+            operating_income_raw = self._df_ttm_value(quarterly_income, annual_income, ["Operating Income", "OperatingIncome"]) or info.get("operatingIncome", 0) or 0
+            gross_profit_raw = self._df_ttm_value(quarterly_income, annual_income, ["Gross Profit", "GrossProfit"]) or info.get("grossProfits", 0) or 0
+            capex_raw = abs(self._df_ttm_value(quarterly_cashflow, annual_cashflow, ["Capital Expenditure", "CapitalExpenditure"], absolute=True))
+            da_raw = self._df_ttm_value(quarterly_cashflow, annual_cashflow, ["Depreciation And Amortization", "DepreciationAndAmortization", "Reconciled Depreciation", "ReconciledDepreciation"])
+            if not da_raw:
+                da_raw = self._df_ttm_value(quarterly_income, annual_income, ["Reconciled Depreciation", "ReconciledDepreciation"])
+            da_raw = abs(da_raw) if da_raw else 0
+
+            gross_ppe_raw = self._df_raw_value(annual_balance, ["Gross PPE", "GrossPPE"]) or self._df_raw_value(annual_balance, ["Net PPE", "NetPPE"])
+            net_fixed_assets_raw = self._df_raw_value(annual_balance, ["Net PPE", "NetPPE"])
+            receivables_raw = self._df_raw_value(annual_balance, ["Accounts Receivable", "AccountsReceivable", "Net Receivables"])
+            inventory_raw = self._df_raw_value(annual_balance, ["Inventory"])
+            accounts_payable_raw = self._df_raw_value(annual_balance, ["Accounts Payable", "AccountsPayable"])
+
+            da_minus_capex_raw = max(da_raw - capex_raw, 0)
+            investment_capex_raw = max(capex_raw - da_raw, 0)
+            adj_income_raw = operating_income_raw + da_minus_capex_raw
+            adj_margin_ratio = (adj_income_raw / revenue_raw) if revenue_raw else 0
+            operating_margin_ratio = (operating_income_raw / revenue_raw) if revenue_raw else info.get("operatingMargins", 0) or 0
+            gross_margin_ratio = info.get("grossMargins", None)
+            if gross_margin_ratio is None and revenue_raw and gross_profit_raw:
+                gross_margin_ratio = gross_profit_raw / revenue_raw
+
+            # R&D
+            rnd_raw = self._df_ttm_value(quarterly_income, annual_income, ["Research And Development", "ResearchAndDevelopment", "Research Development"]) or 0
+
+            # 3-year growth from annual income statement
+            gp_3y_growth_raw, gp_3y_start_raw, gp_3y_end_raw, gp_3y_label = None, 0, 0, "3Y Annual GP Growth"
+            if annual_income is not None and not annual_income.empty:
+                cols = sorted(annual_income.columns, reverse=True)
+                gp_label_candidates = ["Gross Profit", "GrossProfit"]
+                rev_label_candidates = ["Total Revenue", "TotalRevenue"]
+                for candidates, label_out in [(gp_label_candidates, "3Y Annual GP Growth"), (rev_label_candidates, "3Y Annual Sales Growth")]:
+                    for lbl in candidates:
+                        if lbl in annual_income.index:
+                            vals = [(c, annual_income.loc[lbl, c]) for c in cols if pd.notna(annual_income.loc[lbl, c])]
+                            if len(vals) >= 2:
+                                end_val = float(vals[0][1])
+                                start_idx = min(3, len(vals) - 1)
+                                start_val = float(vals[start_idx][1])
+                                end_date = vals[0][0]
+                                start_date = vals[start_idx][0]
+                                years = (end_date - start_date).days / 365.25 if hasattr(end_date, "days") or hasattr(start_date, "year") else start_idx
+                                try:
+                                    years = (end_date - start_date).days / 365.25
+                                except Exception:
+                                    years = start_idx
+                                years = max(years, 1)
+                                if start_val and abs(start_val) > 0:
+                                    gp_3y_growth_raw = (end_val / abs(start_val)) ** (1 / years) - 1
+                                    gp_3y_start_raw = start_val
+                                    gp_3y_end_raw = end_val
+                                    gp_3y_label = label_out
+                                break
+                    if gp_3y_growth_raw is not None:
+                        break
+
+            # Analyst estimates from info
+            cy_eps_raw = info.get("forwardEps", 0) or 0
+            year_ago_eps_raw = info.get("trailingEps", 0) or 0
+            ny_eps_raw = 0
+            cy_eps_growth_raw = None
+            ny_eps_growth_raw = None
+            if cy_eps_raw and year_ago_eps_raw and year_ago_eps_raw != 0:
+                cy_eps_growth_raw = (cy_eps_raw / abs(year_ago_eps_raw)) - 1
+
+            # Revenue estimates from info
+            cy_revenue_raw = info.get("revenueEstimates", {}).get("avg", 0) if isinstance(info.get("revenueEstimates"), dict) else 0
+            ny_revenue_raw = 0
+            cy_growth_raw = info.get("revenueGrowth", None)
+            ny_growth_raw = None
+
+            # Try earnings_estimate for better estimates
+            try:
+                ee = stock.earnings_estimate
+                if ee is not None and not ee.empty:
+                    if "0y" in ee.index:
+                        if "avg" in ee.columns and pd.notna(ee.loc["0y", "avg"]):
+                            cy_eps_raw = float(ee.loc["0y", "avg"])
+                        if "yearAgoEps" in ee.columns and pd.notna(ee.loc["0y", "yearAgoEps"]):
+                            year_ago_eps_raw = float(ee.loc["0y", "yearAgoEps"])
+                        if "growth" in ee.columns and pd.notna(ee.loc["0y", "growth"]):
+                            cy_eps_growth_raw = float(ee.loc["0y", "growth"])
+                    if "+1y" in ee.index:
+                        if "avg" in ee.columns and pd.notna(ee.loc["+1y", "avg"]):
+                            ny_eps_raw = float(ee.loc["+1y", "avg"])
+                        if "growth" in ee.columns and pd.notna(ee.loc["+1y", "growth"]):
+                            ny_eps_growth_raw = float(ee.loc["+1y", "growth"])
+            except Exception:
+                pass
+
+            # Try revenue_estimate for better revenue forecasts
+            try:
+                re_est = stock.revenue_estimate
+                if re_est is not None and not re_est.empty:
+                    if "0y" in re_est.index:
+                        if "avg" in re_est.columns and pd.notna(re_est.loc["0y", "avg"]):
+                            cy_revenue_raw = float(re_est.loc["0y", "avg"])
+                        if "growth" in re_est.columns and pd.notna(re_est.loc["0y", "growth"]):
+                            cy_growth_raw = float(re_est.loc["0y", "growth"])
+                    if "+1y" in re_est.index:
+                        if "avg" in re_est.columns and pd.notna(re_est.loc["+1y", "avg"]):
+                            ny_revenue_raw = float(re_est.loc["+1y", "avg"])
+                        if "growth" in re_est.columns and pd.notna(re_est.loc["+1y", "growth"]):
+                            ny_growth_raw = float(re_est.loc["+1y", "growth"])
+            except Exception:
+                pass
+
+            # Finviz EPS fallbacks
+            if cy_eps_growth_raw is None:
+                finviz_cy_eps = finviz_metrics.get("eps_this_y")
+                if finviz_cy_eps and finviz_cy_eps != "--":
+                    try:
+                        cy_eps_growth_raw = float(finviz_cy_eps.strip('%')) / 100
+                    except Exception:
+                        pass
+            if ny_eps_growth_raw is None:
+                finviz_ny_eps = finviz_metrics.get("eps_next_y")
+                if finviz_ny_eps and finviz_ny_eps != "--":
+                    try:
+                        ny_eps_growth_raw = float(finviz_ny_eps.strip('%')) / 100
+                    except Exception:
+                        pass
+
+            # Currency
+            financial_currency = (info.get("financialCurrency") or info.get("currency") or "USD").upper()
+            usd_fx_rate = self.get_usd_fx_rate(financial_currency)
+            quote_currency = (info.get("currency") or "USD").upper()
+            eps_fx = usd_fx_rate if quote_currency == "USD" and financial_currency != "USD" else 1.0
+            cy_eps_raw = (cy_eps_raw or 0) * eps_fx
+            ny_eps_raw = (ny_eps_raw or 0) * eps_fx
+            year_ago_eps_raw = (year_ago_eps_raw or 0) * eps_fx
+
+            # Market cap and valuation
+            market_cap_raw = float(finviz_market_cap_raw or 0) or info.get("marketCap", 0) or 0
+            cash_bucket_raw = self._latest_row_raw(balance_statement, ["Cash, Equivalents & Short Term Investments", "Cash & Short Term Investments", "Cash Cash Equivalents and Short Term Investments"])
+            if not cash_bucket_raw:
+                cash_bucket_raw = self._latest_row_raw(balance_statement, ["Cash & Cash Equivalents", "Cash and Cash Equivalents"]) + self._latest_row_raw(balance_statement, ["Other Short Term Investments", "Short Term Investments"])
+            if not cash_bucket_raw:
+                cash_bucket_raw = self._df_raw_value(annual_balance, ["Cash Cash Equivalents And Short Term Investments", "CashCashEquivalentsAndShortTermInvestments", "Cash And Cash Equivalents", "CashAndCashEquivalents"])
+            total_debt_raw = self._df_raw_value(annual_balance, ["Total Debt", "TotalDebt"])
+            if not total_debt_raw:
+                total_debt_raw = self._df_raw_value(annual_balance, ["Current Debt", "CurrentDebt"]) + self._df_raw_value(annual_balance, ["Long Term Debt", "LongTermDebt"])
+            net_cash_raw = cash_bucket_raw - total_debt_raw if cash_bucket_raw or total_debt_raw else (market_cap_raw - float(finviz_ev_raw or 0) if finviz_ev_raw and market_cap_raw else 0)
+            derived_enterprise_value_raw = market_cap_raw - net_cash_raw if market_cap_raw else 0
+
+            valuation_raw = float(finviz_ev_raw or 0) or info.get("enterpriseValue", 0) or 0
+            valuation_basis = "enterpriseValue" if valuation_raw else "marketCap"
+            valuation_prefix = "EV" if valuation_raw else "Mkt Cap"
+            valuation_numerator_label = "Current Enterprise Value" if valuation_raw else "Current Market Cap"
+            if not valuation_raw:
+                valuation_raw = market_cap_raw
+
+            cy_adj_inc_raw = cy_revenue_raw * adj_margin_ratio if cy_revenue_raw and adj_margin_ratio else 0
+            ny_adj_inc_raw = ny_revenue_raw * adj_margin_ratio if ny_revenue_raw and adj_margin_ratio else 0
+            nwc_raw = receivables_raw + inventory_raw - accounts_payable_raw
+            roc_denominator_raw = nwc_raw + net_fixed_assets_raw
+
+            current_price_raw = info.get("currentPrice", 0) or info.get("regularMarketPrice", 0) or 0
+            target_mean_raw = info.get("targetMeanPrice", 0) or 0
+            target_low_raw = info.get("targetLowPrice", 0) or 0
+            target_high_raw = info.get("targetHighPrice", 0) or 0
+            target_move_raw = ((target_mean_raw - current_price_raw) / current_price_raw) if target_mean_raw and current_price_raw else None
+
+            recommendation_mean = info.get("recommendationMean", 0) or 0
+            recommendation_key = info.get("recommendationKey", "--") or "--"
+
+            # Analyst recommendations breakdown
+            analyst_recommendations = {}
+            try:
+                recs = stock.recommendations
+                if recs is not None and not recs.empty:
+                    latest = recs.iloc[-1] if len(recs) > 0 else {}
+                    analyst_recommendations = {
+                        "strongBuy": int(latest.get("strongBuy", 0) or 0),
+                        "buy": int(latest.get("buy", 0) or 0),
+                        "hold": int(latest.get("hold", 0) or 0),
+                        "sell": int(latest.get("sell", 0) or 0),
+                        "strongSell": int(latest.get("strongSell", 0) or 0),
+                    }
+            except Exception:
+                pass
+
+            company_name = info.get("longName") or info.get("shortName") or ticker
+
+            values = {
+                "income": self._format_money(operating_income_raw),
+                "margin": self._format_percent(adj_margin_ratio) if adj_margin_ratio else "--",
+                "gross_margin": self._format_percent(gross_margin_ratio) if gross_margin_ratio is not None else "--",
+                "ev_cy_ebit": self._format_3sig(valuation_raw / cy_adj_inc_raw) if valuation_raw and cy_adj_inc_raw else "--",
+                "ev_ny_ebit": self._format_3sig(valuation_raw / ny_adj_inc_raw) if valuation_raw and ny_adj_inc_raw else "--",
+                "adj_income": self._format_money(adj_income_raw),
+                "capex": self._format_money(capex_raw),
+                "da": self._format_money(da_raw),
+                "ev": self._format_money(valuation_raw),
+                "ev_adj_ebit": self._format_3sig(valuation_raw / adj_income_raw) if valuation_raw and adj_income_raw else "--",
+                "cy_growth": self._format_percent(cy_growth_raw) if cy_growth_raw is not None else "--",
+                "ny_growth": self._format_percent(ny_growth_raw) if ny_growth_raw is not None else "--",
+                "gp_3y_growth": self._format_percent(gp_3y_growth_raw) if gp_3y_growth_raw is not None else "--",
+                "gp_3y_start": self._format_money(gp_3y_start_raw) if gp_3y_start_raw else "--",
+                "gp_3y_end": self._format_money(gp_3y_end_raw) if gp_3y_end_raw else "--",
+                "gp_3y_label": gp_3y_label,
+                "rnd_adj_income": self._format_percent(rnd_raw / adj_income_raw) if rnd_raw and adj_income_raw else "--",
+                "cy_adj_inc": self._format_money(cy_adj_inc_raw) if cy_adj_inc_raw else "--",
+                "ny_adj_inc": self._format_money(ny_adj_inc_raw) if ny_adj_inc_raw else "--",
+                "market_cap": self._format_money(market_cap_raw),
+                "net_cash": self._format_money(net_cash_raw),
+                "derived_enterprise_value": self._format_money(derived_enterprise_value_raw),
+                "revenue": self._format_money(revenue_raw),
+                "operating_margin": self._format_percent(operating_margin_ratio) if operating_margin_ratio else "--",
+                "da_minus_capex": self._format_money(da_minus_capex_raw) if da_minus_capex_raw else "0",
+                "cy_revenue": self._format_money(cy_revenue_raw) if cy_revenue_raw else "--",
+                "ny_revenue": self._format_money(ny_revenue_raw) if ny_revenue_raw else "--",
+                "gross_ppe": self._format_money(gross_ppe_raw),
+                "adj_ebit_gross_ppe": self._format_percent(adj_income_raw / gross_ppe_raw) if adj_income_raw and gross_ppe_raw else "--",
+                "capex_adj_income": self._format_percent(investment_capex_raw / adj_income_raw) if adj_income_raw else "--",
+                "investment_capex": self._format_money(investment_capex_raw) if investment_capex_raw else "0",
+                "roc": self._format_percent(adj_income_raw / roc_denominator_raw) if adj_income_raw and roc_denominator_raw else "--",
+                "net_working_capital": self._format_money(nwc_raw),
+                "net_fixed_assets": self._format_money(net_fixed_assets_raw),
+                "receivables": self._format_money(receivables_raw),
+                "inventory": self._format_money(inventory_raw),
+                "accounts_payable": self._format_money(accounts_payable_raw),
+                "financial_currency": financial_currency,
+                "usd_fx_rate": usd_fx_rate,
+                "company_name": company_name,
+                "income_statement": income_statement,
+                "balance_statement": balance_statement,
+                "cash_flow_statement": cash_flow_statement,
+                "current_price": self._format_3sig(current_price_raw),
+                "target_mean_price": self._format_3sig(target_mean_raw),
+                "target_low_price": self._format_3sig(target_low_raw),
+                "target_high_price": self._format_3sig(target_high_raw),
+                "target_move": self._format_percent(target_move_raw) if target_move_raw is not None else "--",
+                "recommendation_mean": self._format_3sig(recommendation_mean),
+                "recommendation_key": recommendation_key,
+                "analyst_recommendations": analyst_recommendations,
+                "valuation_basis": valuation_basis,
+                "valuation_prefix": valuation_prefix,
+                "valuation_numerator_label": valuation_numerator_label,
+                "current_year_eps": self._format_3sig(cy_eps_raw),
+                "next_year_eps": self._format_3sig(ny_eps_raw),
+                "year_ago_eps": self._format_3sig(year_ago_eps_raw),
+                "current_year_eps_growth": self._format_percent(cy_eps_growth_raw) if cy_eps_growth_raw is not None else "--",
+                "next_year_eps_growth": self._format_percent(ny_eps_growth_raw) if ny_eps_growth_raw is not None else "--",
+                "price_current_eps": self._format_3sig(current_price_raw / year_ago_eps_raw) if current_price_raw and year_ago_eps_raw else "--",
+                "price_cy_eps": self._format_3sig(current_price_raw / cy_eps_raw) if current_price_raw and cy_eps_raw else "--",
+                "price_ny_eps": self._format_3sig(current_price_raw / ny_eps_raw) if current_price_raw and ny_eps_raw else "--",
+            }
+            return tuple(values[key] for key in FETCH_RESULT_FIELDS)
+        except Exception as e:
+            print(f"yfinance fetch error for {ticker}: {e}")
+            raise
+
     def fetch_yahoo_finance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics=None):
+        # Try yfinance first if available
+        if HAS_YFINANCE:
+            try:
+                result = self.fetch_yfinance_data(ticker, finviz_ev_raw, finviz_market_cap_raw, finviz_metrics)
+                print(f"[yfinance] Successfully fetched data for {ticker}")
+                return result
+            except Exception as e:
+                print(f"[yfinance] Failed for {ticker}, falling back to manual: {e}")
+
         finviz_metrics = finviz_metrics or {}
         try:
             from http.cookiejar import CookieJar
