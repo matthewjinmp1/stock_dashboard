@@ -1130,7 +1130,34 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             return _merge(primary, secondary)
 
-    def _df_to_statement(self, df, formatter=None, ttm_label="TTM"):
+    def _ordered_df_index(self, df, order_map):
+        """Return the DataFrame index sorted by order_map key order, with extras at the end."""
+        if order_map is None:
+            return list(df.index)
+        ordered_keys = list(order_map.keys())
+        index_list = list(df.index)
+        # Build ordered result: items that match order_map keys first, in map order
+        seen = set()
+        result = []
+        for key in ordered_keys:
+            # yfinance may use CamelCase or spaced labels — check both
+            if key in index_list:
+                result.append(key)
+                seen.add(key)
+            else:
+                # Try matching with spaces removed
+                for idx_label in index_list:
+                    if idx_label.replace(" ", "") == key and idx_label not in seen:
+                        result.append(idx_label)
+                        seen.add(idx_label)
+                        break
+        # Append remaining items not in order_map
+        for idx_label in index_list:
+            if idx_label not in seen:
+                result.append(idx_label)
+        return result
+
+    def _df_to_statement(self, df, formatter=None, ttm_label="TTM", order_map=None):
         """Convert a pandas DataFrame (rows=line items, columns=dates) to our statement format."""
         formatter = formatter or self._format_money
         if df is None or df.empty:
@@ -1140,19 +1167,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         cols = sorted(df.columns, reverse=True)
         periods = [ttm_label] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
         rows = []
-        for label in df.index:
+        ordered_index = self._ordered_df_index(df, order_map)
+        for label in ordered_index:
             raw_values = df.loc[label, cols].tolist()
             # TTM = most recent value (for annual) or just repeat latest
             ttm_val = raw_values[0] if raw_values else None
             formatted = [formatter(ttm_val) if pd.notna(ttm_val) else "--"]
             for v in raw_values:
                 formatted.append(formatter(v) if pd.notna(v) else "--")
-            # Convert index label from CamelCase to readable
-            display_label = re.sub(r"(?<!^)(?=[A-Z])", " ", str(label)).replace("And", "and")
+            # Use order_map display label if available, otherwise convert CamelCase
+            camel_key = str(label).replace(" ", "")
+            display_label = (order_map or {}).get(label) or (order_map or {}).get(camel_key)
+            if not display_label:
+                display_label = re.sub(r"(?<!^)(?=[A-Z])", " ", str(label)).replace("And", "and")
             rows.append({"label": display_label, "values": formatted})
         return {"periods": periods, "rows": rows}
 
-    def _df_to_quarterly_statement(self, df, formatter=None):
+    def _df_to_quarterly_statement(self, df, formatter=None, order_map=None):
         """Convert a quarterly DataFrame to our statement format with LATEST anchor."""
         formatter = formatter or self._format_money
         if df is None or df.empty:
@@ -1161,13 +1192,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         cols = sorted(df.columns, reverse=True)
         periods = ["LATEST"] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
         rows = []
-        for label in df.index:
+        ordered_index = self._ordered_df_index(df, order_map)
+        for label in ordered_index:
             raw_values = df.loc[label, cols].tolist()
             latest_val = raw_values[0] if raw_values else None
             formatted = [formatter(latest_val) if pd.notna(latest_val) else "--"]
             for v in raw_values:
                 formatted.append(formatter(v) if pd.notna(v) else "--")
-            display_label = re.sub(r"(?<!^)(?=[A-Z])", " ", str(label)).replace("And", "and")
+            camel_key = str(label).replace(" ", "")
+            display_label = (order_map or {}).get(label) or (order_map or {}).get(camel_key)
+            if not display_label:
+                display_label = re.sub(r"(?<!^)(?=[A-Z])", " ", str(label)).replace("And", "and")
             rows.append({"label": display_label, "values": formatted})
         return {"periods": periods, "rows": rows}
 
@@ -1218,16 +1253,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             quarterly_cashflow = stock.quarterly_cashflow
 
             income_statement = {
-                "annual": self._df_to_statement(annual_income),
-                "quarterly": self._df_to_quarterly_statement(quarterly_income),
+                "annual": self._df_to_statement(annual_income, order_map=INCOME_STATEMENT_TYPES),
+                "quarterly": self._df_to_quarterly_statement(quarterly_income, order_map=INCOME_STATEMENT_TYPES),
             }
             balance_statement = {
-                "annual": self._df_to_statement(annual_balance, ttm_label="MRQ"),
-                "quarterly": self._df_to_quarterly_statement(quarterly_balance),
+                "annual": self._df_to_statement(annual_balance, ttm_label="MRQ", order_map=BALANCE_STATEMENT_TYPES),
+                "quarterly": self._df_to_quarterly_statement(quarterly_balance, order_map=BALANCE_STATEMENT_TYPES),
             }
             cash_flow_statement = {
-                "annual": self._df_to_statement(annual_cashflow),
-                "quarterly": self._df_to_quarterly_statement(quarterly_cashflow),
+                "annual": self._df_to_statement(annual_cashflow, order_map=CASH_FLOW_STATEMENT_TYPES),
+                "quarterly": self._df_to_quarterly_statement(quarterly_cashflow, order_map=CASH_FLOW_STATEMENT_TYPES),
             }
 
             # Core metrics from DataFrames (TTM using quarterly sums)
