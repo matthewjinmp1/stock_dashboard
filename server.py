@@ -1635,7 +1635,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if cy_eps_raw and year_ago_eps_raw and year_ago_eps_raw != 0:
                 cy_eps_growth_raw = (cy_eps_raw / abs(year_ago_eps_raw)) - 1
 
-            # Revenue estimates from info
+            # Revenue estimates from info (native currency — will be converted to USD below)
             cy_revenue_raw = info.get("revenueEstimates", {}).get("avg", 0) if isinstance(info.get("revenueEstimates"), dict) else 0
             ny_revenue_raw = 0
             cy_growth_raw = info.get("revenueGrowth", None)
@@ -1694,6 +1694,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         ny_eps_growth_raw = float(finviz_ny_eps.strip('%')) / 100
                     except Exception:
                         pass
+
+            # Convert revenue estimates and 3Y GP values from native currency to USD
+            cy_revenue_raw = (cy_revenue_raw or 0) * usd_fx_rate
+            ny_revenue_raw = (ny_revenue_raw or 0) * usd_fx_rate
+            gp_3y_start_raw = (gp_3y_start_raw or 0) * usd_fx_rate
+            gp_3y_end_raw = (gp_3y_end_raw or 0) * usd_fx_rate
 
             # Currency (usd_fx_rate already fetched above, just apply to EPS if needed)
             quote_currency = (info.get("currency") or "USD").upper()
