@@ -975,11 +975,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         if not point["date"].startswith("idx-"):
                             quarterly_period_dates.add(point["date"])
 
-        sorted_periods = sorted(period_dates, reverse=True)
+        sorted_periods = sorted(period_dates, reverse=True)[:4]
         periods = ["TTM"] + sorted_periods
         rows = []
 
-        q_sorted_periods = sorted(quarterly_period_dates, reverse=True)
+        q_sorted_periods = sorted(quarterly_period_dates, reverse=True)[:5]
         q_periods = q_sorted_periods
         q_rows_out = []
 
@@ -1426,6 +1426,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         cols = [c for c in all_cols if active_df[c].notna().any()]
         if not cols:
             return {"periods": [], "rows": []}
+        cols = cols[:4]  # Limit to 4 historical years
         periods = [ttm_label] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
         rows = []
         for label in active_labels:
@@ -1457,6 +1458,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         cols = [c for c in all_cols if active_df[c].notna().any()]
         if not cols:
             return {"periods": [], "rows": []}
+        cols = cols[:5]  # Limit to 5 quarters
         periods = [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
         rows = []
         for label in active_labels:
