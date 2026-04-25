@@ -1457,12 +1457,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         cols = [c for c in all_cols if active_df[c].notna().any()]
         if not cols:
             return {"periods": [], "rows": []}
-        periods = ["LATEST"] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
+        periods = [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
         rows = []
         for label in active_labels:
             raw_values = df.loc[label, cols].tolist()
-            latest_val = raw_values[0]
-            formatted = [formatter(latest_val) if pd.notna(latest_val) else "--"]
+            formatted = []
             for v in raw_values:
                 formatted.append(formatter(v) if pd.notna(v) else "--")
             display_label = self._resolve_display_label(label, order_map)

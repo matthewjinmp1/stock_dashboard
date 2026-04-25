@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
@@ -27,6 +27,9 @@ if is_port_in_use "${PORT}"; then
 fi
 
 echo "Starting server on http://localhost:${PORT} (auto-reload enabled)"
+
+# Cleanup background process on exit
+trap 'echo "[watcher] Shutting down..."; kill "$SERVER_PID" 2>/dev/null; exit' SIGINT SIGTERM
 
 get_checksum() {
   md5 -q "$ROOT_DIR/server.py" 2>/dev/null || md5sum "$ROOT_DIR/server.py" | awk '{print $1}'
