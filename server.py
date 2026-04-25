@@ -448,22 +448,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ],
             },
             "quarterly": {
-                "periods": ["LATEST", "2026-03-31", "2025-12-31", "2025-09-30", "2025-06-30", "2025-03-31"],
+                "periods": ["2026-03-31", "2025-12-31", "2025-09-30", "2025-06-30", "2025-03-31"],
                 "rows": [
-                    {"label": "Total Revenue", "values": ["27B", "27B", "26B", "24.5B", "23B", "22.5B"]},
-                    {"label": "Cost of Revenue", "values": ["10.8B", "10.8B", "10.4B", "9.8B", "9.2B", "9B"]},
-                    {"label": "Gross Profit", "values": ["16.2B", "16.2B", "15.6B", "14.7B", "13.8B", "13.5B"]},
-                    {"label": "Research & Development", "values": ["3.2B", "3.2B", "3.1B", "2.9B", "2.8B", "2.7B"]},
-                    {"label": "Selling, General & Administrative", "values": ["3.7B", "3.7B", "3.5B", "3.4B", "3.3B", "3.2B"]},
-                    {"label": "Operating Income", "values": ["8.1B", "8.1B", "7.8B", "7.2B", "6.8B", "6.5B"]},
-                    {"label": "Interest Expense", "values": ["310M", "310M", "300M", "290M", "280M", "270M"]},
-                    {"label": "Pretax Income", "values": ["7.9B", "7.9B", "7.6B", "7B", "6.6B", "6.3B"]},
-                    {"label": "Tax Provision", "values": ["1.58B", "1.58B", "1.52B", "1.4B", "1.32B", "1.26B"]},
-                    {"label": "Net Income", "values": ["6.32B", "6.32B", "6.08B", "5.6B", "5.28B", "5.04B"]},
-                    {"label": "Diluted Average Shares", "values": ["2.31B", "2.31B", "2.32B", "2.33B", "2.34B", "2.35B"]},
-                    {"label": "Diluted EPS", "values": ["2.74", "2.74", "2.62", "2.4", "2.26", "2.14"]},
-                    {"label": "EBITDA", "values": ["9.4B", "9.4B", "9.1B", "8.5B", "8B", "7.7B"]},
-                    {"label": "Tax Rate For Calcs", "values": ["0.20", "0.20", "0.20", "0.20", "0.20", "0.20"]},
+                    {"label": "Total Revenue", "values": ["27B", "26B", "24.5B", "23B", "22.5B"]},
+                    {"label": "Cost of Revenue", "values": ["10.8B", "10.4B", "9.8B", "9.2B", "9B"]},
+                    {"label": "Gross Profit", "values": ["16.2B", "15.6B", "14.7B", "13.8B", "13.5B"]},
+                    {"label": "Research & Development", "values": ["3.2B", "3.1B", "2.9B", "2.8B", "2.7B"]},
+                    {"label": "Selling, General & Administrative", "values": ["3.7B", "3.5B", "3.4B", "3.3B", "3.2B"]},
+                    {"label": "Operating Income", "values": ["8.1B", "7.8B", "7.2B", "6.8B", "6.5B"]},
+                    {"label": "Interest Expense", "values": ["310M", "300M", "290M", "280M", "270M"]},
+                    {"label": "Pretax Income", "values": ["7.9B", "7.6B", "7B", "6.6B", "6.3B"]},
+                    {"label": "Tax Provision", "values": ["1.58B", "1.52B", "1.4B", "1.32B", "1.26B"]},
+                    {"label": "Net Income", "values": ["6.32B", "6.08B", "5.6B", "5.28B", "5.04B"]},
+                    {"label": "Diluted Average Shares", "values": ["2.31B", "2.32B", "2.33B", "2.34B", "2.35B"]},
+                    {"label": "Diluted EPS", "values": ["2.74", "2.62", "2.4", "2.26", "2.14"]},
+                    {"label": "EBITDA", "values": ["9.4B", "9.1B", "8.5B", "8B", "7.7B"]},
+                    {"label": "Tax Rate For Calcs", "values": ["0.20", "0.20", "0.20", "0.20", "0.20"]},
                 ],
             },
         }
@@ -488,22 +488,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ],
             },
             "quarterly": {
-                "periods": ["LATEST", "2026-03-31", "2025-12-31", "2025-09-30", "2025-06-30", "2025-03-31"],
+                "periods": ["2026-03-31", "2025-12-31", "2025-09-30", "2025-06-30", "2025-03-31"],
                 "rows": [
-                    {"label": "Cash & Cash Equivalents", "values": ["26B", "26B", "25B", "23B", "21B", "20B"]},
-                    {"label": "Other Short Term Investments", "values": ["21B", "21B", "20B", "19B", "17B", "16B"]},
-                    {"label": "Cash, Equivalents & Short Term Investments", "values": ["47B", "47B", "45B", "42B", "38B", "36B"]},
-                    {"label": "Accounts Receivable", "values": ["16B", "16B", "15B", "14.5B", "14B", "13.5B"]},
-                    {"label": "Inventory", "values": ["10.5B", "10.5B", "10B", "9.5B", "9B", "8.5B"]},
-                    {"label": "Accounts Payable", "values": ["8.5B", "8.5B", "8B", "7.8B", "7.5B", "7.2B"]},
-                    {"label": "Current Debt", "values": ["5.2B", "5.2B", "5B", "4.8B", "4.5B", "4.2B"]},
-                    {"label": "Long Term Debt", "values": ["19B", "19B", "20B", "21B", "22B", "23B"]},
-                    {"label": "Total Debt", "values": ["24.2B", "24.2B", "25B", "25.8B", "26.5B", "27.2B"]},
-                    {"label": "Gross PP&E", "values": ["82B", "82B", "80B", "78B", "76B", "74B"]},
-                    {"label": "Net PP&E", "values": ["51B", "51B", "50B", "49B", "48B", "47B"]},
-                    {"label": "Total Assets", "values": ["185B", "185B", "180B", "175B", "168B", "162B"]},
-                    {"label": "Total Liabilities", "values": ["71B", "71B", "70B", "69B", "68B", "67B"]},
-                    {"label": "Stockholders Equity", "values": ["114B", "114B", "110B", "106B", "100B", "95B"]},
+                    {"label": "Cash & Cash Equivalents", "values": ["26B", "25B", "23B", "21B", "20B"]},
+                    {"label": "Other Short Term Investments", "values": ["21B", "20B", "19B", "17B", "16B"]},
+                    {"label": "Cash, Equivalents & Short Term Investments", "values": ["47B", "45B", "42B", "38B", "36B"]},
+                    {"label": "Accounts Receivable", "values": ["16B", "15B", "14.5B", "14B", "13.5B"]},
+                    {"label": "Inventory", "values": ["10.5B", "10B", "9.5B", "9B", "8.5B"]},
+                    {"label": "Accounts Payable", "values": ["8.5B", "8B", "7.8B", "7.5B", "7.2B"]},
+                    {"label": "Current Debt", "values": ["5.2B", "5B", "4.8B", "4.5B", "4.2B"]},
+                    {"label": "Long Term Debt", "values": ["19B", "20B", "21B", "22B", "23B"]},
+                    {"label": "Total Debt", "values": ["24.2B", "25B", "25.8B", "26.5B", "27.2B"]},
+                    {"label": "Gross PP&E", "values": ["82B", "80B", "78B", "76B", "74B"]},
+                    {"label": "Net PP&E", "values": ["51B", "50B", "49B", "48B", "47B"]},
+                    {"label": "Total Assets", "values": ["185B", "180B", "175B", "168B", "162B"]},
+                    {"label": "Total Liabilities", "values": ["71B", "70B", "69B", "68B", "67B"]},
+                    {"label": "Stockholders Equity", "values": ["114B", "110B", "106B", "100B", "95B"]},
                 ],
             },
         }
@@ -520,14 +520,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ],
             },
             "quarterly": {
-                "periods": ["LATEST", "2026-03-31", "2025-12-31", "2025-09-30", "2025-06-30", "2025-03-31"],
+                "periods": ["2026-03-31", "2025-12-31", "2025-09-30", "2025-06-30", "2025-03-31"],
                 "rows": [
-                    {"label": "Operating Cash Flow", "values": ["9.2B", "9.2B", "8.8B", "8.3B", "7.8B", "7.5B"]},
-                    {"label": "Capital Expenditures", "values": ["-1.9B", "-1.9B", "-1.8B", "-1.7B", "-1.6B", "-1.5B"]},
-                    {"label": "Depreciation And Amortization", "values": ["1.3B", "1.3B", "1.28B", "1.25B", "1.22B", "1.2B"]},
-                    {"label": "Free Cash Flow", "values": ["7.3B", "7.3B", "7B", "6.6B", "6.2B", "6B"]},
-                    {"label": "Repurchase Of Capital Stock", "values": ["-2.2B", "-2.2B", "-2B", "-1.8B", "-1.6B", "-1.5B"]},
-                    {"label": "Cash Dividends Paid", "values": ["-800M", "-800M", "-780M", "-750M", "-720M", "-700M"]},
+                    {"label": "Operating Cash Flow", "values": ["9.2B", "8.8B", "8.3B", "7.8B", "7.5B"]},
+                    {"label": "Capital Expenditures", "values": ["-1.9B", "-1.8B", "-1.7B", "-1.6B", "-1.5B"]},
+                    {"label": "Depreciation And Amortization", "values": ["1.3B", "1.28B", "1.25B", "1.22B", "1.2B"]},
+                    {"label": "Free Cash Flow", "values": ["7.3B", "7B", "6.6B", "6.2B", "6B"]},
+                    {"label": "Repurchase Of Capital Stock", "values": ["-2.2B", "-2B", "-1.8B", "-1.6B", "-1.5B"]},
+                    {"label": "Cash Dividends Paid", "values": ["-800M", "-780M", "-750M", "-720M", "-700M"]},
                 ],
             },
         }
@@ -2305,6 +2305,30 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             print("Yahoo error:", e)
             return self._empty_fetch_tuple(ticker)
 
+    def _prune_latest(self, payload):
+        if not isinstance(payload, dict): return payload
+        for key in ["incomeStatement", "balanceStatement", "cashFlowStatement"]:
+            stmt = payload.get(key)
+            if not isinstance(stmt, dict): continue
+            q = stmt.get("quarterly")
+            if not isinstance(q, dict): continue
+            periods = q.get("periods")
+            if not periods: continue
+            
+            prune_idx = -1
+            if str(periods[0]).upper() == "LATEST":
+                prune_idx = 0
+            elif str(periods[-1]).upper() == "LATEST":
+                prune_idx = len(periods) - 1
+                
+            if prune_idx != -1:
+                q["periods"] = [p for i, p in enumerate(periods) if i != prune_idx]
+                for row in q.get("rows", []):
+                    vals = row.get("values")
+                    if vals:
+                        row["values"] = [v for i, v in enumerate(vals) if i != prune_idx]
+        return payload
+
     def handle_api_request(self, ticker, refresh=False):
         if not ticker:
             self._send_response(400, {"error": "Ticker is required"})
@@ -2367,7 +2391,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not refresh and ticker in cache and cache[ticker].get('date') == today:
             cached_payload = cache[ticker].get('data', {})
             if cache_is_usable(cached_payload):
-                self._send_response(200, enrich_cached_payload(cached_payload, cache[ticker], fetch_count=0))
+                self._send_response(200, self._prune_latest(enrich_cached_payload(cached_payload, cache[ticker], fetch_count=0)))
                 return
 
         finviz_metrics = {"short_float": "--", "market_cap": "--", "enterprise_value": "--"}
@@ -2392,12 +2416,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if cache_is_usable(previous_payload):
                 self._send_response(
                     200,
-                    enrich_cached_payload(
+                    self._prune_latest(enrich_cached_payload(
                         previous_payload,
                         previous_cache_entry,
                         fetch_count=getattr(self, "_request_fetch_count", 0),
                         refresh_error=refresh,
-                    ),
+                    )),
                 )
                 return
 
@@ -2477,7 +2501,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         cache[ticker] = {'date': today, 'pulledAt': pulled_at, 'data': payload}
         save_cache(cache)
-        self._send_response(200, payload)
+        self._send_response(200, self._prune_latest(payload))
 
     def _send_response(self, status, payload):
         self.send_response(status)
