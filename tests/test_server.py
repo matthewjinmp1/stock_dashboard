@@ -1406,11 +1406,10 @@ class StatementPageBuilderTests(unittest.TestCase):
 
         # Check Quarterly
         q_stmt = statement["quarterly"]
-        self.assertEqual(q_stmt["periods"], ["LATEST", "2025-12-31", "2025-09-30", "2025-06-30", "2025-03-31", "2024-12-31"])
+        self.assertEqual(q_stmt["periods"], ["2025-12-31", "2025-09-30", "2025-06-30", "2025-03-31", "2024-12-31"])
         
         revenue_row = next(row for row in q_stmt["rows"] if row["label"] == "Total Revenue")
-        # LATEST should match the most recent quarter (idx 1)
-        self.assertEqual(revenue_row["values"], ["300", "300", "250", "220", "230", "280"])
+        self.assertEqual(revenue_row["values"], ["300", "250", "220", "230", "280"])
 
         # Verify only one Total Revenue row (deduplication check)
         labels = [row["label"] for row in q_stmt["rows"]]

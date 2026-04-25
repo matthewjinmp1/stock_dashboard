@@ -980,7 +980,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         rows = []
 
         q_sorted_periods = sorted(quarterly_period_dates, reverse=True)
-        q_periods = ["LATEST"] + q_sorted_periods
+        q_periods = q_sorted_periods
         q_rows_out = []
 
         seen_labels = set()
@@ -1015,8 +1015,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 values.append(formatter(raw) if raw is not None else "--")
             rows.append({"label": label, "values": values})
 
-            q_latest_raw = quarter_points[0]["raw"] if quarter_points else None
-            q_values = [formatter(q_latest_raw) if q_latest_raw is not None else "--"]
+            q_values = []
             for period in q_sorted_periods:
                 raw = quarter_by_date.get(period)
                 q_values.append(formatter(raw) if raw is not None else "--")
