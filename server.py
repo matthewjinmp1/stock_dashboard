@@ -1516,8 +1516,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             # Fetch currency rate early so all values can be USD-normalized
             financial_currency = (info.get("financialCurrency") or info.get("currency") or "USD").upper()
-            usd_fx_rate = self.get_usd_fx_rate(financial_currency)
-            self._request_fetch_count += 1
+            usd_fx_rate = 1.0
+            if financial_currency != "USD":
+                try:
+                    fx_ticker = yf.Ticker(f"{financial_currency}USD=X")
+                    self._request_fetch_count += 1
+                    fx_info = fx_ticker.fast_info
+                    usd_fx_rate = float(fx_info.last_price or 1.0) or 1.0
+                    print(f"[FX] {financial_currency}/USD rate: {usd_fx_rate}")
+                except Exception as e:
+                    print(f"[FX] Failed to fetch {financial_currency}/USD rate: {e}, falling back to 1.0")
+                    usd_fx_rate = self.get_usd_fx_rate(financial_currency)
+                    self._request_fetch_count += 1
+            else:
+                self._request_fetch_count += 1
 
             # Currency-aware formatter: multiplies raw values by FX rate before formatting
             def fx_formatter(val):
