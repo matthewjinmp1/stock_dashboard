@@ -26,6 +26,35 @@ if is_port_in_use "${PORT}"; then
   exit 1
 fi
 
-echo "Starting server on http://localhost:${PORT}"
-exec python3 server.py
+echo "Starting server on http://localhost:${PORT} (auto-reload enabled)"
 
+get_checksum() {
+  md5 -q "$ROOT_DIR/server.py" 2>/dev/null || md5sum "$ROOT_DIR/server.py" | awk '{print $1}'
+}
+
+LAST_CHECKSUM=$(get_checksum)
+
+while true; do
+  python3 server.py &
+  SERVER_PID=$!
+
+  echo "[watcher] Server started (PID $SERVER_PID)"
+
+  while kill -0 "$SERVER_PID" 2>/dev/null; do
+    sleep 1
+    CURRENT_CHECKSUM=$(get_checksum)
+    if [[ "$CURRENT_CHECKSUM" != "$LAST_CHECKSUM" ]]; then
+      echo "[watcher] server.py changed — restarting..."
+      LAST_CHECKSUM=$CURRENT_CHECKSUM
+      kill "$SERVER_PID" 2>/dev/null
+      wait "$SERVER_PID" 2>/dev/null
+      break
+    fi
+  done
+
+  # If server exited on its own (crash), pause briefly before restarting
+  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    echo "[watcher] Server exited. Restarting in 1s..."
+    sleep 1
+  fi
+done
