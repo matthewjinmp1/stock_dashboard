@@ -282,8 +282,8 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(result["current_year_eps_growth"], "20%")
         self.assertEqual(result["next_year_eps_growth"], "25%")
         self.assertEqual(result["price_current_eps"], "1")
-        self.assertEqual(result["price_cy_eps"], "0.833")
-        self.assertEqual(result["price_ny_eps"], "0.667")
+        self.assertEqual(result["price_cy_eps"], "0.83")
+        self.assertEqual(result["price_ny_eps"], "0.67")
         self.assertEqual(result["investment_capex"], "0")
 
     def test_falls_back_to_market_cap_when_ev_missing(self):
@@ -300,8 +300,8 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(result["ev_cy_ebit"], "6.25")
         self.assertEqual(result["ev_ny_ebit"], "5")
         self.assertEqual(result["price_current_eps"], "1")
-        self.assertEqual(result["price_cy_eps"], "0.833")
-        self.assertEqual(result["price_ny_eps"], "0.667")
+        self.assertEqual(result["price_cy_eps"], "0.83")
+        self.assertEqual(result["price_ny_eps"], "0.67")
 
     def test_net_cash_prefers_combined_cash_bucket_without_double_counting(self):
         quote_summary_payload = make_quote_summary_payload()

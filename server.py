@@ -738,18 +738,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if val == 0:
             return "0"
         abs_val = abs(val)
+        # 3 significant figures, but never more than 2 decimal places
         if abs_val >= 100:
             res = f"{val:.0f}"
         elif abs_val >= 10:
             res = f"{val:.1f}"
-        elif abs_val >= 1:
-            res = f"{val:.2f}"
-        elif abs_val >= 0.1:
-            res = f"{val:.3f}"
-        elif abs_val >= 0.01:
-            res = f"{val:.4f}"
         else:
-            res = f"{val:.3g}"
+            res = f"{val:.2f}"
         if "." in res:
             res = res.rstrip("0").rstrip(".")
         return res
