@@ -1514,6 +1514,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             info = stock.info or {}
             self._request_fetch_count = getattr(self, "_request_fetch_count", 0) + 1
 
+            # Fetch currency rate early so all values can be USD-normalized
+            financial_currency = (info.get("financialCurrency") or info.get("currency") or "USD").upper()
+            usd_fx_rate = self.get_usd_fx_rate(financial_currency)
+            self._request_fetch_count += 1
+
+            # Currency-aware formatter: multiplies raw values by FX rate before formatting
+            def fx_formatter(val):
+                if val is None:
+                    return "--"
+                try:
+                    return self._format_money(float(val) * usd_fx_rate)
+                except Exception:
+                    return "--"
+
             # Financial statements (each property triggers HTTP calls internally)
             annual_income = stock.financials
             self._request_fetch_count += 1
@@ -1529,33 +1543,33 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._request_fetch_count += 1
 
             income_statement = {
-                "annual": self._df_to_statement(annual_income, order_map=INCOME_STATEMENT_TYPES),
-                "quarterly": self._df_to_quarterly_statement(quarterly_income, order_map=INCOME_STATEMENT_TYPES),
+                "annual": self._df_to_statement(annual_income, formatter=fx_formatter, order_map=INCOME_STATEMENT_TYPES),
+                "quarterly": self._df_to_quarterly_statement(quarterly_income, formatter=fx_formatter, order_map=INCOME_STATEMENT_TYPES),
             }
             balance_statement = {
-                "annual": self._df_to_statement(annual_balance, ttm_label="MRQ", order_map=BALANCE_STATEMENT_TYPES),
-                "quarterly": self._df_to_quarterly_statement(quarterly_balance, order_map=BALANCE_STATEMENT_TYPES),
+                "annual": self._df_to_statement(annual_balance, formatter=fx_formatter, ttm_label="MRQ", order_map=BALANCE_STATEMENT_TYPES),
+                "quarterly": self._df_to_quarterly_statement(quarterly_balance, formatter=fx_formatter, order_map=BALANCE_STATEMENT_TYPES),
             }
             cash_flow_statement = {
-                "annual": self._df_to_statement(annual_cashflow, order_map=CASH_FLOW_STATEMENT_TYPES),
-                "quarterly": self._df_to_quarterly_statement(quarterly_cashflow, order_map=CASH_FLOW_STATEMENT_TYPES),
+                "annual": self._df_to_statement(annual_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES),
+                "quarterly": self._df_to_quarterly_statement(quarterly_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES),
             }
 
-            # Core metrics from DataFrames (TTM using quarterly sums)
-            revenue_raw = self._df_ttm_value(quarterly_income, annual_income, ["Total Revenue", "TotalRevenue"]) or info.get("totalRevenue", 0) or 0
-            operating_income_raw = self._df_ttm_value(quarterly_income, annual_income, ["Operating Income", "OperatingIncome"]) or info.get("operatingIncome", 0) or 0
-            gross_profit_raw = self._df_ttm_value(quarterly_income, annual_income, ["Gross Profit", "GrossProfit"]) or info.get("grossProfits", 0) or 0
-            capex_raw = abs(self._df_ttm_value(quarterly_cashflow, annual_cashflow, ["Capital Expenditure", "CapitalExpenditure"], absolute=True))
+            # Core metrics from DataFrames (TTM using quarterly sums) — all converted to USD
+            revenue_raw = (self._df_ttm_value(quarterly_income, annual_income, ["Total Revenue", "TotalRevenue"]) or info.get("totalRevenue", 0) or 0) * usd_fx_rate
+            operating_income_raw = (self._df_ttm_value(quarterly_income, annual_income, ["Operating Income", "OperatingIncome"]) or info.get("operatingIncome", 0) or 0) * usd_fx_rate
+            gross_profit_raw = (self._df_ttm_value(quarterly_income, annual_income, ["Gross Profit", "GrossProfit"]) or info.get("grossProfits", 0) or 0) * usd_fx_rate
+            capex_raw = abs(self._df_ttm_value(quarterly_cashflow, annual_cashflow, ["Capital Expenditure", "CapitalExpenditure"], absolute=True)) * usd_fx_rate
             da_raw = self._df_ttm_value(quarterly_cashflow, annual_cashflow, ["Depreciation And Amortization", "DepreciationAndAmortization", "Reconciled Depreciation", "ReconciledDepreciation"])
             if not da_raw:
                 da_raw = self._df_ttm_value(quarterly_income, annual_income, ["Reconciled Depreciation", "ReconciledDepreciation"])
-            da_raw = abs(da_raw) if da_raw else 0
+            da_raw = abs(da_raw) * usd_fx_rate if da_raw else 0
 
-            gross_ppe_raw = self._df_raw_value(annual_balance, ["Gross PPE", "GrossPPE"]) or self._df_raw_value(annual_balance, ["Net PPE", "NetPPE"])
-            net_fixed_assets_raw = self._df_raw_value(annual_balance, ["Net PPE", "NetPPE"])
-            receivables_raw = self._df_raw_value(annual_balance, ["Accounts Receivable", "AccountsReceivable", "Net Receivables"])
-            inventory_raw = self._df_raw_value(annual_balance, ["Inventory"])
-            accounts_payable_raw = self._df_raw_value(annual_balance, ["Accounts Payable", "AccountsPayable"])
+            gross_ppe_raw = (self._df_raw_value(annual_balance, ["Gross PPE", "GrossPPE"]) or self._df_raw_value(annual_balance, ["Net PPE", "NetPPE"])) * usd_fx_rate
+            net_fixed_assets_raw = self._df_raw_value(annual_balance, ["Net PPE", "NetPPE"]) * usd_fx_rate
+            receivables_raw = self._df_raw_value(annual_balance, ["Accounts Receivable", "AccountsReceivable", "Net Receivables"]) * usd_fx_rate
+            inventory_raw = self._df_raw_value(annual_balance, ["Inventory"]) * usd_fx_rate
+            accounts_payable_raw = self._df_raw_value(annual_balance, ["Accounts Payable", "AccountsPayable"]) * usd_fx_rate
 
             da_minus_capex_raw = max(da_raw - capex_raw, 0)
             investment_capex_raw = max(capex_raw - da_raw, 0)
@@ -1669,9 +1683,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     except Exception:
                         pass
 
-            # Currency
-            financial_currency = (info.get("financialCurrency") or info.get("currency") or "USD").upper()
-            usd_fx_rate = self.get_usd_fx_rate(financial_currency)
+            # Currency (usd_fx_rate already fetched above, just apply to EPS if needed)
             quote_currency = (info.get("currency") or "USD").upper()
             eps_fx = usd_fx_rate if quote_currency == "USD" and financial_currency != "USD" else 1.0
             cy_eps_raw = (cy_eps_raw or 0) * eps_fx
@@ -1680,14 +1692,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             # Market cap and valuation
             market_cap_raw = float(finviz_market_cap_raw or 0) or info.get("marketCap", 0) or 0
+            # Balance sheet cash/debt values are in native currency — convert to USD
             cash_bucket_raw = self._latest_row_raw(balance_statement, ["Cash, Equivalents & Short Term Investments", "Cash & Short Term Investments", "Cash Cash Equivalents and Short Term Investments"])
             if not cash_bucket_raw:
                 cash_bucket_raw = self._latest_row_raw(balance_statement, ["Cash & Cash Equivalents", "Cash and Cash Equivalents"]) + self._latest_row_raw(balance_statement, ["Other Short Term Investments", "Short Term Investments"])
             if not cash_bucket_raw:
-                cash_bucket_raw = self._df_raw_value(annual_balance, ["Cash Cash Equivalents And Short Term Investments", "CashCashEquivalentsAndShortTermInvestments", "Cash And Cash Equivalents", "CashAndCashEquivalents"])
-            total_debt_raw = self._df_raw_value(annual_balance, ["Total Debt", "TotalDebt"])
+                cash_bucket_raw = self._df_raw_value(annual_balance, ["Cash Cash Equivalents And Short Term Investments", "CashCashEquivalentsAndShortTermInvestments", "Cash And Cash Equivalents", "CashAndCashEquivalents"]) * usd_fx_rate
+            total_debt_raw = self._df_raw_value(annual_balance, ["Total Debt", "TotalDebt"]) * usd_fx_rate
             if not total_debt_raw:
-                total_debt_raw = self._df_raw_value(annual_balance, ["Current Debt", "CurrentDebt"]) + self._df_raw_value(annual_balance, ["Long Term Debt", "LongTermDebt"])
+                total_debt_raw = (self._df_raw_value(annual_balance, ["Current Debt", "CurrentDebt"]) + self._df_raw_value(annual_balance, ["Long Term Debt", "LongTermDebt"])) * usd_fx_rate
             net_cash_raw = cash_bucket_raw - total_debt_raw if cash_bucket_raw or total_debt_raw else (market_cap_raw - float(finviz_ev_raw or 0) if finviz_ev_raw and market_cap_raw else 0)
             derived_enterprise_value_raw = market_cap_raw - net_cash_raw if market_cap_raw else 0
 
