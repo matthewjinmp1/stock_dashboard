@@ -1636,43 +1636,39 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             cy_growth_raw = info.get("revenueGrowth", None)
             ny_growth_raw = None
 
-            # Try earnings_estimate for better estimates
+            # Combined Analysis Trends (Revenue and Earnings estimates in one fetch)
             try:
-                ee = stock.earnings_estimate
-                self._request_fetch_count += 1
-                if ee is not None and not ee.empty:
-                    if "0y" in ee.index:
-                        if "avg" in ee.columns and pd.notna(ee.loc["0y", "avg"]):
-                            cy_eps_raw = float(ee.loc["0y", "avg"])
-                        if "yearAgoEps" in ee.columns and pd.notna(ee.loc["0y", "yearAgoEps"]):
-                            year_ago_eps_raw = float(ee.loc["0y", "yearAgoEps"])
-                        if "growth" in ee.columns and pd.notna(ee.loc["0y", "growth"]):
-                            cy_eps_growth_raw = float(ee.loc["0y", "growth"])
-                    if "+1y" in ee.index:
-                        if "avg" in ee.columns and pd.notna(ee.loc["+1y", "avg"]):
-                            ny_eps_raw = float(ee.loc["+1y", "avg"])
-                        if "growth" in ee.columns and pd.notna(ee.loc["+1y", "growth"]):
-                            ny_eps_growth_raw = float(ee.loc["+1y", "growth"])
-            except Exception:
-                pass
-
-            # Try revenue_estimate for better revenue forecasts
-            try:
-                re_est = stock.revenue_estimate
-                self._request_fetch_count += 1
-                if re_est is not None and not re_est.empty:
-                    if "0y" in re_est.index:
-                        if "avg" in re_est.columns and pd.notna(re_est.loc["0y", "avg"]):
-                            cy_revenue_raw = float(re_est.loc["0y", "avg"])
-                        if "growth" in re_est.columns and pd.notna(re_est.loc["0y", "growth"]):
-                            cy_growth_raw = float(re_est.loc["0y", "growth"])
-                    if "+1y" in re_est.index:
-                        if "avg" in re_est.columns and pd.notna(re_est.loc["+1y", "avg"]):
-                            ny_revenue_raw = float(re_est.loc["+1y", "avg"])
-                        if "growth" in re_est.columns and pd.notna(re_est.loc["+1y", "growth"]):
-                            ny_growth_raw = float(re_est.loc["+1y", "growth"])
-            except Exception:
-                pass
+                trends = self._fetch_yahoo_analysis_trends(ticker)
+                for trend in (trends or []):
+                    period = trend.get("period")
+                    if period == "0y":
+                        ee = trend.get("earningsEstimate", {})
+                        if ee.get("avg") is not None:
+                            cy_eps_raw = float(ee["avg"])
+                        if ee.get("yearAgoEps") is not None:
+                            year_ago_eps_raw = float(ee["yearAgoEps"])
+                        if ee.get("growth") is not None:
+                            cy_eps_growth_raw = float(ee["growth"])
+                            
+                        re_est = trend.get("revenueEstimate", {})
+                        if re_est.get("avg") is not None:
+                            cy_revenue_raw = float(re_est["avg"])
+                        if re_est.get("growth") is not None:
+                            cy_growth_raw = float(re_est["growth"])
+                    elif period == "+1y":
+                        ee = trend.get("earningsEstimate", {})
+                        if ee.get("avg") is not None:
+                            ny_eps_raw = float(ee["avg"])
+                        if ee.get("growth") is not None:
+                            ny_eps_growth_raw = float(ee["growth"])
+                            
+                        re_est = trend.get("revenueEstimate", {})
+                        if re_est.get("avg") is not None:
+                            ny_revenue_raw = float(re_est["avg"])
+                        if re_est.get("growth") is not None:
+                            ny_growth_raw = float(re_est["growth"])
+            except Exception as e:
+                print(f"Combined analysis trends error: {e}")
 
             # Finviz EPS fallbacks
             if cy_eps_growth_raw is None:
