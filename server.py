@@ -728,17 +728,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         currency = (currency or "USD").upper()
         if currency == "USD":
             return 1.0
-        try:
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{currency}USD=X?range=1d&interval=1d"
-            body = json.loads(self._counted_open(opener, url, timeout=3).read().decode("utf-8"))
-            result = body.get("chart", {}).get("result", []) or []
-            quote = result[0].get("indicators", {}).get("quote", [{}])[0] if result else {}
-            close = quote.get("close", []) or []
-            for value in reversed(close):
-                if value:
-                    return float(value)
-        except Exception:
-            pass
+        
+        # Try multiple Yahoo API endpoints for the live rate
+        endpoints = [
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{currency}USD=X?range=1d&interval=1d",
+            f"https://query2.finance.yahoo.com/v8/finance/chart/{currency}USD=X?range=1d&interval=1d"
+        ]
+        
+        for url in endpoints:
+            try:
+                body = json.loads(self._counted_open(opener, url, timeout=3).read().decode("utf-8"))
+                result = body.get("chart", {}).get("result", []) or []
+                quote = result[0].get("indicators", {}).get("quote", [{}])[0] if result else {}
+                close = quote.get("close", []) or []
+                for value in reversed(close):
+                    if value:
+                        return float(value)
+            except Exception:
+                continue
+
+        # If all live lookups fail, we have to return 1.0 to avoid crashing, 
+        # but we no longer use hardcoded "safety" rates.
         return 1.0
 
     def _infer_currency_from_ticker(self, ticker, current_currency):
@@ -1599,11 +1609,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._request_fetch_count = getattr(self, "_request_fetch_count", 0) + 1
 
             # Fetch currency rate early so all values can be USD-normalized
-            financial_currency = self._infer_currency_from_ticker(ticker, raw_currency)
-            if financial_currency:
-                financial_currency = financial_currency.upper()
-            else:
-                financial_currency = "USD"
+            raw_currency = (info.get("financialCurrency") or info.get("currency") or "USD")
+            financial_currency = self._infer_currency_from_ticker(ticker, raw_currency).upper()
             
             financial_fx_rate = 1.0
             if financial_currency != "USD":
@@ -2299,12 +2306,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         )
                         break
 
-            raw_currency = (fd.get("financialCurrency") or price.get("currency"))
-            financial_currency = (
-                self._infer_currency_from_ticker(ticker, raw_currency)
-                or statement_currency
-                or "USD"
-            ).upper()
+            raw_currency = (fd.get("financialCurrency") or price.get("currency") or "USD")
+            financial_currency = self._infer_currency_from_ticker(ticker, raw_currency).upper()
             quote_currency = (price.get("currency") or chart_meta.get("currency") or "USD").upper()
             financial_fx_rate = self.get_usd_fx_rate(financial_currency, data_opener)
             # Quote FX applies to Market Cap and Price
