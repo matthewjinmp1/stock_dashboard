@@ -1068,7 +1068,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
 
         self.assertEqual(captured["status"], 200)
         self.assertEqual(captured["payload"]["incomeStatement"]["annual"]["rows"][0]["values"][0], "305B")
-        mock_finviz.assert_called_once()
+        mock_finviz.assert_not_called()
         mock_yahoo.assert_called_once()
 
     def test_payload_exposes_net_cash_and_derived_enterprise_value(self):

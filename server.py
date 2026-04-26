@@ -2376,6 +2376,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "price_current_eps": self._format_3sig(current_price_raw / year_ago_eps_raw) if current_price_raw and year_ago_eps_raw else "--",
                 "price_cy_eps": self._format_3sig(current_price_raw / cy_eps_raw) if current_price_raw and cy_eps_raw else "--",
                 "price_ny_eps": self._format_3sig(current_price_raw / ny_eps_raw) if current_price_raw and ny_eps_raw else "--",
+                "short_float": self._format_percent(self._raw(fd.get("shortPercentOfFloat"))) if fd.get("shortPercentOfFloat") else "--",
             }
             return tuple(values[key] for key in FETCH_RESULT_FIELDS)
         except Exception as e:
