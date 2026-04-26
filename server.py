@@ -1771,12 +1771,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             net_cash_raw = cash_bucket_raw - total_debt_raw if cash_bucket_raw or total_debt_raw else (market_cap_raw - float(finviz_ev_raw or 0) if finviz_ev_raw and market_cap_raw else 0)
             derived_enterprise_value_raw = market_cap_raw - net_cash_raw if market_cap_raw else 0
 
-            valuation_raw = float(finviz_ev_raw or 0) or info.get("enterpriseValue", 0) or 0
-            valuation_basis = "enterpriseValue" if valuation_raw else "marketCap"
-            valuation_prefix = "EV" if valuation_raw else "Mkt Cap"
-            valuation_numerator_label = "Current Enterprise Value" if valuation_raw else "Current Market Cap"
-            if not valuation_raw:
-                valuation_raw = market_cap_raw
+            valuation_raw = derived_enterprise_value_raw or market_cap_raw
+            valuation_basis = "derivedEV"
+            valuation_prefix = "EV"
+            valuation_numerator_label = "Derived Enterprise Value"
 
             cy_adj_inc_raw = cy_revenue_raw * adj_margin_ratio if cy_revenue_raw and adj_margin_ratio else 0
             ny_adj_inc_raw = ny_revenue_raw * adj_margin_ratio if ny_revenue_raw and adj_margin_ratio else 0
@@ -2256,12 +2254,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             net_cash_raw = cash_bucket_raw - total_debt_raw if cash_bucket_raw or total_debt_raw else (market_cap_raw - float(finviz_ev_raw or 0) if finviz_ev_raw and market_cap_raw else 0)
             derived_enterprise_value_raw = market_cap_raw - net_cash_raw if market_cap_raw else 0
 
-            valuation_raw = float(finviz_ev_raw or 0)
-            valuation_basis = "enterpriseValue" if valuation_raw else "marketCap"
-            valuation_prefix = "EV" if valuation_raw else "Mkt Cap"
-            valuation_numerator_label = "Current Enterprise Value" if valuation_raw else "Current Market Cap"
-            if not valuation_raw:
-                valuation_raw = market_cap_raw
+            valuation_raw = derived_enterprise_value_raw or market_cap_raw
+            valuation_basis = "derivedEV"
+            valuation_prefix = "EV"
+            valuation_numerator_label = "Derived Enterprise Value"
 
             cy_adj_inc_raw = cy_revenue_raw * adj_margin_ratio if cy_revenue_raw and adj_margin_ratio else 0
             ny_adj_inc_raw = ny_revenue_raw * adj_margin_ratio if ny_revenue_raw and adj_margin_ratio else 0
