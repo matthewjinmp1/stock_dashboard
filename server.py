@@ -741,6 +741,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             pass
         return 1.0
 
+    def _infer_currency_from_ticker(self, ticker, current_currency):
+        """Fallback to infer currency from ticker suffix if API returns USD or missing."""
+        if not ticker or not isinstance(ticker, str):
+            return current_currency
+
+        ticker_upper = ticker.upper()
+        if current_currency in (None, "", "USD"):
+            if ticker_upper.endswith(".HK"):
+                return "HKD"
+            if ticker_upper.endswith(".SS") or ticker_upper.endswith(".SZ"):
+                return "CNY"
+            if ticker_upper.endswith(".L"):
+                return "GBP"
+            if ticker_upper.endswith(".TO") or ticker_upper.endswith(".V"):
+                return "CAD"
+            if ticker_upper.endswith(".DE"):
+                return "EUR"
+            if ticker_upper.endswith(".AS") or ticker_upper.endswith(".PA") or ticker_upper.endswith(".BR"):
+                return "EUR"
+        return current_currency or "USD"
+
     def _format_3sig(self, val):
         if val in (None, ""):
             return "--"
@@ -1578,28 +1599,44 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._request_fetch_count = getattr(self, "_request_fetch_count", 0) + 1
 
             # Fetch currency rate early so all values can be USD-normalized
-            financial_currency = (info.get("financialCurrency") or info.get("currency") or "USD").upper()
-            usd_fx_rate = 1.0
+            financial_currency = self._infer_currency_from_ticker(ticker, raw_currency)
+            if financial_currency:
+                financial_currency = financial_currency.upper()
+            else:
+                financial_currency = "USD"
+            
+            financial_fx_rate = 1.0
             if financial_currency != "USD":
                 try:
                     fx_ticker = yf.Ticker(f"{financial_currency}USD=X")
                     self._request_fetch_count += 1
                     fx_info = fx_ticker.fast_info
-                    usd_fx_rate = float(fx_info.last_price or 1.0) or 1.0
-                    print(f"[FX] {financial_currency}/USD rate: {usd_fx_rate}")
-                except Exception as e:
-                    print(f"[FX] Failed to fetch {financial_currency}/USD rate: {e}, falling back to 1.0")
-                    usd_fx_rate = self.get_usd_fx_rate(financial_currency)
+                    financial_fx_rate = float(fx_info.last_price or 1.0) or 1.0
+                except Exception:
+                    financial_fx_rate = self.get_usd_fx_rate(financial_currency)
                     self._request_fetch_count += 1
-            else:
-                pass
+
+            quote_currency = (info.get("currency") or "USD").upper()
+            quote_fx_rate = 1.0
+            if quote_currency != "USD":
+                if quote_currency == financial_currency:
+                    quote_fx_rate = financial_fx_rate
+                else:
+                    try:
+                        fx_ticker = yf.Ticker(f"{quote_currency}USD=X")
+                        self._request_fetch_count += 1
+                        fx_info = fx_ticker.fast_info
+                        quote_fx_rate = float(fx_info.last_price or 1.0) or 1.0
+                    except Exception:
+                        quote_fx_rate = self.get_usd_fx_rate(quote_currency)
+                        self._request_fetch_count += 1
 
             # Currency-aware formatter: multiplies raw values by FX rate before formatting
             def fx_formatter(val):
                 if val is None:
                     return "--"
                 try:
-                    return self._format_money(float(val) * usd_fx_rate)
+                    return self._format_money(float(val) * financial_fx_rate)
                 except Exception:
                     return "--"
 
@@ -1782,29 +1819,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         pass
 
             # Convert revenue estimates and 3Y GP values from native currency to USD
-            cy_revenue_raw = (cy_revenue_raw or 0) * usd_fx_rate
-            ny_revenue_raw = (ny_revenue_raw or 0) * usd_fx_rate
-            gp_3y_start_raw = (gp_3y_start_raw or 0) * usd_fx_rate
-            gp_3y_end_raw = (gp_3y_end_raw or 0) * usd_fx_rate
+            cy_revenue_raw = (cy_revenue_raw or 0) * financial_fx_rate
+            ny_revenue_raw = (ny_revenue_raw or 0) * financial_fx_rate
+            gp_3y_start_raw = (gp_3y_start_raw or 0) * financial_fx_rate
+            gp_3y_end_raw = (gp_3y_end_raw or 0) * financial_fx_rate
 
-            # Currency (usd_fx_rate already fetched above, just apply to EPS if needed)
-            quote_currency = (info.get("currency") or "USD").upper()
-            eps_fx = usd_fx_rate if quote_currency == "USD" and financial_currency != "USD" else 1.0
-            cy_eps_raw = (cy_eps_raw or 0) * eps_fx
-            ny_eps_raw = (ny_eps_raw or 0) * eps_fx
-            year_ago_eps_raw = (year_ago_eps_raw or 0) * eps_fx
+            # Apply correct conversion to EPS based on quote vs financial currency
+            cy_eps_raw = (cy_eps_raw or 0) * financial_fx_rate
+            ny_eps_raw = (ny_eps_raw or 0) * financial_fx_rate
+            year_ago_eps_raw = (year_ago_eps_raw or 0) * financial_fx_rate
 
-            # Market cap and valuation
-            market_cap_raw = float(finviz_market_cap_raw or 0) or info.get("marketCap", 0) or 0
-            # Balance sheet cash/debt values are in native currency — convert to USD
+            # Market cap and valuation use quote_fx_rate
+            market_cap_raw = (float(finviz_market_cap_raw or 0) or info.get("marketCap", 0) or 0) * quote_fx_rate
+            # Balance sheet cash/debt values are in financial currency
             cash_bucket_raw = self._latest_row_raw(balance_statement, ["Cash, Equivalents & Short Term Investments", "Cash & Short Term Investments", "Cash Cash Equivalents and Short Term Investments"])
             if not cash_bucket_raw:
                 cash_bucket_raw = self._latest_row_raw(balance_statement, ["Cash & Cash Equivalents", "Cash and Cash Equivalents"]) + self._latest_row_raw(balance_statement, ["Other Short Term Investments", "Short Term Investments"])
             if not cash_bucket_raw:
-                cash_bucket_raw = self._df_raw_value(annual_balance, ["Cash Cash Equivalents And Short Term Investments", "CashCashEquivalentsAndShortTermInvestments", "Cash And Cash Equivalents", "CashAndCashEquivalents"]) * usd_fx_rate
-            total_debt_raw = self._df_raw_value(annual_balance, ["Total Debt", "TotalDebt"]) * usd_fx_rate
+                cash_bucket_raw = self._df_raw_value(annual_balance, ["Cash Cash Equivalents And Short Term Investments", "CashCashEquivalentsAndShortTermInvestments", "Cash And Cash Equivalents", "CashAndCashEquivalents"]) * financial_fx_rate
+            total_debt_raw = self._df_raw_value(annual_balance, ["Total Debt", "TotalDebt"]) * financial_fx_rate
             if not total_debt_raw:
-                total_debt_raw = (self._df_raw_value(annual_balance, ["Current Debt", "CurrentDebt"]) + self._df_raw_value(annual_balance, ["Long Term Debt", "LongTermDebt"])) * usd_fx_rate
+                total_debt_raw = (self._df_raw_value(annual_balance, ["Current Debt", "CurrentDebt"]) + self._df_raw_value(annual_balance, ["Long Term Debt", "LongTermDebt"])) * financial_fx_rate
             net_cash_raw = cash_bucket_raw - total_debt_raw if cash_bucket_raw or total_debt_raw else (market_cap_raw - float(finviz_ev_raw or 0) if finviz_ev_raw and market_cap_raw else 0)
             derived_enterprise_value_raw = market_cap_raw - net_cash_raw if market_cap_raw else 0
 
@@ -1818,10 +1853,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             nwc_raw = receivables_raw + inventory_raw - accounts_payable_raw
             roc_denominator_raw = nwc_raw + net_fixed_assets_raw
 
-            current_price_raw = info.get("currentPrice", 0) or info.get("regularMarketPrice", 0) or 0
-            target_mean_raw = info.get("targetMeanPrice", 0) or 0
-            target_low_raw = info.get("targetLowPrice", 0) or 0
-            target_high_raw = info.get("targetHighPrice", 0) or 0
+            current_price_raw = (info.get("currentPrice", 0) or info.get("regularMarketPrice", 0) or 0) * quote_fx_rate
+            target_mean_raw = (info.get("targetMeanPrice", 0) or 0) * quote_fx_rate
+            target_low_raw = (info.get("targetLowPrice", 0) or 0) * quote_fx_rate
+            target_high_raw = (info.get("targetHighPrice", 0) or 0) * quote_fx_rate
             target_move_raw = ((target_mean_raw - current_price_raw) / current_price_raw) if target_mean_raw and current_price_raw else None
 
             recommendation_mean = info.get("recommendationMean", 0) or 0
@@ -2264,34 +2299,40 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         )
                         break
 
+            raw_currency = (fd.get("financialCurrency") or price.get("currency"))
             financial_currency = (
-                fd.get("financialCurrency")
-                or price.get("currency")
-                or chart_meta.get("currency")
+                self._infer_currency_from_ticker(ticker, raw_currency)
                 or statement_currency
                 or "USD"
             ).upper()
-            quote_currency = (price.get("currency") or chart_meta.get("currency") or "USD").upper()
-            usd_fx_rate = self.get_usd_fx_rate(financial_currency, data_opener)
-            eps_fx = usd_fx_rate if quote_currency == "USD" and financial_currency != "USD" else 1.0
-            cy_eps_raw *= eps_fx
-            ny_eps_raw *= eps_fx
-            year_ago_eps_raw *= eps_fx
+            quote_currency = (price.get("currency") or chart_meta.get("currency") or "USD").            # Financial FX applies to statements and estimates
+            financial_fx_rate = self.get_usd_fx_rate(financial_currency, data_opener)
+            # Quote FX applies to Market Cap and Price
+            quote_fx_rate = self.get_usd_fx_rate(quote_currency, data_opener)
+            
+            cy_eps_raw *= financial_fx_rate
+            ny_eps_raw *= financial_fx_rate
+            year_ago_eps_raw *= financial_fx_rate
 
             if cy_eps_raw and year_ago_eps_raw and abs(cy_eps_raw - year_ago_eps_raw) < 1e-9:
                 eps_row = next((row for row in self._unwrap_annual(income_statement).get("rows", []) if row.get("label") in ("Diluted EPS", "Basic EPS")), None)
                 if eps_row and len(eps_row.get("values", [])) > 1:
                     fallback = self._parse_money_to_raw(eps_row["values"][1])
                     if fallback:
-                        year_ago_eps_raw = fallback
+                        year_ago_eps_raw = fallback * financial_fx_rate
 
-            market_cap_raw = float(finviz_market_cap_raw or 0) or self._raw(price.get("marketCap")) or self._raw(dks.get("marketCap"))
+            market_cap_raw = (float(finviz_market_cap_raw or 0) or self._raw(price.get("marketCap")) or self._raw(dks.get("marketCap"))) * quote_fx_rate
             cash_bucket_raw = self._latest_row_raw(balance_statement, ["Cash, Equivalents & Short Term Investments", "Cash & Short Term Investments"])
             if not cash_bucket_raw:
                 cash_bucket_raw = self._latest_row_raw(balance_statement, ["Cash & Cash Equivalents", "Cash And Cash Equivalents"]) + self._latest_row_raw(balance_statement, ["Other Short Term Investments", "Short Term Investments"])
             total_debt_raw = self._latest_row_raw(balance_statement, ["Total Debt"])
             if not total_debt_raw:
                 total_debt_raw = self._latest_row_raw(balance_statement, ["Current Debt", "Short Term Debt"]) + self._latest_row_raw(balance_statement, ["Long Term Debt"])
+            
+            # Cash and debt are in financial currency
+            cash_bucket_raw *= financial_fx_rate
+            total_debt_raw *= financial_fx_rate
+            
             net_cash_raw = cash_bucket_raw - total_debt_raw if cash_bucket_raw or total_debt_raw else (market_cap_raw - float(finviz_ev_raw or 0) if finviz_ev_raw and market_cap_raw else 0)
             derived_enterprise_value_raw = market_cap_raw - net_cash_raw if market_cap_raw else 0
 
@@ -2302,17 +2343,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             cy_adj_inc_raw = cy_revenue_raw * adj_margin_ratio if cy_revenue_raw and adj_margin_ratio else 0
             ny_adj_inc_raw = ny_revenue_raw * adj_margin_ratio if ny_revenue_raw and adj_margin_ratio else 0
-            nwc_raw = receivables_raw + inventory_raw - accounts_payable_raw
-            roc_denominator_raw = nwc_raw + net_fixed_assets_raw
+            nwc_raw = (receivables_raw + inventory_raw - accounts_payable_raw) * financial_fx_rate
+            roc_denominator_raw = (nwc_raw + net_fixed_assets_raw) * financial_fx_rate
+
             current_price_raw = (
                 self._raw(price.get("regularMarketPrice"))
                 or self._raw(fd.get("currentPrice"))
                 or chart_meta.get("regularMarketPrice")
                 or 0
-            )
-            target_mean_raw = self._raw(fd.get("targetMeanPrice"))
-            target_low_raw = self._raw(fd.get("targetLowPrice"))
-            target_high_raw = self._raw(fd.get("targetHighPrice"))
+            ) * quote_fx_rate
+            target_mean_raw = self._raw(fd.get("targetMeanPrice")) * quote_fx_rate
+            target_low_raw = self._raw(fd.get("targetLowPrice")) * quote_fx_rate
+            target_high_raw = self._raw(fd.get("targetHighPrice")) * quote_fx_rate
+fx_rate
             target_move_raw = ((target_mean_raw - current_price_raw) / current_price_raw) if target_mean_raw and current_price_raw else None
 
             analyst_recommendations = ((res.get("recommendationTrend", {}) or {}).get("trend", []) or [{}])[0]
