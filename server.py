@@ -2305,7 +2305,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 or statement_currency
                 or "USD"
             ).upper()
-            quote_currency = (price.get("currency") or chart_meta.get("currency") or "USD").            # Financial FX applies to statements and estimates
+            quote_currency = (price.get("currency") or chart_meta.get("currency") or "USD").upper()
             financial_fx_rate = self.get_usd_fx_rate(financial_currency, data_opener)
             # Quote FX applies to Market Cap and Price
             quote_fx_rate = self.get_usd_fx_rate(quote_currency, data_opener)
@@ -2355,7 +2355,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             target_mean_raw = self._raw(fd.get("targetMeanPrice")) * quote_fx_rate
             target_low_raw = self._raw(fd.get("targetLowPrice")) * quote_fx_rate
             target_high_raw = self._raw(fd.get("targetHighPrice")) * quote_fx_rate
-fx_rate
             target_move_raw = ((target_mean_raw - current_price_raw) / current_price_raw) if target_mean_raw and current_price_raw else None
 
             analyst_recommendations = ((res.get("recommendationTrend", {}) or {}).get("trend", []) or [{}])[0]
@@ -2400,7 +2399,7 @@ fx_rate
                 "inventory": self._format_money(inventory_raw),
                 "accounts_payable": self._format_money(accounts_payable_raw),
                 "financial_currency": financial_currency,
-                "usd_fx_rate": usd_fx_rate,
+                "usd_fx_rate": quote_fx_rate,
                 "company_name": company_name,
                 "income_statement": income_statement,
                 "balance_statement": balance_statement,
