@@ -1435,7 +1435,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # CamelCase → spaced (only for true CamelCase labels)
         return re.sub(r"(?<!^)(?=[A-Z])", " ", str(label)).replace("And", "and")
 
-    def _df_to_statement(self, df, formatter=None, ttm_label="TTM", order_map=None):
+    def _df_to_statement(self, df, formatter=None, ttm_label="TTM", order_map=None, quarterly_df=None):
         """Convert a pandas DataFrame (rows=line items, columns=dates) to our statement format."""
         formatter = formatter or self._format_money
         if df is None or df.empty:
@@ -1459,7 +1459,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         rows = []
         for label in active_labels:
             raw_values = df.loc[label, cols].tolist()
-            ttm_val = raw_values[0]
+            # Calculate TTM from quarterly_df if available, otherwise fallback to latest annual
+            ttm_val = None
+            if quarterly_df is not None:
+                ttm_val = self._df_ttm_value(quarterly_df, df, [label])
+            
+            if ttm_val is None:
+                ttm_val = raw_values[0]
+                
             formatted = [formatter(ttm_val) if pd.notna(ttm_val) else "--"]
             for v in raw_values:
                 formatted.append(formatter(v) if pd.notna(v) else "--")
@@ -1578,7 +1585,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._request_fetch_count += 1
 
             income_statement = {
-                "annual": self._df_to_statement(annual_income, formatter=fx_formatter, order_map=INCOME_STATEMENT_TYPES),
+                "annual": self._df_to_statement(annual_income, formatter=fx_formatter, order_map=INCOME_STATEMENT_TYPES, quarterly_df=quarterly_income),
                 "quarterly": self._df_to_quarterly_statement(quarterly_income, formatter=fx_formatter, order_map=INCOME_STATEMENT_TYPES),
             }
             balance_statement = {
@@ -1586,7 +1593,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "quarterly": self._df_to_quarterly_statement(quarterly_balance, formatter=fx_formatter, order_map=BALANCE_STATEMENT_TYPES),
             }
             cash_flow_statement = {
-                "annual": self._df_to_statement(annual_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES),
+                "annual": self._df_to_statement(annual_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES, quarterly_df=quarterly_cashflow),
                 "quarterly": self._df_to_quarterly_statement(quarterly_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES),
             }
 
