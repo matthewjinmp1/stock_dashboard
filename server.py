@@ -1591,7 +1591,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     usd_fx_rate = self.get_usd_fx_rate(financial_currency)
                     self._request_fetch_count += 1
             else:
-                self._request_fetch_count += 1
+                pass
 
             # Currency-aware formatter: multiplies raw values by FX rate before formatting
             def fx_formatter(val):
@@ -1602,19 +1602,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 except Exception:
                     return "--"
 
-            # Financial statements (each property triggers HTTP calls internally)
             annual_income = stock.financials
-            self._request_fetch_count += 1
             quarterly_income = stock.quarterly_financials
-            self._request_fetch_count += 1
             annual_balance = stock.balance_sheet
-            self._request_fetch_count += 1
             quarterly_balance = stock.quarterly_balance_sheet
-            self._request_fetch_count += 1
             annual_cashflow = stock.cashflow
-            self._request_fetch_count += 1
             quarterly_cashflow = stock.quarterly_cashflow
-            self._request_fetch_count += 1
+            # Each of the above properties in yfinance triggers a separate HTTP call
+            self._request_fetch_count += 6
 
             income_statement = {
                 "annual": self._df_to_statement(annual_income, formatter=fx_formatter, order_map=INCOME_STATEMENT_TYPES, quarterly_df=quarterly_income),
