@@ -699,6 +699,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return opener.open(url, timeout=timeout)
         return urllib.request.urlopen(url, timeout=timeout)
 
+    def _make_yahoo_opener(self):
+        from http.cookiejar import CookieJar
+        cj = CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+        opener.addheaders = [
+            ("User-Agent", YAHOO_USER_AGENT),
+            ("Accept", "application/json,text/plain,*/*"),
+            ("Accept-Language", "en-US,en;q=0.9"),
+            ("Connection", "close"),
+        ]
+        return opener
+
     def get_yahoo_crumb(self, opener=None):
         cached = getattr(Handler, "_yahoo_crumb_cache", None)
         cached_at = getattr(Handler, "_yahoo_crumb_cache_at", 0) or 0
@@ -1073,9 +1085,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         url = f"https://finance.yahoo.com/quote/{ticker}/financials/"
         html = page_opener.open(url, timeout=10).read().decode("utf-8", errors="ignore")
         results = []
-        for match in re.finditer(r'<script[^>]*data-sveltekit-fetched[^>]*>(.*?)</script>', html, re.DOTALL):
+        # Look for both data-sveltekit-fetched and __sveltekit_data script tags
+        for match in re.finditer(r'<script[^>]*?(?:data-sveltekit-fetched|__sveltekit_data)[^>]*?>(.*?)</script>', html, re.DOTALL | re.IGNORECASE):
             try:
-                outer = json.loads(match.group(1))
+                content = match.group(1).strip()
+                if not content:
+                    continue
+                outer = json.loads(content)
                 body = outer.get("body", "{}")
                 if isinstance(body, str):
                     body = json.loads(body)
@@ -1140,7 +1156,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _extract_yahoo_analysis_trends_from_html(self, html):
         json_trends = []
-        for match in re.finditer(r'<script[^>]*data-sveltekit-fetched[^>]*>(.*?)</script>', html, re.DOTALL):
+        for match in re.finditer(r'<script[^>]*?(?:data-sveltekit-fetched|__sveltekit_data)[^>]*?>(.*?)</script>', html, re.DOTALL | re.IGNORECASE):
             try:
                 body = json.loads(match.group(1)).get("body", "{}")
                 if isinstance(body, str):
@@ -1171,18 +1187,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 order.append(period)
 
             for table_trend in table_trends:
-                period = table_trend.get("period")
-                if not period:
-                    continue
-                merged = dict(by_period.get(period, {"period": period}))
+                t_period = str(table_trend.get("period", "")).lower()
+                # Find matching JSON trend (flexible period match)
+                match_period = None
+                if "0y" in t_period or "curr" in t_period:
+                    match_period = next((p for p in by_period if "0y" in p.lower() or "curr" in p.lower()), None)
+                elif "1y" in t_period or "next" in t_period:
+                    match_period = next((p for p in by_period if "1y" in p.lower() or "next" in p.lower()), None)
+                
+                merged = dict(by_period.get(match_period or t_period, {"period": t_period}))
                 revenue_estimate = dict(merged.get("revenueEstimate", {}) or {})
                 table_revenue_estimate = table_trend.get("revenueEstimate", {}) or {}
-                if "growth" in table_revenue_estimate:
+                
+                if "growth" in table_revenue_estimate and ("growth" not in revenue_estimate or not revenue_estimate["growth"]):
                     revenue_estimate["growth"] = table_revenue_estimate["growth"]
+                if "avg" in table_revenue_estimate and ("avg" not in revenue_estimate or not revenue_estimate["avg"]):
+                    revenue_estimate["avg"] = table_revenue_estimate["avg"]
+                
                 merged["revenueEstimate"] = revenue_estimate
-                if period not in by_period:
-                    order.append(period)
-                by_period[period] = merged
+                if (match_period or t_period) not in by_period:
+                    order.append(t_period)
+                by_period[match_period or t_period] = merged
 
             return [by_period[period] for period in order if period in by_period]
         if json_trends:
@@ -1201,13 +1226,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         for source in text_sources:
             text = html_lib.unescape(str(source))
+            text = re.sub(r"&nbsp;", " ", text, flags=re.IGNORECASE)
             text = re.sub(r"<[^>]+>", " ", text)
             text = re.sub(r"\\u0025", "%", text)
             text = re.sub(r"\\u002F", "/", text)
             text = re.sub(r"\\+", " ", text)
             text = re.sub(r"\s+", " ", text).strip()
 
-            label_match = re.search(r"Sales\s+Growth\s*\(\s*year\s*/\s*est\s*\)", text, re.IGNORECASE)
+            # Flexible label matching for "Sales Growth (year/est)"
+            label_match = re.search(r"Sales\s+Growth.*year.*/.*est", text, re.IGNORECASE)
             if not label_match:
                 continue
 
@@ -1234,10 +1261,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return []
 
     def _fetch_yahoo_analysis_trends(self, ticker):
+        opener = self._make_yahoo_opener()
         for page in ("analysis", "analyst-insights"):
             try:
                 url = f"https://finance.yahoo.com/quote/{ticker}/{page}/"
-                html = self._counted_open(None, url, timeout=8).read().decode("utf-8", errors="ignore")
+                html = self._counted_open(opener, url, timeout=8).read().decode("utf-8", errors="ignore")
                 trends = self._extract_yahoo_analysis_trends_from_html(html)
                 if trends:
                     return trends
@@ -1639,34 +1667,64 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # Combined Analysis Trends (Revenue and Earnings estimates in one fetch)
             try:
                 trends = self._fetch_yahoo_analysis_trends(ticker)
-                for trend in (trends or []):
-                    period = trend.get("period")
-                    if period == "0y":
-                        ee = trend.get("earningsEstimate", {})
-                        if ee.get("avg") is not None:
-                            cy_eps_raw = float(ee["avg"])
-                        if ee.get("yearAgoEps") is not None:
-                            year_ago_eps_raw = float(ee["yearAgoEps"])
-                        if ee.get("growth") is not None:
-                            cy_eps_growth_raw = float(ee["growth"])
-                            
-                        re_est = trend.get("revenueEstimate", {})
-                        if re_est.get("avg") is not None:
-                            cy_revenue_raw = float(re_est["avg"])
-                        if re_est.get("growth") is not None:
-                            cy_growth_raw = float(re_est["growth"])
-                    elif period == "+1y":
-                        ee = trend.get("earningsEstimate", {})
-                        if ee.get("avg") is not None:
-                            ny_eps_raw = float(ee["avg"])
-                        if ee.get("growth") is not None:
-                            ny_eps_growth_raw = float(ee["growth"])
-                            
-                        re_est = trend.get("revenueEstimate", {})
-                        if re_est.get("avg") is not None:
-                            ny_revenue_raw = float(re_est["avg"])
-                        if re_est.get("growth") is not None:
-                            ny_growth_raw = float(re_est["growth"])
+                if not trends:
+                    # Fallback to separate yfinance fetches if combined fetch fails
+                    try:
+                        ee = stock.earnings_estimate
+                        self._request_fetch_count += 1
+                        if ee is not None and not ee.empty:
+                            if "0y" in ee.index:
+                                cy_eps_raw = float(ee.loc["0y", "avg"]) if "avg" in ee.columns and pd.notna(ee.loc["0y", "avg"]) else cy_eps_raw
+                                year_ago_eps_raw = float(ee.loc["0y", "yearAgoEps"]) if "yearAgoEps" in ee.columns and pd.notna(ee.loc["0y", "yearAgoEps"]) else year_ago_eps_raw
+                                cy_eps_growth_raw = float(ee.loc["0y", "growth"]) if "growth" in ee.columns and pd.notna(ee.loc["0y", "growth"]) else cy_eps_growth_raw
+                            if "+1y" in ee.index:
+                                ny_eps_raw = float(ee.loc["+1y", "avg"]) if "avg" in ee.columns and pd.notna(ee.loc["+1y", "avg"]) else ny_eps_raw
+                                ny_eps_growth_raw = float(ee.loc["+1y", "growth"]) if "growth" in ee.columns and pd.notna(ee.loc["+1y", "growth"]) else ny_eps_growth_raw
+                        
+                        re_est = stock.revenue_estimate
+                        self._request_fetch_count += 1
+                        if re_est is not None and not re_est.empty:
+                            if "0y" in re_est.index:
+                                cy_revenue_raw = float(re_est.loc["0y", "avg"]) if "avg" in re_est.columns and pd.notna(re_est.loc["0y", "avg"]) else cy_revenue_raw
+                                cy_growth_raw = float(re_est.loc["0y", "growth"]) if "growth" in re_est.columns and pd.notna(re_est.loc["0y", "growth"]) else cy_growth_raw
+                            if "+1y" in re_est.index:
+                                ny_revenue_raw = float(re_est.loc["+1y", "avg"]) if "avg" in re_est.columns and pd.notna(re_est.loc["+1y", "avg"]) else ny_revenue_raw
+                                ny_growth_raw = float(re_est.loc["+1y", "growth"]) if "growth" in re_est.columns and pd.notna(re_est.loc["+1y", "growth"]) else ny_growth_raw
+                    except Exception as fe:
+                        print(f"Fallback estimates error: {fe}")
+                else:
+                    for trend in (trends or []):
+                        period = str(trend.get("period", "")).lower()
+                        # Handle flexible period names like +1y, 1y, 0y, etc.
+                        is_cy = "0y" in period or "curr" in period
+                        is_ny = "1y" in period or "next" in period
+                        
+                        if is_cy:
+                            ee = trend.get("earningsEstimate", {})
+                            if ee.get("avg") is not None:
+                                cy_eps_raw = self._raw(ee["avg"])
+                            if ee.get("yearAgoEps") is not None:
+                                year_ago_eps_raw = self._raw(ee["yearAgoEps"])
+                            if ee.get("growth") is not None:
+                                cy_eps_growth_raw = self._raw(ee["growth"])
+                                
+                            re_est = trend.get("revenueEstimate", {})
+                            if re_est.get("avg") is not None:
+                                cy_revenue_raw = self._raw(re_est["avg"])
+                            if re_est.get("growth") is not None:
+                                cy_growth_raw = self._raw(re_est["growth"])
+                        elif is_ny:
+                            ee = trend.get("earningsEstimate", {})
+                            if ee.get("avg") is not None:
+                                ny_eps_raw = self._raw(ee["avg"])
+                            if ee.get("growth") is not None:
+                                ny_eps_growth_raw = self._raw(ee["growth"])
+                                
+                            re_est = trend.get("revenueEstimate", {})
+                            if re_est.get("avg") is not None:
+                                ny_revenue_raw = self._raw(re_est["avg"])
+                            if re_est.get("growth") is not None:
+                                ny_growth_raw = self._raw(re_est["growth"])
             except Exception as e:
                 print(f"Combined analysis trends error: {e}")
 
@@ -1836,18 +1894,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             from http.cookiejar import CookieJar
 
-            def yahoo_opener():
-                cj = CookieJar()
-                opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
-                opener.addheaders = [
-                    ("User-Agent", YAHOO_USER_AGENT),
-                    ("Accept", "application/json,text/plain,*/*"),
-                    ("Accept-Language", "en-US,en;q=0.9"),
-                    ("Connection", "close"),
-                ]
-                return opener
-
-            data_opener = yahoo_opener()
+            data_opener = self._make_yahoo_opener()
             self._yahoo_statement_page_cache = {}
 
             res = {}
@@ -1954,7 +2001,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 pass
 
             try:
-                quote_opener = yahoo_opener()
+                quote_opener = self._make_yahoo_opener()
                 crumb = self.get_yahoo_crumb(quote_opener)
                 modules = ",".join([
                     "financialData", "earningsTrend", "defaultKeyStatistics", "price",
