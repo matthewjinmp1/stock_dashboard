@@ -45,6 +45,7 @@ FETCH_RESULT_FIELDS = [
     "valuation_basis", "valuation_prefix", "valuation_numerator_label",
     "current_year_eps", "next_year_eps", "year_ago_eps", "current_year_eps_growth",
     "next_year_eps_growth", "price_current_eps", "price_cy_eps", "price_ny_eps",
+    "short_float",
 ]
 
 # Ordered dicts: keys define the preferred display order.
@@ -1906,6 +1907,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "price_current_eps": self._format_3sig(current_price_raw / year_ago_eps_raw) if current_price_raw and year_ago_eps_raw else "--",
                 "price_cy_eps": self._format_3sig(current_price_raw / cy_eps_raw) if current_price_raw and cy_eps_raw else "--",
                 "price_ny_eps": self._format_3sig(current_price_raw / ny_eps_raw) if current_price_raw and ny_eps_raw else "--",
+                "short_float": self._format_percent(info.get("shortPercentOfFloat")) if info.get("shortPercentOfFloat") else "--",
             }
             return tuple(values[key] for key in FETCH_RESULT_FIELDS)
         except Exception as e:
@@ -2469,22 +2471,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._send_response(200, self._prune_latest(enrich_cached_payload(cached_payload, cache[ticker], fetch_count=0)))
                 return
 
-        finviz_metrics = {"short_float": "--", "market_cap": "--", "enterprise_value": "--"}
-        try:
-            finviz_metrics = self.fetch_finviz_snapshot_metrics(ticker)
-        except HTTPError as e:
-            if e.code != 404:
-                print("Finviz error:", e)
-        except Exception as e:
-            print("Finviz error:", e)
-
-        finviz_market_cap_raw = self._parse_finviz_abbrev_to_raw(finviz_metrics.get("market_cap"))
-        finviz_enterprise_value_raw = self._parse_finviz_abbrev_to_raw(finviz_metrics.get("enterprise_value"))
+        finviz_market_cap_raw = 0
+        finviz_enterprise_value_raw = 0
         result = dict(zip(FETCH_RESULT_FIELDS, self.fetch_yahoo_finance_data(
             ticker,
-            finviz_ev_raw=finviz_enterprise_value_raw,
-            finviz_market_cap_raw=finviz_market_cap_raw,
-            finviz_metrics=finviz_metrics,
+            finviz_ev_raw=0,
+            finviz_market_cap_raw=0,
+            finviz_metrics={},
         )))
 
         if result.get("company_name") == ticker and result.get("valuation_basis") == "unavailable":
@@ -2503,7 +2496,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         payload = {
             "ticker": ticker,
-            "shortFloat": finviz_metrics.get("short_float") or "--",
+            "shortFloat": result.get("short_float") or "--",
             "income": result["income"],
             "margin": result["margin"],
             "grossMargin": result["gross_margin"],
@@ -2567,7 +2560,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "priceCyEps": result["price_cy_eps"],
             "priceNyEps": result["price_ny_eps"],
             "payloadVersion": PAYLOAD_VERSION,
-            "evSource": "finviz" if finviz_enterprise_value_raw and result["valuation_basis"] == "enterpriseValue" else "unavailable",
+            "evSource": "derived" if result["valuation_basis"] == "derivedEV" else "finviz" if finviz_enterprise_value_raw and result["valuation_basis"] == "enterpriseValue" else "unavailable",
             "marketCapSource": "yahoo",
             "dataDate": today,
             "pulledAt": pulled_at,
