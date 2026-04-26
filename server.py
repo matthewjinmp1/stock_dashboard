@@ -1616,7 +1616,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     financial_fx_rate = self.get_usd_fx_rate(financial_currency)
                     self._request_fetch_count += 1
 
-            quote_currency = (info.get("currency") or "USD").upper()
+            quote_currency = self._infer_currency_from_ticker(ticker, info.get("currency")).upper()
             quote_fx_rate = 1.0
             if quote_currency != "USD":
                 if quote_currency == financial_currency:
@@ -2305,7 +2305,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 or statement_currency
                 or "USD"
             ).upper()
-            quote_currency = (price.get("currency") or chart_meta.get("currency") or "USD").upper()
+            quote_currency = self._infer_currency_from_ticker(ticker, (price.get("currency") or chart_meta.get("currency"))).upper()
             financial_fx_rate = self.get_usd_fx_rate(financial_currency, data_opener)
             # Quote FX applies to Market Cap and Price
             quote_fx_rate = self.get_usd_fx_rate(quote_currency, data_opener)
