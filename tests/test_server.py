@@ -8,6 +8,7 @@ from unittest import mock
 from urllib.error import HTTPError
 
 import server
+import datetime
 
 
 FETCH_RESULT_FIELDS = server.FETCH_RESULT_FIELDS
@@ -774,6 +775,36 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(mapped["valuation_basis"], "unavailable")
         self.assertEqual(mapped["valuation_prefix"], "EV")
         self.assertEqual(mapped["company_name"], "FAIL")
+
+    def test_adaptive_growth_label_for_short_history(self):
+        # Mock only 2 years of revenue data in the manual scraper format
+        income_statement = {
+            "annual": {
+                "periods": ["2024-12-31", "2023-12-31"],
+                "rows": [
+                    {"label": "Total Revenue", "values": ["121", "100"]}
+                ]
+            }
+        }
+        
+        # We need to mock the dependencies for the manual scraper path
+        with mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
+             mock.patch.object(self.handler, "_counted_open"), \
+             mock.patch.object(self.handler, "build_income_statement_from_timeseries_results", return_value=income_statement), \
+             mock.patch.object(self.handler, "build_balance_sheet_from_timeseries_results", return_value=fake_balance_statement()), \
+             mock.patch.object(self.handler, "build_cash_flow_statement_from_timeseries_results", return_value=fake_statement("Cash")):
+            
+            # Ensure the scraper thinks it's a successful fetch
+            with mock.patch("server.json.loads") as mock_json:
+                mock_json.return_value = {"quoteSummary": {"result": [{"price": {"longName": "GROW", "regularMarketPrice": {"raw": 10}, "marketCap": {"raw": 1000}, "currency": "USD"}}]}}
+                
+                result = self.handler.fetch_yahoo_finance_data("GROW")
+                mapped = dict(zip(FETCH_RESULT_FIELDS, result))
+                
+                # Calculation: (121 / 100) ^ (1/1) - 1 = 21%
+                self.assertEqual(mapped["gp_3y_growth"], "21%")
+                # Label should update to "1Y Annual Sales Growth"
+                self.assertEqual(mapped["gp_3y_label"], "1Y Annual Sales Growth")
 
 
 class HandleApiRequestContractTests(unittest.TestCase):
