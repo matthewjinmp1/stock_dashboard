@@ -1679,7 +1679,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                     gp_3y_growth_raw = (end_val / abs(start_val)) ** (1 / years) - 1
                                     gp_3y_start_raw = start_val
                                     gp_3y_end_raw = end_val
-                                    gp_3y_label = label_out
+                                    # Update label based on actual years used
+                                    display_years = round(years) if years >= 0.9 else round(years, 1)
+                                    gp_3y_label = f"{display_years}Y {label_out.split(' ', 1)[1]}"
                                 break
                     if gp_3y_growth_raw is not None:
                         break
@@ -2120,7 +2122,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         if period_label in ("TTM", "MRQ", "LATEST"):
                             continue
                         raw = self._parse_money_to_raw(row["values"][idx])
-                        if raw:
+                        if raw is not None:
                             points.append((period, raw))
                     return points
                 return []
@@ -2156,6 +2158,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     years = (end_date - start_date).days / 365.25 if end_date and start_date else end_idx - start_idx
                     years = years if years > 0 else 1
                     growth = (end / abs(start)) ** (1 / years) - 1
+                    # Update label based on actual years used
+                    display_years = round(years) if years >= 0.9 else round(years, 1)
+                    label = f"{display_years}Y {label.split(' ', 1)[1]}"
                 return growth, start, end, label
 
             gp_3y_growth_raw, gp_3y_start_raw, gp_3y_end_raw, gp_3y_label = three_year_growth(income_statement)
