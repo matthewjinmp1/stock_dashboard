@@ -991,6 +991,37 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         periods = ["TTM"] + sorted_periods
         rows = []
 
+        # Map base keys to their official "trailing" counterparts if they exist
+        trailing_map = {
+            "TotalRevenue": "trailingTotalRevenue",
+            "CostOfRevenue": "trailingCostOfRevenue",
+            "GrossProfit": "trailingGrossProfit",
+            "OperatingIncome": "trailingOperatingIncome",
+            "NetIncome": "trailingNetIncome",
+            "OperatingCashFlow": "trailingOperatingCashFlow",
+            "FreeCashFlow": "trailingFreeCashFlow",
+            "CapitalExpenditure": "trailingCapitalExpenditure",
+            "Ebitda": "trailingEbitda",
+            "BasicEPS": "trailingBasicEPS",
+            "DilutedEPS": "trailingDilutedEPS",
+        }
+
+        # Pre-process all points into a lookup for fast access
+        ttm_official_lookup = {}
+        for item in selected_results or []:
+            type_name = self._statement_type_name(item)
+            if type_name.startswith("trailing"):
+                points = self._series_points(item, type_name)
+                if points:
+                    # Trailing series usually have a single point
+                    # We map it to the "base" label this trailing series belongs to
+                    for base, trailing in trailing_map.items():
+                        if type_name == trailing:
+                            label = type_map.get(base)
+                            if label:
+                                ttm_official_lookup[label] = points[0]["raw"]
+                            break
+
         q_sorted_periods = sorted(quarterly_period_dates, reverse=True)[:5]
         q_periods = q_sorted_periods
         q_rows_out = []
@@ -1014,12 +1045,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             quarter_points = quarterly_rows.get(label, [])
             quarter_by_date = {p["date"]: p["raw"] for p in quarter_points}
 
-            ttm_raw = None
-            if len(quarter_points) >= 4:
-                latest_four = quarter_points[:4]
-                ttm_raw = sum(point["raw"] for point in latest_four)
-            elif annual_points:
-                ttm_raw = annual_points[0]["raw"]
+            ttm_raw = ttm_official_lookup.get(label)
+            if ttm_raw is None:
+                if len(quarter_points) >= 4:
+                    latest_four = quarter_points[:4]
+                    ttm_raw = sum(point["raw"] for point in latest_four)
+                elif annual_points:
+                    ttm_raw = annual_points[0]["raw"]
 
             values = [formatter(ttm_raw) if ttm_raw is not None else "--"]
             for period in sorted_periods:
