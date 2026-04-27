@@ -423,13 +423,31 @@ document.addEventListener('DOMContentLoaded', () => {
         save('stock_starred_tickers', state.starred);
     }
 
-    function tableHeaders() {
+    function sortIcon(key, kind) {
+        const sort = state.sort[kind] || {};
+        const active = sort.key === key;
+        const direction = active ? sort.direction : '';
+        const label = active
+            ? `Sorted ${direction === 'asc' ? 'ascending' : 'descending'}`
+            : 'Sortable column';
+        return `<span class="sort-icon ${active ? 'active' : ''}" data-direction="${direction}" aria-hidden="true"></span><span class="sr-only">${label}</span>`;
+    }
+
+    function sortableHeader(key, label, kind) {
+        const sort = state.sort[kind] || {};
+        const active = sort.key === key;
+        const direction = active ? sort.direction : '';
+        const ariaSort = active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none';
+        return `<th data-sort="${key}" aria-sort="${ariaSort}"><span class="sort-label">${label}</span>${sortIcon(key, kind)}</th>`;
+    }
+
+    function tableHeaders(kind = 'watchlist') {
         return `<tr>
-            <th data-sort="ticker">Ticker</th><th data-sort="margin">Adj Margin</th>
-            <th data-sort="grossMargin">Gross Margin</th><th data-sort="cy_growth">CY Growth</th>
-            <th data-sort="ny_growth">NY Growth</th><th data-sort="shortFloat">Short Float</th>
-            <th data-sort="ev_adj_ebit">EV/Adj Op Inc</th><th data-sort="ev_cy_ebit">EV/CY</th>
-            <th data-sort="ev_ny_ebit">EV/NY</th><th>Actions</th>
+            ${sortableHeader('ticker', 'Ticker', kind)}${sortableHeader('margin', 'Adj Margin', kind)}
+            ${sortableHeader('grossMargin', 'Gross Margin', kind)}${sortableHeader('cy_growth', 'CY Growth', kind)}
+            ${sortableHeader('ny_growth', 'NY Growth', kind)}${sortableHeader('shortFloat', 'Short Float', kind)}
+            ${sortableHeader('ev_adj_ebit', 'EV/Adj Op Inc', kind)}${sortableHeader('ev_cy_ebit', 'EV/CY', kind)}
+            ${sortableHeader('ev_ny_ebit', 'EV/NY', kind)}<th>Actions</th>
         </tr>`;
     }
 
@@ -437,7 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const list = kind === 'watchlist' ? state.watchlist : state.groups;
         const body = kind === 'watchlist' ? $('watchlist-body') : $('groups-body');
         const head = kind === 'watchlist' ? document.querySelector('#watchlist-table thead') : $('groups-head');
-        if (head) head.innerHTML = tableHeaders();
+        if (head) head.innerHTML = tableHeaders(kind);
         if (!list.length) {
             body.innerHTML = `<tr><td colspan="10">No tickers yet.</td></tr>`;
             return;
