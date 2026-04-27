@@ -5,7 +5,6 @@ import tempfile
 import threading
 import unittest
 from unittest import mock
-from urllib.error import HTTPError
 
 import server
 import datetime
@@ -28,14 +27,6 @@ class FakeResponse:
         if isinstance(self.payload, bytes):
             return self.payload
         return self.payload.encode("utf-8")
-
-
-class FakePageOpener:
-    def __init__(self, html):
-        self.html = html
-
-    def open(self, _url, timeout=10):
-        return FakeResponse(self.html)
 
 
 def make_handler():
@@ -239,534 +230,30 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
     def setUp(self):
         self.handler = make_handler()
 
-    def _run_fetch(self, *, finviz_ev_raw, finviz_market_cap_raw):
-        quote_summary_payload = make_quote_summary_payload()
-        timeseries_payload = make_timeseries_payload()
+    def test_delegates_to_yfinance_without_manual_fetches(self):
+        expected = tuple(f"value-{idx}" for idx, _field in enumerate(FETCH_RESULT_FIELDS))
 
-        def counted_open(_opener, url, timeout=3):
-            if "quoteSummary" in url:
-                return FakeResponse(json.dumps(quote_summary_payload))
-            if "fundamentals-timeseries" in url:
-                return FakeResponse(json.dumps(timeseries_payload))
-            raise AssertionError(f"Unexpected URL: {url}")
-
-        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
-             mock.patch("server.urllib.request.install_opener"), \
-             mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
-             mock.patch.object(self.handler, "get_usd_fx_rate", return_value=1.0), \
-             mock.patch.object(self.handler, "_counted_open", side_effect=counted_open), \
-             mock.patch.object(self.handler, "build_income_statement_from_page", return_value=fake_statement("Income")), \
-             mock.patch.object(self.handler, "build_balance_sheet_from_page", return_value=fake_balance_statement()), \
-             mock.patch.object(self.handler, "build_cash_flow_statement_from_page", return_value=fake_statement("Cash")):
-            return dict(zip(FETCH_RESULT_FIELDS, self.handler.fetch_yahoo_finance_data(
-                "ACME",
-                finviz_ev_raw=finviz_ev_raw,
-                finviz_market_cap_raw=finviz_market_cap_raw,
-            )))
-
-    def test_uses_enterprise_value_when_available(self):
-        result = self._run_fetch(finviz_ev_raw=240, finviz_market_cap_raw=180)
-
-        self.assertEqual(result["valuation_basis"], "derivedEV")
-        self.assertEqual(result["valuation_prefix"], "EV")
-        self.assertEqual(result["valuation_numerator_label"], "Derived Enterprise Value")
-        self.assertEqual(result["ev"], "210")
-        self.assertEqual(result["market_cap"], "180")
-        self.assertEqual(result["net_cash"], "-30")
-        self.assertEqual(result["derived_enterprise_value"], "210")
-        self.assertEqual(result["ev_adj_ebit"], "8.75")
-        self.assertEqual(result["ev_cy_ebit"], "7.29")
-        self.assertEqual(result["ev_ny_ebit"], "5.83")
-        self.assertEqual(result["year_ago_eps"], "10")
-        self.assertEqual(result["current_year_eps"], "12")
-        self.assertEqual(result["next_year_eps"], "15")
-        self.assertEqual(result["current_year_eps_growth"], "20%")
-        self.assertEqual(result["next_year_eps_growth"], "25%")
-        self.assertEqual(result["price_current_eps"], "1")
-        self.assertEqual(result["price_cy_eps"], "0.83")
-        self.assertEqual(result["price_ny_eps"], "0.67")
-        self.assertEqual(result["investment_capex"], "0")
-
-    def test_falls_back_to_market_cap_when_ev_missing(self):
-        result = self._run_fetch(finviz_ev_raw=None, finviz_market_cap_raw=150)
-
-        self.assertEqual(result["valuation_basis"], "derivedEV")
-        self.assertEqual(result["valuation_prefix"], "EV")
-        self.assertEqual(result["valuation_numerator_label"], "Derived Enterprise Value")
-        self.assertEqual(result["ev"], "180")
-        self.assertEqual(result["market_cap"], "150")
-        self.assertEqual(result["net_cash"], "-30")
-        self.assertEqual(result["derived_enterprise_value"], "180")
-        self.assertEqual(result["ev_adj_ebit"], "7.5")
-        self.assertEqual(result["ev_cy_ebit"], "6.25")
-        self.assertEqual(result["ev_ny_ebit"], "5")
-        self.assertEqual(result["price_current_eps"], "1")
-        self.assertEqual(result["price_cy_eps"], "0.83")
-        self.assertEqual(result["price_ny_eps"], "0.67")
-
-    def test_net_cash_prefers_combined_cash_bucket_without_double_counting(self):
-        quote_summary_payload = make_quote_summary_payload()
-        quote_summary_payload["quoteSummary"]["result"][0]["price"]["marketCap"] = {"raw": 180000000000}
-        timeseries_payload = make_timeseries_payload()
-
-        balance_statement = {
-            "periods": ["MRQ", "2025-12-31"],
-            "rows": [
-                {"label": "Cash & Cash Equivalents", "values": ["30.2B", "30.2B"]},
-                {"label": "Other Short Term Investments", "values": ["64.3B", "64.3B"]},
-                {"label": "Cash, Equivalents & Short Term Investments", "values": ["94.6B", "94.6B"]},
-                {"label": "Current Debt", "values": ["3B", "3B"]},
-                {"label": "Long Term Debt", "values": ["40.2B", "40.2B"]},
-            ],
-        }
-        balance_statement = {"annual": balance_statement, "quarterly": balance_statement}
-
-        def counted_open(_opener, url, timeout=3):
-            if "quoteSummary" in url:
-                return FakeResponse(json.dumps(quote_summary_payload))
-            if "fundamentals-timeseries" in url:
-                return FakeResponse(json.dumps(timeseries_payload))
-            raise AssertionError(f"Unexpected URL: {url}")
-
-        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
-             mock.patch("server.urllib.request.install_opener"), \
-             mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
-             mock.patch.object(self.handler, "get_usd_fx_rate", return_value=1.0), \
-             mock.patch.object(self.handler, "_counted_open", side_effect=counted_open), \
-             mock.patch.object(self.handler, "build_income_statement_from_page", return_value=fake_statement("Income")), \
-             mock.patch.object(self.handler, "build_balance_sheet_from_page", return_value=balance_statement), \
-             mock.patch.object(self.handler, "build_cash_flow_statement_from_page", return_value=fake_statement("Cash")):
-            result = dict(zip(FETCH_RESULT_FIELDS, self.handler.fetch_yahoo_finance_data(
-                "ACME",
-                finviz_ev_raw=240000000000,
-                finviz_market_cap_raw=180000000000,
-            )))
-
-        self.assertEqual(result["net_cash"], "51.4B")
-        self.assertEqual(result["derived_enterprise_value"], "129B")
-
-    def test_investment_capex_is_capex_less_depreciation_floored_at_zero(self):
-        result = self._run_fetch(finviz_ev_raw=240, finviz_market_cap_raw=180)
-        self.assertEqual(result["capex"], "4")
-        self.assertEqual(result["da"], "8")
-        self.assertEqual(result["investment_capex"], "0")
-        self.assertEqual(result["capex_adj_income"], "0%")
-
-    def test_restores_three_year_growth_and_rnd_spending_metrics(self):
-        quote_summary_payload = make_quote_summary_payload()
-        timeseries_payload = make_timeseries_payload()
-        income_statement = {
-            "periods": ["TTM", "2025-12-31", "2024-12-31", "2023-12-31", "2022-12-31"],
-            "rows": [
-                {"label": "Total Revenue", "values": ["100", "100", "90", "80", "70"]},
-                {"label": "Gross Profit", "values": ["56", "56", "48", "44", "40"]},
-                {"label": "Research & Development", "values": ["6", "6", "5", "4", "3"]},
-            ],
-        }
-        income_statement = {"annual": income_statement, "quarterly": income_statement}
-
-        def counted_open(_opener, url, timeout=3):
-            if "quoteSummary" in url:
-                return FakeResponse(json.dumps(quote_summary_payload))
-            if "fundamentals-timeseries" in url:
-                return FakeResponse(json.dumps(timeseries_payload))
-            raise AssertionError(f"Unexpected URL: {url}")
-
-        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
-             mock.patch("server.urllib.request.install_opener"), \
-             mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
-             mock.patch.object(self.handler, "get_usd_fx_rate", return_value=1.0), \
-             mock.patch.object(self.handler, "_counted_open", side_effect=counted_open), \
-             mock.patch.object(self.handler, "build_income_statement_from_page", return_value=income_statement), \
-             mock.patch.object(self.handler, "build_balance_sheet_from_page", return_value=fake_balance_statement()), \
-             mock.patch.object(self.handler, "build_cash_flow_statement_from_page", return_value=fake_statement("Cash")):
-            result = dict(zip(FETCH_RESULT_FIELDS, self.handler.fetch_yahoo_finance_data(
+        with mock.patch.object(server, "HAS_YFINANCE", True), \
+             mock.patch.object(self.handler, "fetch_yfinance_data", return_value=expected) as mock_yfinance:
+            result = self.handler.fetch_yahoo_finance_data(
                 "ACME",
                 finviz_ev_raw=240,
                 finviz_market_cap_raw=180,
-            )))
+                finviz_metrics={"eps_this_y": "99%"},
+            )
 
-        self.assertEqual(result["gp_3y_label"], "3Y Annual GP Growth")
-        self.assertEqual(result["gp_3y_start"], "40")
-        self.assertEqual(result["gp_3y_end"], "56")
-        self.assertEqual(result["gp_3y_growth"], "11.9%")
-        self.assertEqual(result["rnd_adj_income"], "25%")
-
-    def test_does_not_fill_forward_revenue_growth_from_annual_history_when_estimates_are_missing(self):
-        quote_summary_payload = make_quote_summary_payload()
-        quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"] = []
-        timeseries_payload = make_timeseries_payload()
-        income_statement = {
-            "periods": ["TTM", "2025-12-31", "2024-12-31", "2023-12-31"],
-            "rows": [
-                {"label": "Total Revenue", "values": ["100", "100", "90", "80"]},
-                {"label": "Operating Income", "values": ["20", "20", "18", "16"]},
-            ],
-        }
-
-        def counted_open(_opener, url, timeout=3):
-            if "quoteSummary" in url:
-                return FakeResponse(json.dumps(quote_summary_payload))
-            if "fundamentals-timeseries" in url:
-                return FakeResponse(json.dumps(timeseries_payload))
-            if "/analysis/" in url or "analyst-insights" in url or "stockanalysis.com" in url:
-                return FakeResponse("")
-            raise AssertionError(f"Unexpected URL: {url}")
-
-        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
-             mock.patch("server.urllib.request.install_opener"), \
-             mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
-             mock.patch.object(self.handler, "get_usd_fx_rate", return_value=1.0), \
-             mock.patch.object(self.handler, "_counted_open", side_effect=counted_open), \
-             mock.patch.object(self.handler, "build_income_statement_from_page", return_value=income_statement), \
-             mock.patch.object(self.handler, "build_balance_sheet_from_page", return_value=fake_balance_statement()), \
-             mock.patch.object(self.handler, "build_cash_flow_statement_from_page", return_value=fake_statement("Cash")):
-            result = dict(zip(FETCH_RESULT_FIELDS, self.handler.fetch_yahoo_finance_data(
-                "ACME",
-                finviz_ev_raw=240,
-                finviz_market_cap_raw=180,
-            )))
-
-        self.assertEqual(result["cy_growth"], "--")
-        self.assertEqual(result["ny_growth"], "--")
-        self.assertEqual(result["cy_revenue"], "--")
-        self.assertEqual(result["ny_revenue"], "--")
-        self.assertEqual(result["cy_adj_inc"], "--")
-        self.assertEqual(result["ny_adj_inc"], "--")
-        self.assertEqual(result["ev_cy_ebit"], "--")
-        self.assertEqual(result["ev_ny_ebit"], "--")
-
-    def test_uses_yahoo_revenue_growth_field_without_deriving_from_estimates(self):
-        quote_summary_payload = make_quote_summary_payload()
-        for trend in quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"]:
-            # These intentionally disagree with the implied estimate growth.
-            # Display Yahoo's reported growth field instead of deriving one.
-            trend["revenueEstimate"]["growth"] = {"raw": 0.99}
-        timeseries_payload = make_timeseries_payload()
-        income_statement = {
-            "periods": ["TTM", "2025-12-31", "2024-12-31", "2023-12-31"],
-            "rows": [
-                {"label": "Total Revenue", "values": ["100", "100", "90", "80"]},
-                {"label": "Operating Income", "values": ["20", "20", "18", "16"]},
-            ],
-        }
-
-        def counted_open(_opener, url, timeout=3):
-            if "quoteSummary" in url:
-                return FakeResponse(json.dumps(quote_summary_payload))
-            if "fundamentals-timeseries" in url:
-                return FakeResponse(json.dumps(timeseries_payload))
-            if "/analysis/" in url or "analyst-insights" in url or "stockanalysis.com" in url:
-                return FakeResponse("")
-            raise AssertionError(f"Unexpected URL: {url}")
-
-        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
-             mock.patch("server.urllib.request.install_opener"), \
-             mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
-             mock.patch.object(self.handler, "get_usd_fx_rate", return_value=1.0), \
-             mock.patch.object(self.handler, "_counted_open", side_effect=counted_open), \
-             mock.patch.object(self.handler, "build_income_statement_from_page", return_value=income_statement), \
-             mock.patch.object(self.handler, "build_balance_sheet_from_page", return_value=fake_balance_statement()), \
-             mock.patch.object(self.handler, "build_cash_flow_statement_from_page", return_value=fake_statement("Cash")):
-            result = dict(zip(FETCH_RESULT_FIELDS, self.handler.fetch_yahoo_finance_data(
-                "ACME",
-                finviz_ev_raw=240,
-                finviz_market_cap_raw=180,
-            )))
-
-        self.assertEqual(result["cy_growth"], "99%")
-        self.assertEqual(result["ny_growth"], "99%")
-        self.assertEqual(result["cy_revenue"], "120")
-        self.assertEqual(result["ny_revenue"], "150")
-
-    def test_uses_stockanalysis_forecast_revenue_without_filling_growth(self):
-        quote_summary_payload = make_quote_summary_payload()
-        quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"] = []
-        timeseries_payload = make_timeseries_payload()
-        income_statement = {
-            "periods": ["TTM", "2025-12-31", "2024-12-31", "2023-12-31"],
-            "rows": [
-                {"label": "Total Revenue", "values": ["100", "100", "90", "80"]},
-                {"label": "Operating Income", "values": ["20", "20", "18", "16"]},
-            ],
-        }
-        forecast_html = """
-        <script>
-        estimatesCharts:{eps:{},revenue:{"2026-12-31":{avg:130,low:120,high:140},"2027-12-31":{avg:150,low:140,high:160}},epsGrowth:{},revenueGrowth:{"2026-12-31":{avg:30,low:20,high:40},"2027-12-31":{avg:15.3846153846,low:10,high:20}}},recommendations:[]
-        </script>
-        """
-
-        def counted_open(_opener, url, timeout=3):
-            if "quoteSummary" in url:
-                return FakeResponse(json.dumps(quote_summary_payload))
-            if "fundamentals-timeseries" in url:
-                return FakeResponse(json.dumps(timeseries_payload))
-            if "stockanalysis.com" in url:
-                return FakeResponse(forecast_html)
-            if "/analysis/" in url or "analyst-insights" in url:
-                return FakeResponse("")
-            raise AssertionError(f"Unexpected URL: {url}")
-
-        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
-             mock.patch("server.urllib.request.install_opener"), \
-             mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
-             mock.patch.object(self.handler, "get_usd_fx_rate", return_value=1.0), \
-             mock.patch.object(self.handler, "_counted_open", side_effect=counted_open), \
-             mock.patch.object(self.handler, "build_income_statement_from_page", return_value=income_statement), \
-             mock.patch.object(self.handler, "build_balance_sheet_from_page", return_value=fake_balance_statement()), \
-             mock.patch.object(self.handler, "build_cash_flow_statement_from_page", return_value=fake_statement("Cash")):
-            result = dict(zip(FETCH_RESULT_FIELDS, self.handler.fetch_yahoo_finance_data(
-                "ACME",
-                finviz_ev_raw=240,
-                finviz_market_cap_raw=180,
-            )))
-
-        self.assertEqual(result["cy_growth"], "--")
-        self.assertEqual(result["ny_growth"], "--")
-        self.assertEqual(result["cy_revenue"], "130")
-        self.assertEqual(result["ny_revenue"], "150")
-
-    def test_prefers_yahoo_analysis_sales_growth_before_stockanalysis_forecast(self):
-        quote_summary_payload = make_quote_summary_payload()
-        quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"] = []
-        timeseries_payload = make_timeseries_payload()
-        income_statement = {
-            "periods": ["TTM", "2025-12-31", "2024-12-31", "2023-12-31"],
-            "rows": [
-                {"label": "Total Revenue", "values": ["281.72", "281.72", "245.12", "211.92"]},
-                {"label": "Operating Income", "values": ["128.53", "128.53", "109.43", "88.52"]},
-            ],
-        }
-        yahoo_trends = [
-            {
-                "period": "0y",
-                "revenueEstimate": {
-                    "avg": {"raw": 328.27},
-                    "growth": {"raw": 0.188},
-                    "yearAgoRevenue": {"raw": 281.72},
-                },
-                "earningsEstimate": {"avg": {"raw": 29.6}, "yearAgoEps": {"raw": 23.49}},
-            },
-            {
-                "period": "+1y",
-                "revenueEstimate": {
-                    "avg": {"raw": 379.1},
-                    "growth": {"raw": 0.157},
-                    "yearAgoRevenue": {"raw": 328.27},
-                },
-                "earningsEstimate": {"avg": {"raw": 34.38}, "growth": {"raw": 0.1615}},
-            },
-        ]
-        analysis_payload = {
-            "quoteSummary": {
-                "result": [
-                    {
-                        "earningsTrend": {
-                            "trend": yahoo_trends,
-                        },
-                    },
-                ],
-            },
-        }
-        analysis_html = (
-            '<script data-sveltekit-fetched>'
-            + json.dumps({"body": json.dumps(analysis_payload)})
-            + "</script>"
+        self.assertEqual(result, expected)
+        mock_yfinance.assert_called_once_with(
+            "ACME",
+            finviz_ev_raw=0,
+            finviz_market_cap_raw=0,
+            finviz_metrics={},
         )
-        stockanalysis_html = """
-        <script>
-        estimatesCharts:{eps:{},revenue:{"2026-12-31":{avg:335,low:320,high:350},"2027-12-31":{avg:387,low:360,high:400}},epsGrowth:{},revenueGrowth:{"2026-12-31":{avg:18.8,low:10,high:20},"2027-12-31":{avg:15.7,low:10,high:20}}},recommendations:[]
-        </script>
-        """
+        self.assertFalse(hasattr(self.handler, "_counted_open"))
 
-        def counted_open(_opener, url, timeout=3):
-            if "quoteSummary" in url:
-                return FakeResponse(json.dumps(quote_summary_payload))
-            if "fundamentals-timeseries" in url:
-                return FakeResponse(json.dumps(timeseries_payload))
-            if "/analysis/" in url:
-                return FakeResponse(analysis_html)
-            if "analyst-insights" in url:
-                return FakeResponse("")
-            if "stockanalysis.com" in url:
-                return FakeResponse(stockanalysis_html)
-            raise AssertionError(f"Unexpected URL: {url}")
-
-        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
-             mock.patch("server.urllib.request.install_opener"), \
-             mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
-             mock.patch.object(self.handler, "get_usd_fx_rate", return_value=1.0), \
-             mock.patch.object(self.handler, "_counted_open", side_effect=counted_open), \
-             mock.patch.object(self.handler, "build_income_statement_from_page", return_value=income_statement), \
-             mock.patch.object(self.handler, "build_balance_sheet_from_page", return_value=fake_balance_statement()), \
-             mock.patch.object(self.handler, "build_cash_flow_statement_from_page", return_value=fake_statement("Cash")):
-            result = dict(zip(FETCH_RESULT_FIELDS, self.handler.fetch_yahoo_finance_data(
-                "MSFT",
-                finviz_ev_raw=240,
-                finviz_market_cap_raw=180,
-            )))
-
-        self.assertEqual(result["cy_growth"], "18.8%")
-        self.assertEqual(result["ny_growth"], "15.7%")
-        self.assertEqual(result["cy_revenue"], "328")
-        self.assertEqual(result["ny_revenue"], "379")
-
-    def test_extracts_visible_yahoo_sales_growth_row_when_quote_summary_trends_are_missing(self):
-        analysis_html = """
-        <html><body>
-          <section>
-            <h2>Revenue Estimate</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>Currency in USD</th>
-                  <th>Current Qtr. (Mar 2026)</th>
-                  <th>Next Qtr. (Jun 2026)</th>
-                  <th>Current Year (2026)</th>
-                  <th>Next Year (2027)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td>Avg. Estimate</td><td>81.4B</td><td>87.62B</td><td>328.25B</td><td>379B</td></tr>
-                <tr><td>Sales Growth (year/est)</td><td>16.17%</td><td>14.63%</td><td>16.52%</td><td>15.46%</td></tr>
-              </tbody>
-            </table>
-          </section>
-        </body></html>
-        """
-
-        trends = self.handler._extract_yahoo_analysis_trends_from_html(analysis_html)
-
-        self.assertEqual(trends[0]["period"], "0y")
-        self.assertAlmostEqual(trends[0]["revenueEstimate"]["growth"]["raw"], 0.1652)
-        self.assertEqual(trends[1]["period"], "+1y")
-        self.assertAlmostEqual(trends[1]["revenueEstimate"]["growth"]["raw"], 0.1546)
-
-    def test_merges_visible_yahoo_sales_growth_when_svelte_trends_lack_growth(self):
-        body = {
-            "quoteSummary": {
-                "result": [{
-                    "earningsTrend": {
-                        "trend": [
-                            {"period": "0y", "revenueEstimate": {"avg": {"raw": 328250000000}}},
-                            {"period": "+1y", "revenueEstimate": {"avg": {"raw": 379000000000}}},
-                        ]
-                    }
-                }]
-            }
-        }
-        analysis_html = f"""
-        <html><body>
-          <script data-sveltekit-fetched>{json.dumps({"body": json.dumps(body)})}</script>
-          <table>
-            <tr><td>Sales Growth (year/est)</td><td>16.17%</td><td>14.63%</td><td>16.52%</td><td>15.46%</td></tr>
-          </table>
-        </body></html>
-        """
-
-        trends = self.handler._extract_yahoo_analysis_trends_from_html(analysis_html)
-        by_period = {trend["period"]: trend for trend in trends}
-
-        self.assertEqual(by_period["0y"]["revenueEstimate"]["avg"]["raw"], 328250000000)
-        self.assertAlmostEqual(by_period["0y"]["revenueEstimate"]["growth"]["raw"], 0.1652)
-        self.assertEqual(by_period["+1y"]["revenueEstimate"]["avg"]["raw"], 379000000000)
-        self.assertAlmostEqual(by_period["+1y"]["revenueEstimate"]["growth"]["raw"], 0.1546)
-
-    def test_falls_back_to_actual_annual_eps_when_year_ago_matches_current_year(self):
-        quote_summary_payload = make_quote_summary_payload()
-        quote_summary_payload["quoteSummary"]["result"][0]["earningsTrend"]["trend"][0]["earningsEstimate"] = {
-            "avg": {"raw": 12},
-            "yearAgoEps": {"raw": 12},
-        }
-        timeseries_payload = make_timeseries_payload()
-
-        def counted_open(_opener, url, timeout=3):
-            if "quoteSummary" in url:
-                return FakeResponse(json.dumps(quote_summary_payload))
-            if "fundamentals-timeseries" in url:
-                return FakeResponse(json.dumps(timeseries_payload))
-            raise AssertionError(f"Unexpected URL: {url}")
-
-        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
-             mock.patch("server.urllib.request.install_opener"), \
-             mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
-             mock.patch.object(self.handler, "get_usd_fx_rate", return_value=1.0), \
-             mock.patch.object(self.handler, "_counted_open", side_effect=counted_open), \
-             mock.patch.object(self.handler, "build_income_statement_from_page", return_value=fake_income_statement_with_eps("12", "10")), \
-             mock.patch.object(self.handler, "build_balance_sheet_from_page", return_value=fake_statement("Balance")), \
-             mock.patch.object(self.handler, "build_cash_flow_statement_from_page", return_value=fake_statement("Cash")):
-            result = dict(zip(FETCH_RESULT_FIELDS, self.handler.fetch_yahoo_finance_data(
-                "ACME",
-                finviz_ev_raw=240,
-                finviz_market_cap_raw=180,
-            )))
-
-        self.assertEqual(result["year_ago_eps"], "10")
-        self.assertEqual(result["price_current_eps"], "1")
-
-    def test_converts_adr_eps_estimates_into_quote_currency_for_pe(self):
-        quote_summary_payload = make_quote_summary_payload()
-        result_payload = quote_summary_payload["quoteSummary"]["result"][0]
-        result_payload["financialData"]["financialCurrency"] = "CNY"
-        result_payload["financialData"]["currentPrice"] = {"raw": 100}
-        result_payload["price"]["currency"] = "USD"
-        result_payload["price"]["regularMarketPrice"] = {"raw": 100}
-        result_payload["earningsTrend"]["trend"][0]["earningsEstimate"] = {
-            "avg": {"raw": 500, "fmt": "50.00"},
-            "growth": {"raw": 0.25},
-            "yearAgoEps": {"raw": 400, "fmt": "40.00"},
-        }
-        result_payload["earningsTrend"]["trend"][1]["earningsEstimate"] = {
-            "avg": {"raw": 800, "fmt": "80.00"},
-            "growth": {"raw": 0.6},
-        }
-        timeseries_payload = make_timeseries_payload()
-
-        def counted_open(_opener, url, timeout=3):
-            if "quoteSummary" in url:
-                return FakeResponse(json.dumps(quote_summary_payload))
-            if "fundamentals-timeseries" in url:
-                return FakeResponse(json.dumps(timeseries_payload))
-            raise AssertionError(f"Unexpected URL: {url}")
-
-        def fake_fx_rate(currency, opener=None):
-            return 0.1 if currency == "CNY" else 1.0
-
-        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
-             mock.patch("server.urllib.request.install_opener"), \
-             mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
-             mock.patch.object(self.handler, "get_usd_fx_rate", side_effect=fake_fx_rate), \
-             mock.patch.object(self.handler, "_counted_open", side_effect=counted_open), \
-             mock.patch.object(self.handler, "build_income_statement_from_page", return_value=fake_statement("Income")), \
-             mock.patch.object(self.handler, "build_balance_sheet_from_page", return_value=fake_balance_statement()), \
-             mock.patch.object(self.handler, "build_cash_flow_statement_from_page", return_value=fake_statement("Cash")):
-            result = dict(zip(FETCH_RESULT_FIELDS, self.handler.fetch_yahoo_finance_data(
-                "BABA",
-                finviz_ev_raw=240,
-                finviz_market_cap_raw=180,
-            )))
-
-        self.assertEqual(result["financial_currency"], "CNY")
-        self.assertEqual(result["year_ago_eps"], "4")
-        self.assertEqual(result["current_year_eps"], "5")
-        self.assertEqual(result["next_year_eps"], "8")
-        self.assertEqual(result["price_current_eps"], "25")
-        self.assertEqual(result["price_cy_eps"], "20")
-        self.assertEqual(result["price_ny_eps"], "12.5")
-
-    def test_exception_fallback_keeps_full_tuple_shape(self):
-        err = HTTPError(
-            url="https://query1.finance.yahoo.com",
-            code=401,
-            msg="Unauthorized",
-            hdrs=None,
-            fp=None,
-        )
-
-        with mock.patch("server.urllib.request.build_opener", return_value=DummyOpener()), \
-             mock.patch("server.urllib.request.install_opener"), \
-             mock.patch.object(self.handler, "get_yahoo_crumb", side_effect=["crumb-a", "crumb-b"]), \
-             mock.patch.object(self.handler, "_counted_open", side_effect=err), \
+    def test_yfinance_failure_keeps_full_tuple_shape(self):
+        with mock.patch.object(server, "HAS_YFINANCE", True), \
+             mock.patch.object(self.handler, "fetch_yfinance_data", side_effect=RuntimeError("boom")), \
              mock.patch("builtins.print"):
             result = self.handler.fetch_yahoo_finance_data("FAIL", 0, 0)
 
@@ -776,36 +263,16 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(mapped["valuation_prefix"], "EV")
         self.assertEqual(mapped["company_name"], "FAIL")
 
-    def test_adaptive_growth_label_for_short_history(self):
-        # Mock only 2 years of revenue data in the manual scraper format
-        income_statement = {
-            "annual": {
-                "periods": ["2024-12-31", "2023-12-31"],
-                "rows": [
-                    {"label": "Total Revenue", "values": ["121", "100"]}
-                ]
-            }
-        }
-        
-        # We need to mock the dependencies for the manual scraper path
-        with mock.patch.object(self.handler, "get_yahoo_crumb", return_value="crumb"), \
-             mock.patch.object(self.handler, "_counted_open"), \
-             mock.patch.object(self.handler, "build_income_statement_from_timeseries_results", return_value=income_statement), \
-             mock.patch.object(self.handler, "build_balance_sheet_from_timeseries_results", return_value=fake_balance_statement()), \
-             mock.patch.object(self.handler, "build_cash_flow_statement_from_timeseries_results", return_value=fake_statement("Cash")):
-            
-            # Ensure the scraper thinks it's a successful fetch
-            with mock.patch("server.json.loads") as mock_json:
-                mock_json.return_value = {"quoteSummary": {"result": [{"price": {"longName": "GROW", "regularMarketPrice": {"raw": 10}, "marketCap": {"raw": 1000}, "currency": "USD"}}]}}
-                
-                result = self.handler.fetch_yahoo_finance_data("GROW")
-                mapped = dict(zip(FETCH_RESULT_FIELDS, result))
-                
-                # Calculation: (121 / 100) ^ (1/1) - 1 = 21%
-                self.assertEqual(mapped["gp_3y_growth"], "21%")
-                # Label should update to "1Y Annual Sales Growth"
-                self.assertEqual(mapped["gp_3y_label"], "1Y Annual Sales Growth")
+    def test_missing_yfinance_keeps_full_tuple_shape(self):
+        with mock.patch.object(server, "HAS_YFINANCE", False), \
+             mock.patch("builtins.print"):
+            result = self.handler.fetch_yahoo_finance_data("FAIL", 0, 0)
 
+        self.assertEqual(len(result), len(FETCH_RESULT_FIELDS))
+        mapped = dict(zip(FETCH_RESULT_FIELDS, result))
+        self.assertEqual(mapped["valuation_basis"], "unavailable")
+        self.assertEqual(mapped["valuation_prefix"], "EV")
+        self.assertEqual(mapped["company_name"], "FAIL")
 
 class HandleApiRequestContractTests(unittest.TestCase):
     def test_test_ticker_returns_complete_fixture_without_external_fetches(self):
@@ -816,8 +283,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
             captured["status"] = status
             captured["payload"] = payload
 
-        with mock.patch.object(handler, "fetch_finviz_snapshot_metrics") as mock_finviz, \
-             mock.patch.object(handler, "fetch_yahoo_finance_data") as mock_yahoo, \
+        with mock.patch.object(handler, "fetch_yahoo_finance_data") as mock_yahoo, \
              mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
             handler.handle_api_request("TEST", refresh=True)
 
@@ -846,7 +312,6 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["incomeStatement"]["annual"]["rows"][0]["label"], "Total Revenue")
         self.assertEqual(payload["balanceStatement"]["annual"]["rows"][2]["label"], "Cash, Equivalents & Short Term Investments")
         self.assertEqual(payload["cashFlowStatement"]["annual"]["rows"][1]["label"], "Capital Expenditures")
-        mock_finviz.assert_not_called()
         mock_yahoo.assert_not_called()
 
     def test_refresh_failure_preserves_existing_cached_payload(self):
@@ -880,11 +345,6 @@ class HandleApiRequestContractTests(unittest.TestCase):
 
         with mock.patch("server.load_cache", return_value={"MSFT": cached_entry}), \
              mock.patch("server.save_cache") as mock_save, \
-             mock.patch.object(handler, "fetch_finviz_snapshot_metrics", return_value={
-                 "short_float": "--",
-                 "market_cap": "--",
-                 "enterprise_value": "--",
-             }), \
              mock.patch.object(handler, "fetch_yahoo_finance_data", return_value=handler._empty_fetch_tuple("MSFT")), \
              mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
             handler.handle_api_request("MSFT", refresh=True)
@@ -971,7 +431,6 @@ class HandleApiRequestContractTests(unittest.TestCase):
                 "data": cached_payload,
             }
         }), \
-             mock.patch.object(handler, "fetch_finviz_snapshot_metrics") as mock_finviz, \
              mock.patch.object(handler, "fetch_yahoo_finance_data") as mock_yahoo, \
              mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
             handler.handle_api_request("META", refresh=False)
@@ -979,7 +438,6 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(captured["status"], 200)
         self.assertEqual(captured["payload"]["ticker"], "META")
         self.assertEqual(captured["payload"]["fetchCount"], 0)
-        mock_finviz.assert_not_called()
         mock_yahoo.assert_not_called()
 
     def test_same_day_cache_with_missing_ttm_anchor_is_refetched(self):
@@ -1088,28 +546,13 @@ class HandleApiRequestContractTests(unittest.TestCase):
             }
         }), \
              mock.patch("server.save_cache"), \
-             mock.patch.object(handler, "fetch_finviz_snapshot_metrics", return_value={
-                 "short_float": "1.11%",
-                 "market_cap": "2.86T",
-                 "enterprise_value": "2.89T",
-             }) as mock_finviz, \
              mock.patch.object(handler, "fetch_yahoo_finance_data", return_value=fetch_payload) as mock_yahoo, \
              mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
             handler.handle_api_request("MSFT", refresh=False)
 
         self.assertEqual(captured["status"], 200)
         self.assertEqual(captured["payload"]["incomeStatement"]["annual"]["rows"][0]["values"][0], "305B")
-        mock_finviz.assert_not_called()
         mock_yahoo.assert_called_once()
-
-    def test_payload_exposes_net_cash_and_derived_enterprise_value(self):
-        helper = FetchYahooFinanceDataTests()
-        helper.setUp()
-        result = helper._run_fetch(finviz_ev_raw=240, finviz_market_cap_raw=180)
-
-        self.assertEqual(result["market_cap"], "180")
-        self.assertEqual(result["net_cash"], "-30")
-        self.assertEqual(result["derived_enterprise_value"], "210")
 
     def test_payload_exposes_valuation_metadata(self):
         handler = make_handler()
@@ -1131,11 +574,6 @@ class HandleApiRequestContractTests(unittest.TestCase):
 
         with mock.patch("server.load_cache", return_value={}), \
              mock.patch("server.save_cache"), \
-             mock.patch.object(handler, "fetch_finviz_snapshot_metrics", return_value={
-                 "short_float": "1.11%",
-                 "market_cap": "1.45T",
-                 "enterprise_value": "1.46T",
-             }), \
              mock.patch.object(handler, "fetch_yahoo_finance_data", return_value=fetch_payload), \
              mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
             handler.handle_api_request("META", refresh=True)
@@ -1156,7 +594,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["nextYearEpsGrowth"], "16.1%")
         self.assertEqual(payload["priceCyEps"], "19.4")
 
-    def test_finviz_404_still_returns_yahoo_payload(self):
+    def test_unavailable_ev_still_returns_yfinance_payload(self):
         handler = make_handler()
         captured = {}
 
@@ -1176,9 +614,6 @@ class HandleApiRequestContractTests(unittest.TestCase):
 
         with mock.patch("server.load_cache", return_value={}), \
              mock.patch("server.save_cache"), \
-             mock.patch.object(handler, "fetch_finviz_snapshot_metrics", side_effect=HTTPError(
-                 "https://finviz.com/quote.ashx?t=META&p=d", 404, "Not Found", hdrs=None, fp=None
-             )), \
              mock.patch.object(handler, "fetch_yahoo_finance_data", return_value=fetch_payload), \
              mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
             handler.handle_api_request("META", refresh=True)
@@ -1267,73 +702,6 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(merged["periods"], ["TTM", "2025-06-30", "2024-06-30", "2023-06-30", "2022-06-30"])
         self.assertEqual(revenue_row["values"], ["305B", "282B", "245B", "212B", "198B"])
         self.assertEqual(income_row["values"], ["143B", "129B", "109B", "88.5B", "83.4B"])
-
-    def test_income_statement_page_merges_quarterly_results_from_separate_scripts(self):
-        annual_body = {
-            "timeseries": {
-                "result": [
-                    {
-                        "meta": {"type": ["annualTotalRevenue"]},
-                        "annualTotalRevenue": [
-                            {"asOfDate": "2025-06-30", "reportedValue": {"raw": 282000000000}},
-                            {"asOfDate": "2024-06-30", "reportedValue": {"raw": 245000000000}},
-                        ],
-                    },
-                    {
-                        "meta": {"type": ["annualOperatingIncome"]},
-                        "annualOperatingIncome": [
-                            {"asOfDate": "2025-06-30", "reportedValue": {"raw": 129000000000}},
-                            {"asOfDate": "2024-06-30", "reportedValue": {"raw": 109000000000}},
-                        ],
-                    },
-                ]
-            }
-        }
-        quarterly_body = {
-            "timeseries": {
-                "result": [
-                    {
-                        "meta": {"type": ["quarterlyOperatingIncome"]},
-                        "quarterlyOperatingIncome": [
-                            {"asOfDate": "2026-03-31", "reportedValue": {"raw": 36000000000}},
-                            {"asOfDate": "2025-12-31", "reportedValue": {"raw": 34000000000}},
-                            {"asOfDate": "2025-09-30", "reportedValue": {"raw": 36000000000}},
-                            {"asOfDate": "2025-06-30", "reportedValue": {"raw": 36559000000}},
-                        ],
-                    }
-                ]
-            }
-        }
-
-        def script_tag(data_url, body):
-            outer = {"body": json.dumps(body)}
-            return (
-                f'<script type="application/json" data-sveltekit-fetched '
-                f'data-url="{data_url}">{json.dumps(outer)}</script>'
-            )
-
-        html = "".join([
-            script_tag(
-                "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/MSFT?type=annualTotalRevenue,annualOperatingIncome",
-                annual_body,
-            ),
-            script_tag(
-                "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/MSFT?type=quarterlyOperatingIncome",
-                quarterly_body,
-            ),
-        ])
-
-        statement = self.handler.build_income_statement_from_page(
-            "MSFT",
-            FakePageOpener(html),
-            lambda value: value,
-            lambda value: str(int(value)),
-        )
-
-        self.assertEqual(statement["annual"]["periods"][0], "TTM")
-        operating_income_row = next(row for row in statement["annual"]["rows"] if row["label"] == "Operating Income")
-        self.assertEqual(operating_income_row["values"][0], "142559000000")
-        self.assertEqual(operating_income_row["values"][1], "129000000000")
 
     def test_income_statement_ttm_falls_back_to_annual_when_quarters_are_partial(self):
         selected_results = [

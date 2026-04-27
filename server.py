@@ -1,17 +1,12 @@
 import http.server
 import socketserver
-import urllib.request
 import re
 import json
 import os
 import sqlite3
 import datetime
 import time
-import io
-import subprocess
-import html as html_lib
 from urllib.parse import urlparse, parse_qs
-from urllib.error import URLError, HTTPError
 
 try:
     import yfinance as yf
@@ -659,88 +654,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             super().do_GET()
 
-    def _counted_open(self, opener, url, timeout=3):
-        if not hasattr(self, "_fetch_count_lock"):
-            self._fetch_count_lock = None
-        if not hasattr(self, "_request_fetch_count"):
-            self._request_fetch_count = 0
-        if self._fetch_count_lock:
-            with self._fetch_count_lock:
-                self._request_fetch_count += 1
-        else:
-            self._request_fetch_count += 1
-        if isinstance(url, str) and (
-            url.startswith("https://query1.finance.yahoo.com/")
-            or url.startswith("https://finance.yahoo.com/")
-            or url.startswith("https://stockanalysis.com/")
-        ):
-            try:
-                result = subprocess.run(
-                    [
-                        "curl",
-                        "-fsSL",
-                        "--compressed",
-                        "--max-time",
-                        str(timeout),
-                        "-A",
-                        YAHOO_USER_AGENT,
-                        "-H",
-                        "Accept: application/json,text/plain,*/*",
-                        "-H",
-                        "Accept-Language: en-US,en;q=0.9",
-                        url,
-                    ],
-                    check=True,
-                    capture_output=True,
-                )
-                return io.BytesIO(result.stdout)
-            except subprocess.CalledProcessError as exc:
-                raise URLError(exc.stderr.decode("utf-8", errors="ignore") or str(exc))
-        if opener is not None and hasattr(opener, "open"):
-            return opener.open(url, timeout=timeout)
-        return urllib.request.urlopen(url, timeout=timeout)
-
-    def _make_yahoo_opener(self):
-        from http.cookiejar import CookieJar
-        cj = CookieJar()
-        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
-        opener.addheaders = [
-            ("User-Agent", YAHOO_USER_AGENT),
-            ("Accept", "application/json,text/plain,*/*"),
-            ("Accept-Language", "en-US,en;q=0.9"),
-            ("Connection", "close"),
-        ]
-        return opener
-
-    def get_yahoo_crumb(self, opener=None):
-        cached = getattr(Handler, "_yahoo_crumb_cache", None)
-        cached_at = getattr(Handler, "_yahoo_crumb_cache_at", 0) or 0
-        if cached and time.time() - cached_at < 60 * 60:
-            return cached
-        response = self._counted_open(opener, "https://query1.finance.yahoo.com/v1/test/getcrumb", timeout=3)
-        crumb = response.read().decode("utf-8", errors="ignore").strip()
-        if crumb:
-            Handler._yahoo_crumb_cache = crumb
-            Handler._yahoo_crumb_cache_at = time.time()
-        return crumb
-
-    def get_usd_fx_rate(self, currency, opener=None):
-        currency = (currency or "USD").upper()
-        if currency == "USD":
-            return 1.0
-        try:
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{currency}USD=X?range=1d&interval=1d"
-            body = json.loads(self._counted_open(opener, url, timeout=3).read().decode("utf-8"))
-            result = body.get("chart", {}).get("result", []) or []
-            quote = result[0].get("indicators", {}).get("quote", [{}])[0] if result else {}
-            close = quote.get("close", []) or []
-            for value in reversed(close):
-                if value:
-                    return float(value)
-        except Exception:
-            pass
-        return 1.0
-
     def _infer_currency_from_ticker(self, ticker, current_currency):
         """Fallback to infer currency from ticker suffix if API returns USD or missing."""
         if not ticker or not isinstance(ticker, str):
@@ -849,45 +762,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         })
         return tuple(values[key] for key in FETCH_RESULT_FIELDS)
 
-    def fetch_yahoo_key_statistics_ev_and_market_cap(self, ticker):
-        """
-        Pull EV + Market Cap from the public Yahoo Finance Key Statistics page HTML.
-        This matches the "Valuation Measures" table the user sees in the browser.
-        """
-        url = f"https://finance.yahoo.com/quote/{ticker}/key-statistics?p={ticker}"
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-                "Accept-Language": "en-US,en;q=0.9",
-            },
-        )
-        html = urllib.request.urlopen(req, timeout=6).read().decode("utf-8", errors="ignore")
-
-        # Yahoo pages embed a large JSON blob as: root.App.main = {...};
-        m = re.search(r"root\.App\.main\s*=\s*({.*?})\s*;\s*\n", html, re.DOTALL)
-        if not m:
-            raise ValueError("Could not find root.App.main JSON in Yahoo page")
-
-        data = json.loads(m.group(1))
-        stores = (
-            data.get("context", {})
-            .get("dispatcher", {})
-            .get("stores", {})
-            .get("QuoteSummaryStore", {})
-        )
-        dks = stores.get("defaultKeyStatistics", {}) or {}
-        price = stores.get("price", {}) or {}
-
-        ev_raw = (dks.get("enterpriseValue", {}) or {}).get("raw", 0) or 0
-        market_cap_raw = (
-            (dks.get("marketCap", {}) or {}).get("raw", 0)
-            or (price.get("marketCap", {}) or {}).get("raw", 0)
-            or 0
-        )
-
-        return float(ev_raw or 0), float(market_cap_raw or 0)
-
     def _parse_finviz_abbrev_to_raw(self, value):
         if not value or value == "--":
             return 0.0
@@ -909,26 +783,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return float(s) * mult
         except Exception:
             return 0.0
-
-    def _extract_finviz_metric(self, html, label):
-        pattern = rf'{re.escape(label)}.*?</td>.*?<td[^>]*>.*?<b[^>]*>\s*(.+?)\s*</b>'
-        m = re.search(pattern, html, re.IGNORECASE | re.DOTALL)
-        if not m:
-            return "--"
-        val = re.sub(r'<[^>]+>', '', m.group(1)).strip()
-        return val or "--"
-
-    def fetch_finviz_snapshot_metrics(self, ticker):
-        url = f"https://finviz.com/quote.ashx?t={ticker}&p=d"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-        html = urllib.request.urlopen(req, timeout=6).read().decode('utf-8', errors='ignore')
-        return {
-            "short_float": self._extract_finviz_metric(html, "Short Float"),
-            "market_cap": self._extract_finviz_metric(html, "Market Cap"),
-            "enterprise_value": self._extract_finviz_metric(html, "Enterprise Value"),
-            "eps_this_y": self._extract_finviz_metric(html, "EPS this Y"),
-            "eps_next_y": self._extract_finviz_metric(html, "EPS next Y"),
-        }
 
     def _unwrap_annual(self, statement):
         """Get the annual sub-object from a nested statement, or the statement itself if flat."""
@@ -1127,281 +981,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def build_cash_flow_statement_from_timeseries_results(self, selected_results, formatter=None):
         return self.build_statement_from_timeseries_results(selected_results, CASH_FLOW_STATEMENT_TYPES, formatter or self._format_money)
-
-    def _extract_timeseries_results_from_page(self, ticker, page_opener):
-        cache_key = ((ticker or "").upper(), id(page_opener))
-        page_cache = getattr(self, "_yahoo_statement_page_cache", None)
-        if page_cache is None:
-            page_cache = {}
-            self._yahoo_statement_page_cache = page_cache
-        if cache_key in page_cache:
-            return page_cache[cache_key]
-        url = f"https://finance.yahoo.com/quote/{ticker}/financials/"
-        html = page_opener.open(url, timeout=10).read().decode("utf-8", errors="ignore")
-        results = []
-        # Look for both data-sveltekit-fetched and __sveltekit_data script tags
-        for match in re.finditer(r'<script[^>]*?(?:data-sveltekit-fetched|__sveltekit_data)[^>]*?>(.*?)</script>', html, re.DOTALL | re.IGNORECASE):
-            try:
-                content = match.group(1).strip()
-                if not content:
-                    continue
-                outer = json.loads(content)
-                body = outer.get("body", "{}")
-                if isinstance(body, str):
-                    body = json.loads(body)
-                results.extend(body.get("timeseries", {}).get("result", []) or [])
-            except Exception:
-                continue
-        page_cache[cache_key] = results
-        return results
-
-    def build_income_statement_from_page(self, ticker, page_opener=None, _identity_formatter=None, formatter=None):
-        page_opener = page_opener or urllib.request.build_opener()
-        return self.build_income_statement_from_timeseries_results(
-            self._extract_timeseries_results_from_page(ticker, page_opener),
-            _identity_formatter,
-            formatter or self._format_money,
-        )
-
-    def build_balance_sheet_from_page(self, ticker, page_opener=None, formatter=None):
-        page_opener = page_opener or urllib.request.build_opener()
-        return self.build_balance_sheet_from_timeseries_results(
-            self._extract_timeseries_results_from_page(ticker, page_opener),
-            formatter or self._format_money,
-        )
-
-    def build_cash_flow_statement_from_page(self, ticker, page_opener=None, formatter=None):
-        page_opener = page_opener or urllib.request.build_opener()
-        return self.build_cash_flow_statement_from_timeseries_results(
-            self._extract_timeseries_results_from_page(ticker, page_opener),
-            formatter or self._format_money,
-        )
-
-    def _stockanalysis_array(self, body):
-        body = body.replace("void 0", "null")
-        try:
-            return json.loads(f"[{body}]")
-        except Exception:
-            return []
-
-    def _stockanalysis_estimate_points(self, html, metric_key, percent=False):
-        charts_match = re.search(r"estimatesCharts:\{(.*?)\},recommendations:", html, re.DOTALL)
-        if not charts_match:
-            return []
-        charts = charts_match.group(1)
-        if metric_key == "revenueGrowth":
-            section_match = re.search(r"revenueGrowth:\{(.*?)\}\s*$", charts, re.DOTALL)
-        else:
-            section_match = re.search(rf"{re.escape(metric_key)}:\{{(.*?)\}},[A-Za-z]+:", charts, re.DOTALL)
-        if not section_match:
-            return []
-
-        points = []
-        for date, raw_value in re.findall(
-            r'"(\d{4}-\d{2}-\d{2})":\{[^{}]*?avg:([-+]?\d+(?:\.\d+)?)',
-            section_match.group(1),
-        ):
-            try:
-                value = float(raw_value)
-            except Exception:
-                continue
-            points.append((date, value / 100 if percent else value))
-        return sorted(points, key=lambda point: point[0])
-
-    def _extract_yahoo_analysis_trends_from_html(self, html):
-        json_trends = []
-        for match in re.finditer(r'<script[^>]*?(?:data-sveltekit-fetched|__sveltekit_data)[^>]*?>(.*?)</script>', html, re.DOTALL | re.IGNORECASE):
-            try:
-                body = json.loads(match.group(1)).get("body", "{}")
-                if isinstance(body, str):
-                    body = json.loads(body)
-                trends = (
-                    body.get("quoteSummary", {})
-                    .get("result", [{}])[0]
-                    .get("earningsTrend", {})
-                    .get("trend", [])
-                )
-                if trends and not json_trends:
-                    json_trends = trends
-            except Exception:
-                continue
-
-        table_trends = self._extract_yahoo_sales_growth_from_analysis_text(html)
-        if table_trends:
-            if not json_trends:
-                return table_trends
-
-            by_period = {}
-            order = []
-            for trend in json_trends:
-                period = trend.get("period")
-                if not period:
-                    continue
-                by_period[period] = dict(trend)
-                order.append(period)
-
-            for table_trend in table_trends:
-                t_period = str(table_trend.get("period", "")).lower()
-                # Find matching JSON trend (flexible period match)
-                match_period = None
-                if "0y" in t_period or "curr" in t_period:
-                    match_period = next((p for p in by_period if "0y" in p.lower() or "curr" in p.lower()), None)
-                elif "1y" in t_period or "next" in t_period:
-                    match_period = next((p for p in by_period if "1y" in p.lower() or "next" in p.lower()), None)
-                
-                merged = dict(by_period.get(match_period or t_period, {"period": t_period}))
-                revenue_estimate = dict(merged.get("revenueEstimate", {}) or {})
-                table_revenue_estimate = table_trend.get("revenueEstimate", {}) or {}
-                
-                if "growth" in table_revenue_estimate and ("growth" not in revenue_estimate or not revenue_estimate["growth"]):
-                    revenue_estimate["growth"] = table_revenue_estimate["growth"]
-                if "avg" in table_revenue_estimate and ("avg" not in revenue_estimate or not revenue_estimate["avg"]):
-                    revenue_estimate["avg"] = table_revenue_estimate["avg"]
-                
-                merged["revenueEstimate"] = revenue_estimate
-                if (match_period or t_period) not in by_period:
-                    order.append(t_period)
-                by_period[match_period or t_period] = merged
-
-            return [by_period[period] for period in order if period in by_period]
-        if json_trends:
-            return json_trends
-        return []
-
-    def _extract_yahoo_sales_growth_from_analysis_text(self, html):
-        text_sources = [html]
-        for match in re.finditer(r'<script[^>]*data-sveltekit-fetched[^>]*>(.*?)</script>', html, re.DOTALL):
-            try:
-                body = json.loads(match.group(1)).get("body", "")
-                if isinstance(body, str):
-                    text_sources.append(body)
-            except Exception:
-                continue
-
-        for source in text_sources:
-            text = html_lib.unescape(str(source))
-            text = re.sub(r"&nbsp;", " ", text, flags=re.IGNORECASE)
-            text = re.sub(r"<[^>]+>", " ", text)
-            text = re.sub(r"\\u0025", "%", text)
-            text = re.sub(r"\\u002F", "/", text)
-            text = re.sub(r"\\+", " ", text)
-            text = re.sub(r"\s+", " ", text).strip()
-
-            # Flexible label matching for "Sales Growth (year/est)"
-            label_match = re.search(r"Sales\s+Growth.*year.*/.*est", text, re.IGNORECASE)
-            if not label_match:
-                continue
-
-            segment = text[label_match.end():label_match.end() + 320]
-            percent_values = re.findall(r"[+\-\u2212]?\d+(?:\.\d+)?\s*%", segment)
-            if len(percent_values) >= 4:
-                cy_growth, ny_growth = percent_values[2], percent_values[3]
-            elif len(percent_values) >= 2:
-                cy_growth, ny_growth = percent_values[-2], percent_values[-1]
-            else:
-                continue
-
-            def to_raw(value):
-                value = value.replace("\u2212", "-").replace("%", "").strip()
-                return float(value) / 100
-
-            try:
-                return [
-                    {"period": "0y", "revenueEstimate": {"growth": {"raw": to_raw(cy_growth)}}},
-                    {"period": "+1y", "revenueEstimate": {"growth": {"raw": to_raw(ny_growth)}}},
-                ]
-            except Exception:
-                continue
-        return []
-
-    def _fetch_yahoo_analysis_trends(self, ticker):
-        opener = self._make_yahoo_opener()
-        for page in ("analysis", "analyst-insights"):
-            try:
-                url = f"https://finance.yahoo.com/quote/{ticker}/{page}/"
-                html = self._counted_open(opener, url, timeout=8).read().decode("utf-8", errors="ignore")
-                trends = self._extract_yahoo_analysis_trends_from_html(html)
-                if trends:
-                    return trends
-            except Exception as e:
-                print(f"Yahoo analysis page warning ({page}):", e)
-        return []
-
-    def _normalize_stockanalysis_label(self, label):
-        replacements = {
-            "Revenue": "Total Revenue",
-            "Selling, General & Admin": "Selling, General & Administrative",
-            "Provision for Income Taxes": "Tax Provision",
-            "Shares Outstanding (Diluted)": "Diluted Average Shares",
-            "Shares Outstanding (Basic)": "Basic Average Shares",
-            "EPS (Diluted)": "Diluted EPS",
-            "EPS (Basic)": "Basic EPS",
-            "Cash & Equivalents": "Cash & Cash Equivalents",
-            "Cash & Short-Term Investments": "Cash, Equivalents & Short Term Investments",
-            "Short-Term Investments": "Other Short Term Investments",
-            "Net Property, Plant & Equipment": "Net PP&E",
-            "Short-Term Debt": "Current Debt",
-            "Long-Term Debt": "Long Term Debt",
-            "Shareholders' Equity": "Stockholders Equity",
-            "Depreciation & Amortization": "Depreciation And Amortization",
-        }
-        return replacements.get(label, label)
-
-    def _format_stockanalysis_value(self, value, fmt):
-        if value is None:
-            return "--"
-        if fmt in ("percentage", "growth", "inverted-growth"):
-            try:
-                return self._format_percent(float(value))
-            except Exception:
-                return "--"
-        if fmt in ("pershare", "divpershare", "reduce_precision"):
-            return self._format_3sig(value)
-        return self._format_money(value)
-
-    def build_statement_from_stockanalysis_page(self, ticker, statement_kind):
-        paths = {
-            "income": f"https://stockanalysis.com/stocks/{ticker.lower()}/financials/",
-            "balance": f"https://stockanalysis.com/stocks/{ticker.lower()}/financials/balance-sheet/",
-            "cash": f"https://stockanalysis.com/stocks/{ticker.lower()}/financials/cash-flow-statement/",
-        }
-        url = paths.get(statement_kind)
-        if not url:
-            return {"annual": {"periods": [], "rows": []}, "quarterly": {"periods": [], "rows": []}}
-        html = self._counted_open(None, url, timeout=8).read().decode("utf-8", errors="ignore")
-        data_match = re.search(r"financialData:\{(.*?)\},map:\[", html, re.DOTALL)
-        map_match = re.search(r"\},map:\[(.*?)\],full_count", html, re.DOTALL)
-        if not data_match or not map_match:
-            return {"annual": {"periods": [], "rows": []}, "quarterly": {"periods": [], "rows": []}}
-
-        field_values = {}
-        for match in re.finditer(r"([A-Za-z_][A-Za-z0-9_]*):\[(.*?)\](?=,[A-Za-z_][A-Za-z0-9_]*:|$)", data_match.group(1), re.DOTALL):
-            values = self._stockanalysis_array(match.group(2))
-            if values:
-                field_values[match.group(1)] = values
-
-        periods = [str(period) for period in field_values.get("datekey", [])]
-        rows = []
-        for object_match in re.finditer(r"\{(.*?)\}", map_match.group(1), re.DOTALL):
-            body = object_match.group(1)
-            id_match = re.search(r'id:"([^"]+)"', body)
-            title_match = re.search(r'title:"([^"]+)"', body)
-            if not id_match or not title_match:
-                continue
-            field_id = id_match.group(1)
-            raw_values = field_values.get(field_id)
-            if not raw_values:
-                continue
-            fmt_match = re.search(r'format:"([^"]+)"', body)
-            fmt = fmt_match.group(1) if fmt_match else ""
-            label = self._normalize_stockanalysis_label(title_match.group(1))
-            values = [self._format_stockanalysis_value(value, fmt) for value in raw_values[:len(periods)]]
-            rows.append({"label": label, "values": values})
-
-        return {
-            "annual": {"periods": periods if rows else [], "rows": rows},
-            "quarterly": {"periods": [], "rows": []}
-        }
 
     def _merge_statement_rows(self, primary, secondary):
         def _merge(p, s):
@@ -1615,9 +1194,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     self._request_fetch_count += 1
                     fx_info = fx_ticker.fast_info
                     financial_fx_rate = float(fx_info.last_price or 1.0) or 1.0
-                except Exception:
-                    financial_fx_rate = self.get_usd_fx_rate(financial_currency)
-                    self._request_fetch_count += 1
+                except Exception as e:
+                    print(f"yfinance FX warning for {financial_currency}: {e}")
 
             quote_currency = self._infer_currency_from_ticker(ticker, info.get("currency")).upper()
             quote_fx_rate = 1.0
@@ -1630,9 +1208,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         self._request_fetch_count += 1
                         fx_info = fx_ticker.fast_info
                         quote_fx_rate = float(fx_info.last_price or 1.0) or 1.0
-                    except Exception:
-                        quote_fx_rate = self.get_usd_fx_rate(quote_currency)
-                        self._request_fetch_count += 1
+                    except Exception as e:
+                        print(f"yfinance FX warning for {quote_currency}: {e}")
             
             print(f"[FX] Financial Rate: {financial_fx_rate}, Quote Rate: {quote_fx_rate}")
 
@@ -1743,85 +1320,30 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             cy_growth_raw = info.get("revenueGrowth", None)
             ny_growth_raw = None
 
-            # Combined Analysis Trends (Revenue and Earnings estimates in one fetch)
+            # Analyst estimates from yfinance only.
             try:
-                trends = self._fetch_yahoo_analysis_trends(ticker)
-                if not trends:
-                    # Fallback to separate yfinance fetches if combined fetch fails
-                    try:
-                        ee = stock.earnings_estimate
-                        self._request_fetch_count += 1
-                        if ee is not None and not ee.empty:
-                            if "0y" in ee.index:
-                                cy_eps_raw = float(ee.loc["0y", "avg"]) if "avg" in ee.columns and pd.notna(ee.loc["0y", "avg"]) else cy_eps_raw
-                                year_ago_eps_raw = float(ee.loc["0y", "yearAgoEps"]) if "yearAgoEps" in ee.columns and pd.notna(ee.loc["0y", "yearAgoEps"]) else year_ago_eps_raw
-                                cy_eps_growth_raw = float(ee.loc["0y", "growth"]) if "growth" in ee.columns and pd.notna(ee.loc["0y", "growth"]) else cy_eps_growth_raw
-                            if "+1y" in ee.index:
-                                ny_eps_raw = float(ee.loc["+1y", "avg"]) if "avg" in ee.columns and pd.notna(ee.loc["+1y", "avg"]) else ny_eps_raw
-                                ny_eps_growth_raw = float(ee.loc["+1y", "growth"]) if "growth" in ee.columns and pd.notna(ee.loc["+1y", "growth"]) else ny_eps_growth_raw
-                        
-                        re_est = stock.revenue_estimate
-                        self._request_fetch_count += 1
-                        if re_est is not None and not re_est.empty:
-                            if "0y" in re_est.index:
-                                cy_revenue_raw = float(re_est.loc["0y", "avg"]) if "avg" in re_est.columns and pd.notna(re_est.loc["0y", "avg"]) else cy_revenue_raw
-                                cy_growth_raw = float(re_est.loc["0y", "growth"]) if "growth" in re_est.columns and pd.notna(re_est.loc["0y", "growth"]) else cy_growth_raw
-                            if "+1y" in re_est.index:
-                                ny_revenue_raw = float(re_est.loc["+1y", "avg"]) if "avg" in re_est.columns and pd.notna(re_est.loc["+1y", "avg"]) else ny_revenue_raw
-                                ny_growth_raw = float(re_est.loc["+1y", "growth"]) if "growth" in re_est.columns and pd.notna(re_est.loc["+1y", "growth"]) else ny_growth_raw
-                    except Exception as fe:
-                        print(f"Fallback estimates error: {fe}")
-                else:
-                    for trend in (trends or []):
-                        period = str(trend.get("period", "")).lower()
-                        # Handle flexible period names like +1y, 1y, 0y, etc.
-                        is_cy = "0y" in period or "curr" in period
-                        is_ny = "1y" in period or "next" in period
-                        
-                        if is_cy:
-                            ee = trend.get("earningsEstimate", {})
-                            if ee.get("avg") is not None:
-                                cy_eps_raw = self._raw(ee["avg"])
-                            if ee.get("yearAgoEps") is not None:
-                                year_ago_eps_raw = self._raw(ee["yearAgoEps"])
-                            if ee.get("growth") is not None:
-                                cy_eps_growth_raw = self._raw(ee["growth"])
-                                
-                            re_est = trend.get("revenueEstimate", {})
-                            if re_est.get("avg") is not None:
-                                cy_revenue_raw = self._raw(re_est["avg"])
-                            if re_est.get("growth") is not None:
-                                cy_growth_raw = self._raw(re_est["growth"])
-                        elif is_ny:
-                            ee = trend.get("earningsEstimate", {})
-                            if ee.get("avg") is not None:
-                                ny_eps_raw = self._raw(ee["avg"])
-                            if ee.get("growth") is not None:
-                                ny_eps_growth_raw = self._raw(ee["growth"])
-                                
-                            re_est = trend.get("revenueEstimate", {})
-                            if re_est.get("avg") is not None:
-                                ny_revenue_raw = self._raw(re_est["avg"])
-                            if re_est.get("growth") is not None:
-                                ny_growth_raw = self._raw(re_est["growth"])
-            except Exception as e:
-                print(f"Combined analysis trends error: {e}")
+                ee = stock.earnings_estimate
+                self._request_fetch_count += 1
+                if ee is not None and not ee.empty:
+                    if "0y" in ee.index:
+                        cy_eps_raw = float(ee.loc["0y", "avg"]) if "avg" in ee.columns and pd.notna(ee.loc["0y", "avg"]) else cy_eps_raw
+                        year_ago_eps_raw = float(ee.loc["0y", "yearAgoEps"]) if "yearAgoEps" in ee.columns and pd.notna(ee.loc["0y", "yearAgoEps"]) else year_ago_eps_raw
+                        cy_eps_growth_raw = float(ee.loc["0y", "growth"]) if "growth" in ee.columns and pd.notna(ee.loc["0y", "growth"]) else cy_eps_growth_raw
+                    if "+1y" in ee.index:
+                        ny_eps_raw = float(ee.loc["+1y", "avg"]) if "avg" in ee.columns and pd.notna(ee.loc["+1y", "avg"]) else ny_eps_raw
+                        ny_eps_growth_raw = float(ee.loc["+1y", "growth"]) if "growth" in ee.columns and pd.notna(ee.loc["+1y", "growth"]) else ny_eps_growth_raw
 
-            # Finviz EPS fallbacks
-            if cy_eps_growth_raw is None:
-                finviz_cy_eps = finviz_metrics.get("eps_this_y")
-                if finviz_cy_eps and finviz_cy_eps != "--":
-                    try:
-                        cy_eps_growth_raw = float(finviz_cy_eps.strip('%')) / 100
-                    except Exception:
-                        pass
-            if ny_eps_growth_raw is None:
-                finviz_ny_eps = finviz_metrics.get("eps_next_y")
-                if finviz_ny_eps and finviz_ny_eps != "--":
-                    try:
-                        ny_eps_growth_raw = float(finviz_ny_eps.strip('%')) / 100
-                    except Exception:
-                        pass
+                re_est = stock.revenue_estimate
+                self._request_fetch_count += 1
+                if re_est is not None and not re_est.empty:
+                    if "0y" in re_est.index:
+                        cy_revenue_raw = float(re_est.loc["0y", "avg"]) if "avg" in re_est.columns and pd.notna(re_est.loc["0y", "avg"]) else cy_revenue_raw
+                        cy_growth_raw = float(re_est.loc["0y", "growth"]) if "growth" in re_est.columns and pd.notna(re_est.loc["0y", "growth"]) else cy_growth_raw
+                    if "+1y" in re_est.index:
+                        ny_revenue_raw = float(re_est.loc["+1y", "avg"]) if "avg" in re_est.columns and pd.notna(re_est.loc["+1y", "avg"]) else ny_revenue_raw
+                        ny_growth_raw = float(re_est.loc["+1y", "growth"]) if "growth" in re_est.columns and pd.notna(re_est.loc["+1y", "growth"]) else ny_growth_raw
+            except Exception as e:
+                print(f"yfinance estimates warning: {e}")
 
             # Convert revenue estimates and 3Y GP values from native currency to USD
             cy_revenue_raw = (cy_revenue_raw or 0) * financial_fx_rate
@@ -1844,7 +1366,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if calculated_market_cap > 0 and (api_market_cap == 0 or abs(calculated_market_cap - api_market_cap) / calculated_market_cap > 0.5):
                 market_cap_raw = calculated_market_cap * quote_fx_rate
             else:
-                market_cap_raw = (float(finviz_market_cap_raw or 0) or api_market_cap) * quote_fx_rate
+                market_cap_raw = api_market_cap * quote_fx_rate
             # Balance sheet cash/debt values are in financial currency
             cash_bucket_raw = self._latest_row_raw(balance_statement, ["Cash, Equivalents & Short Term Investments", "Cash & Short Term Investments", "Cash Cash Equivalents and Short Term Investments"])
             if not cash_bucket_raw:
@@ -1854,7 +1376,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             total_debt_raw = self._df_raw_value(annual_balance, ["Total Debt", "TotalDebt"]) * financial_fx_rate
             if not total_debt_raw:
                 total_debt_raw = (self._df_raw_value(annual_balance, ["Current Debt", "CurrentDebt"]) + self._df_raw_value(annual_balance, ["Long Term Debt", "LongTermDebt"])) * financial_fx_rate
-            net_cash_raw = cash_bucket_raw - total_debt_raw if cash_bucket_raw or total_debt_raw else (market_cap_raw - float(finviz_ev_raw or 0) if finviz_ev_raw and market_cap_raw else 0)
+            net_cash_raw = cash_bucket_raw - total_debt_raw if cash_bucket_raw or total_debt_raw else 0
             derived_enterprise_value_raw = market_cap_raw - net_cash_raw if market_cap_raw else 0
 
             valuation_raw = derived_enterprise_value_raw or market_cap_raw
@@ -1966,490 +1488,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             raise
 
     def fetch_yahoo_finance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics=None):
-        # Try yfinance first if available
-        if HAS_YFINANCE:
-            try:
-                result = self.fetch_yfinance_data(ticker, finviz_ev_raw, finviz_market_cap_raw, finviz_metrics)
-                print(f"[yfinance] Successfully fetched data for {ticker}")
-                return result
-            except Exception as e:
-                print(f"[yfinance] Failed for {ticker}, falling back to manual: {e}")
+        if not HAS_YFINANCE:
+            print(f"[yfinance] unavailable for {ticker}")
+            return self._empty_fetch_tuple(ticker)
 
-        finviz_metrics = finviz_metrics or {}
         try:
-            from http.cookiejar import CookieJar
-
-            data_opener = self._make_yahoo_opener()
-            self._yahoo_statement_page_cache = {}
-
-            res = {}
-            fd = {}
-            et = []
-            dks = {}
-            price = {}
-
-            now = int(time.time())
-            statement_keys = (
-                set(INCOME_STATEMENT_TYPES.keys())
-                | set(BALANCE_STATEMENT_TYPES.keys())
-                | set(CASH_FLOW_STATEMENT_TYPES.keys())
-                | {
-                    "CapitalExpenditure", "DepreciationAndAmortization",
-                    "CashCashEquivalentsAndShortTermInvestments",
-                    "OtherShortTermInvestments", "CashAndCashEquivalents",
-                    "CurrentDebt", "LongTermDebt", "TotalDebt",
-                }
-            )
-            type_names = [
-                f"{period}{key}"
-                for key in sorted(statement_keys)
-                for period in ("annual", "quarterly")
-            ]
-            ts_res = []
-            try:
-                chunk_size = 70
-                for idx in range(0, len(type_names), chunk_size):
-                    ts_types = ",".join(type_names[idx:idx + chunk_size])
-                    ts_url = (
-                        f"https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/{ticker}"
-                        f"?symbol={ticker}&type={ts_types}&period1={now - 86400 * 365 * 6}&period2={now}"
-                    )
-                    ts_data = json.loads(self._counted_open(data_opener, ts_url, timeout=5).read().decode("utf-8"))
-                    ts_res.extend((ts_data.get("timeseries", {}) or {}).get("result", []) or [])
-            except Exception as e:
-                print("Yahoo timeseries warning:", e)
-                ts_res = []
-
-            def series_points(type_name):
-                for item in ts_res:
-                    if self._statement_type_name(item) == type_name:
-                        return sorted(self._series_points(item, type_name), key=lambda p: p["date"], reverse=True)
-                return []
-
-            def series_sum(type_name, absolute=False):
-                points = series_points(type_name)
-                if len(points) >= 4:
-                    value = sum(point["raw"] for point in points[:4])
-                elif points:
-                    value = points[0]["raw"]
-                else:
-                    return 0.0
-                return abs(value) if absolute else value
-
-            def series_latest(type_name, absolute=False):
-                points = series_points(type_name)
-                if not points:
-                    return 0.0
-                value = points[0]["raw"]
-                return abs(value) if absolute else value
-
-            income_statement = self.build_income_statement_from_timeseries_results(ts_res)
-            balance_statement = self.build_balance_sheet_from_timeseries_results(ts_res)
-            cash_flow_statement = self.build_cash_flow_statement_from_timeseries_results(ts_res)
-
-            if not self._unwrap_annual(income_statement).get("rows"):
-                try:
-                    income_statement = self.build_statement_from_stockanalysis_page(ticker, "income")
-                except Exception as e:
-                    print("StockAnalysis income warning:", e)
-            if not self._unwrap_annual(balance_statement).get("rows"):
-                try:
-                    balance_statement = self.build_statement_from_stockanalysis_page(ticker, "balance")
-                except Exception as e:
-                    print("StockAnalysis balance warning:", e)
-            if not self._unwrap_annual(cash_flow_statement).get("rows"):
-                try:
-                    cash_flow_statement = self.build_statement_from_stockanalysis_page(ticker, "cash")
-                except Exception as e:
-                    print("StockAnalysis cash flow warning:", e)
-
-            try:
-                income_statement = self._merge_statement_rows(
-                    income_statement,
-                    self.build_income_statement_from_page(ticker, data_opener),
-                )
-            except Exception:
-                pass
-            try:
-                balance_statement = self._merge_statement_rows(
-                    balance_statement,
-                    self.build_balance_sheet_from_page(ticker, data_opener),
-                )
-            except Exception:
-                pass
-            try:
-                cash_flow_statement = self._merge_statement_rows(
-                    cash_flow_statement,
-                    self.build_cash_flow_statement_from_page(ticker, data_opener),
-                )
-            except Exception:
-                pass
-
-            try:
-                quote_opener = self._make_yahoo_opener()
-                crumb = self.get_yahoo_crumb(quote_opener)
-                modules = ",".join([
-                    "financialData", "earningsTrend", "defaultKeyStatistics", "price",
-                    "recommendationTrend",
-                ])
-                url = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules={modules}&crumb={crumb}"
-                data = json.loads(self._counted_open(quote_opener, url, timeout=3).read().decode("utf-8"))
-                results = data.get("quoteSummary", {}).get("result") or []
-                res = results[0] if results else {}
-            except Exception as e:
-                # Yahoo's quoteSummary endpoint is crumb/cookie sensitive. Keep going:
-                # the timeseries and chart endpoints still provide the core dashboard.
-                print("Yahoo quoteSummary warning:", e)
-
-            fd = res.get("financialData", {}) or {}
-            et = (res.get("earningsTrend", {}) or {}).get("trend", []) or []
-
-            analysis_trends_cache = None
-            def yahoo_analysis_trends_once():
-                nonlocal analysis_trends_cache
-                if analysis_trends_cache is None:
-                    analysis_trends_cache = self._fetch_yahoo_analysis_trends(ticker)
-                return analysis_trends_cache
-            
-            if not et:
-                et = yahoo_analysis_trends_once()
-                if not et:
-                    print("Fallback analysis page: no earningsTrend found in SvelteKit JSON.")
-
-            dks = res.get("defaultKeyStatistics", {}) or {}
-            price = res.get("price", {}) or {}
-
-            chart_meta = {}
-            quote_price_raw = self._raw(price.get("regularMarketPrice")) or self._raw(fd.get("currentPrice"))
-            if not quote_price_raw or not price.get("currency"):
-                try:
-                    chart_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=1d"
-                    chart = json.loads(self._counted_open(data_opener, chart_url, timeout=3).read().decode("utf-8"))
-                    chart_results = (chart.get("chart", {}) or {}).get("result", []) or []
-                    chart_meta = chart_results[0].get("meta", {}) if chart_results else {}
-                except Exception:
-                    chart_meta = {}
-
-            if not res and not ts_res and not chart_meta:
-                if not self._unwrap_annual(income_statement).get("rows") and not self._unwrap_annual(balance_statement).get("rows") and not self._unwrap_annual(cash_flow_statement).get("rows"):
-                    return self._empty_fetch_tuple(ticker)
-
-
-            revenue_raw = series_sum("quarterlyTotalRevenue") or self._raw(fd.get("totalRevenue")) or self._latest_row_raw(income_statement, ["Total Revenue", "Revenue"])
-            operating_income_raw = series_sum("quarterlyOperatingIncome") or self._latest_row_raw(income_statement, ["Operating Income"])
-            capex_raw = series_sum("quarterlyCapitalExpenditure", absolute=True) or abs(self._latest_row_raw(cash_flow_statement, ["Capital Expenditures", "Capital Expenditure"]))
-            da_raw = series_sum("quarterlyDepreciationAndAmortization") or self._latest_row_raw(cash_flow_statement, ["Depreciation And Amortization"])
-            gross_ppe_raw = series_latest("annualGrossPPE") or self._latest_row_raw(balance_statement, ["Gross PP&E", "Gross PPE", "Property, Plant & Equipment", "Net PP&E", "Net PPE"])
-            net_fixed_assets_raw = series_latest("annualNetPPE") or self._latest_row_raw(balance_statement, ["Net PP&E", "Net PPE", "Property, Plant & Equipment"])
-            receivables_raw = series_latest("annualAccountsReceivable") or self._latest_row_raw(balance_statement, ["Accounts Receivable"])
-            inventory_raw = series_latest("annualInventory") or self._latest_row_raw(balance_statement, ["Inventory"])
-            accounts_payable_raw = series_latest("annualAccountsPayable") or self._latest_row_raw(balance_statement, ["Accounts Payable"])
-
-            da_minus_capex_raw = max(da_raw - capex_raw, 0)
-            investment_capex_raw = max(capex_raw - da_raw, 0)
-            adj_income_raw = operating_income_raw + da_minus_capex_raw
-            adj_margin_ratio = (adj_income_raw / revenue_raw) if revenue_raw else 0
-            operating_margin_ratio = (operating_income_raw / revenue_raw) if revenue_raw else self._raw(fd.get("operatingMargins"))
-
-            gross_margin_ratio = self._raw(fd.get("grossMargins"), None)
-            if gross_margin_ratio is None and revenue_raw:
-                gross_profit_raw = self._latest_row_raw(income_statement, ["Gross Profit"])
-                gross_margin_ratio = gross_profit_raw / revenue_raw if gross_profit_raw else 0
-
-            def annual_statement_points(statement, labels):
-                flat = self._unwrap_annual(statement)
-                labels_lower = {label.lower() for label in labels}
-                periods = flat.get("periods", []) or []
-                for row in flat.get("rows", []) or []:
-                    if row.get("label", "").lower() not in labels_lower:
-                        continue
-                    points = []
-                    for idx, period in enumerate(periods):
-                        if idx >= len(row.get("values", [])):
-                            continue
-                        period_label = str(period).upper()
-                        if period_label in ("TTM", "MRQ", "LATEST"):
-                            continue
-                        raw = self._parse_money_to_raw(row["values"][idx])
-                        if raw is not None:
-                            points.append((period, raw))
-                    return points
-                return []
-
-            def three_year_growth(statement):
-                gross_points = annual_statement_points(statement, ["Gross Profit"])
-                points = gross_points
-                label = "3Y Annual GP Growth"
-                if len(points) < 2:
-                    points = annual_statement_points(statement, ["Total Revenue"])
-                    label = "3Y Annual Sales Growth"
-                if len(points) < 2:
-                    return None, 0.0, 0.0, label
-                def parse_period_date(period):
-                    text = str(period)
-                    for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
-                        try:
-                            return datetime.datetime.strptime(text, fmt).date()
-                        except ValueError:
-                            continue
-                    return None
-
-                dated_points = [
-                    (parse_period_date(period), idx, raw)
-                    for idx, (period, raw) in enumerate(points)
-                ]
-                dated_points.sort(key=lambda point: (point[0] or datetime.date.min, point[1]))
-                end_date, end_idx, end = dated_points[-1]
-                start_date, start_idx, start = dated_points[max(0, len(dated_points) - 4)]
-                if not start:
-                    growth = None
-                else:
-                    years = (end_date - start_date).days / 365.25 if end_date and start_date else end_idx - start_idx
-                    years = years if years > 0 else 1
-                    growth = (end / abs(start)) ** (1 / years) - 1
-                    # Update label based on actual years used
-                    display_years = round(years) if years >= 0.9 else round(years, 1)
-                    label = f"{display_years}Y {label.split(' ', 1)[1]}"
-                return growth, start, end, label
-
-            gp_3y_growth_raw, gp_3y_start_raw, gp_3y_end_raw, gp_3y_label = three_year_growth(income_statement)
-            rnd_raw = self._latest_row_raw(income_statement, ["Research & Development", "Research and Development"])
-
-            cy_revenue_raw = ny_revenue_raw = 0
-            cy_growth_raw = ny_growth_raw = None
-            cy_revenue_from_yahoo = ny_revenue_from_yahoo = False
-            cy_eps_raw = ny_eps_raw = year_ago_eps_raw = 0
-            cy_eps_growth_raw = ny_eps_growth_raw = None
-
-            def yahoo_revenue_growth(revenue_est):
-                # Use Yahoo's reported Sales Growth field only. If it is absent,
-                # leave the metric empty rather than estimating or backfilling it.
-                return self._raw(revenue_est.get("growth"), None)
-
-            def apply_estimate_trends(trends, overwrite=False, source="yahoo"):
-                nonlocal cy_revenue_raw, ny_revenue_raw, cy_growth_raw, ny_growth_raw
-                nonlocal cy_revenue_from_yahoo, ny_revenue_from_yahoo
-                nonlocal cy_eps_raw, ny_eps_raw, year_ago_eps_raw, cy_eps_growth_raw, ny_eps_growth_raw
-                for trend in trends or []:
-                    revenue_est = trend.get("revenueEstimate", {}) or {}
-                    earnings_est = trend.get("earningsEstimate", {}) or {}
-                    period = trend.get("period")
-                    if period == "0y":
-                        revenue_avg = self._raw(revenue_est.get("avg"))
-                        revenue_growth = yahoo_revenue_growth(revenue_est)
-                        eps_avg = self._eps_value(earnings_est.get("avg"))
-                        year_ago_eps = self._eps_value(earnings_est.get("yearAgoEps"))
-                        eps_growth = self._raw(earnings_est.get("growth"), None)
-                        if revenue_avg and (overwrite or not cy_revenue_raw):
-                            cy_revenue_raw = revenue_avg
-                            cy_revenue_from_yahoo = source == "yahoo"
-                        if revenue_growth is not None and (overwrite or cy_growth_raw is None):
-                            cy_growth_raw = revenue_growth
-                        if eps_avg and (overwrite or not cy_eps_raw):
-                            cy_eps_raw = eps_avg
-                        if year_ago_eps and (overwrite or not year_ago_eps_raw):
-                            year_ago_eps_raw = year_ago_eps
-                        if eps_growth is not None and (overwrite or cy_eps_growth_raw is None):
-                            cy_eps_growth_raw = eps_growth
-                    elif period == "+1y":
-                        revenue_avg = self._raw(revenue_est.get("avg"))
-                        revenue_growth = yahoo_revenue_growth(revenue_est)
-                        eps_avg = self._eps_value(earnings_est.get("avg"))
-                        eps_growth = self._raw(earnings_est.get("growth"), None)
-                        if revenue_avg and (overwrite or not ny_revenue_raw):
-                            ny_revenue_raw = revenue_avg
-                            ny_revenue_from_yahoo = source == "yahoo"
-                        if revenue_growth is not None and (overwrite or ny_growth_raw is None):
-                            ny_growth_raw = revenue_growth
-                        if eps_avg and (overwrite or not ny_eps_raw):
-                            ny_eps_raw = eps_avg
-                        if eps_growth is not None and (overwrite or ny_eps_growth_raw is None):
-                            ny_eps_growth_raw = eps_growth
-
-            apply_estimate_trends(et)
-
-            if cy_growth_raw is None or ny_growth_raw is None or not cy_revenue_raw or not ny_revenue_raw:
-                yahoo_analysis_trends = yahoo_analysis_trends_once()
-                if yahoo_analysis_trends:
-                    apply_estimate_trends(yahoo_analysis_trends, overwrite=True)
-
-            if cy_eps_growth_raw is None:
-                finviz_cy_eps = finviz_metrics.get("eps_this_y")
-                if finviz_cy_eps and finviz_cy_eps != "--":
-                    try:
-                        cy_eps_growth_raw = float(finviz_cy_eps.strip('%')) / 100
-                    except Exception:
-                        pass
-            if ny_eps_growth_raw is None:
-                finviz_ny_eps = finviz_metrics.get("eps_next_y")
-                if finviz_ny_eps and finviz_ny_eps != "--":
-                    try:
-                        ny_eps_growth_raw = float(finviz_ny_eps.strip('%')) / 100
-                    except Exception:
-                        pass
-                        
-            if not cy_revenue_raw or not ny_revenue_raw:
-                try:
-                    forecast_url = f"https://stockanalysis.com/stocks/{ticker.lower()}/forecast/"
-                    html = self._counted_open(None, forecast_url, timeout=8).read().decode("utf-8", errors="ignore")
-                    forecast_revenues = self._stockanalysis_estimate_points(html, "revenue")
-                    if len(forecast_revenues) > 0 and not cy_revenue_raw:
-                        cy_revenue_raw = forecast_revenues[0][1]
-                    if len(forecast_revenues) > 1 and not ny_revenue_raw:
-                        ny_revenue_raw = forecast_revenues[1][1]
-                except Exception as e:
-                    print("Fallback StockAnalysis forecast error:", e)
-
-            statement_currency = "USD"
-            for item in ts_res:
-                type_name = self._statement_type_name(item)
-                points = self._series_points(item, type_name) if type_name else []
-                if points:
-                    raw_points = item.get(type_name, []) or []
-                    if raw_points:
-                        statement_currency = (
-                            raw_points[0].get("currencyCode")
-                            or statement_currency
-                        )
-                        break
-
-            raw_currency = (fd.get("financialCurrency") or price.get("currency"))
-            financial_currency = (
-                self._infer_currency_from_ticker(ticker, raw_currency)
-                or statement_currency
-                or "USD"
-            ).upper()
-            quote_currency = self._infer_currency_from_ticker(ticker, (price.get("currency") or chart_meta.get("currency"))).upper()
-            financial_fx_rate = self.get_usd_fx_rate(financial_currency, data_opener)
-            # Quote FX applies to Market Cap and Price
-            quote_fx_rate = self.get_usd_fx_rate(quote_currency, data_opener)
-            
-            cy_eps_raw *= financial_fx_rate
-            ny_eps_raw *= financial_fx_rate
-            year_ago_eps_raw *= financial_fx_rate
-
-            if cy_eps_raw and year_ago_eps_raw and abs(cy_eps_raw - year_ago_eps_raw) < 1e-9:
-                eps_row = next((row for row in self._unwrap_annual(income_statement).get("rows", []) if row.get("label") in ("Diluted EPS", "Basic EPS")), None)
-                if eps_row and len(eps_row.get("values", [])) > 1:
-                    fallback = self._parse_money_to_raw(eps_row["values"][1])
-                    if fallback:
-                        year_ago_eps_raw = fallback * financial_fx_rate
-
-            raw_shares = self._raw(dks.get("sharesOutstanding")) or self._raw(dks.get("impliedSharesOutstanding")) or 0
-            raw_price = self._raw(price.get("regularMarketPrice")) or self._raw(fd.get("currentPrice")) or 0
-            calculated_market_cap = (raw_shares * raw_price) if raw_shares and raw_price else 0
-            
-            api_market_cap = self._raw(price.get("marketCap")) or self._raw(dks.get("marketCap")) or 0
-            if calculated_market_cap > 0 and (api_market_cap == 0 or abs(calculated_market_cap - api_market_cap) / calculated_market_cap > 0.5):
-                market_cap_raw = calculated_market_cap * quote_fx_rate
-            else:
-                market_cap_raw = (float(finviz_market_cap_raw or 0) or api_market_cap) * quote_fx_rate
-            cash_bucket_raw = self._latest_row_raw(balance_statement, ["Cash, Equivalents & Short Term Investments", "Cash & Short Term Investments"])
-            if not cash_bucket_raw:
-                cash_bucket_raw = self._latest_row_raw(balance_statement, ["Cash & Cash Equivalents", "Cash And Cash Equivalents"]) + self._latest_row_raw(balance_statement, ["Other Short Term Investments", "Short Term Investments"])
-            total_debt_raw = self._latest_row_raw(balance_statement, ["Total Debt"])
-            if not total_debt_raw:
-                total_debt_raw = self._latest_row_raw(balance_statement, ["Current Debt", "Short Term Debt"]) + self._latest_row_raw(balance_statement, ["Long Term Debt"])
-            
-            # Cash and debt are in financial currency
-            cash_bucket_raw *= financial_fx_rate
-            total_debt_raw *= financial_fx_rate
-            
-            net_cash_raw = cash_bucket_raw - total_debt_raw if cash_bucket_raw or total_debt_raw else (market_cap_raw - float(finviz_ev_raw or 0) if finviz_ev_raw and market_cap_raw else 0)
-            derived_enterprise_value_raw = market_cap_raw - net_cash_raw if market_cap_raw else 0
-
-            valuation_raw = derived_enterprise_value_raw or market_cap_raw
-            valuation_basis = "derivedEV"
-            valuation_prefix = "EV"
-            valuation_numerator_label = "Derived Enterprise Value"
-
-            cy_adj_inc_raw = cy_revenue_raw * adj_margin_ratio if cy_revenue_raw and adj_margin_ratio else 0
-            ny_adj_inc_raw = ny_revenue_raw * adj_margin_ratio if ny_revenue_raw and adj_margin_ratio else 0
-            nwc_raw = (receivables_raw + inventory_raw - accounts_payable_raw) * financial_fx_rate
-            roc_denominator_raw = (nwc_raw + net_fixed_assets_raw) * financial_fx_rate
-
-            current_price_raw = (
-                self._raw(price.get("regularMarketPrice"))
-                or self._raw(fd.get("currentPrice"))
-                or chart_meta.get("regularMarketPrice")
-                or 0
-            ) * quote_fx_rate
-            target_mean_raw = self._raw(fd.get("targetMeanPrice")) * quote_fx_rate
-            target_low_raw = self._raw(fd.get("targetLowPrice")) * quote_fx_rate
-            target_high_raw = self._raw(fd.get("targetHighPrice")) * quote_fx_rate
-            target_move_raw = ((target_mean_raw - current_price_raw) / current_price_raw) if target_mean_raw and current_price_raw else None
-
-            analyst_recommendations = ((res.get("recommendationTrend", {}) or {}).get("trend", []) or [{}])[0]
-            company_name = price.get("longName") or price.get("shortName") or chart_meta.get("longName") or chart_meta.get("shortName") or ticker
-
-            values = {
-                "income": self._format_money(operating_income_raw),
-                "margin": self._format_percent(adj_margin_ratio) if adj_margin_ratio else "--",
-                "gross_margin": self._format_percent(gross_margin_ratio) if gross_margin_ratio is not None else "--",
-                "ev_cy_ebit": self._format_3sig(valuation_raw / cy_adj_inc_raw) if valuation_raw and cy_adj_inc_raw else "--",
-                "ev_ny_ebit": self._format_3sig(valuation_raw / ny_adj_inc_raw) if valuation_raw and ny_adj_inc_raw else "--",
-                "adj_income": self._format_money(adj_income_raw),
-                "capex": self._format_money(capex_raw),
-                "da": self._format_money(da_raw),
-                "ev": self._format_money(valuation_raw),
-                "ev_adj_ebit": self._format_3sig(valuation_raw / adj_income_raw) if valuation_raw and adj_income_raw else "--",
-                "cy_growth": self._format_percent(cy_growth_raw) if cy_growth_raw is not None else "--",
-                "ny_growth": self._format_percent(ny_growth_raw) if ny_growth_raw is not None else "--",
-                "gp_3y_growth": self._format_percent(gp_3y_growth_raw) if gp_3y_growth_raw is not None else "--",
-                "gp_3y_start": self._format_money(gp_3y_start_raw) if gp_3y_start_raw else "--",
-                "gp_3y_end": self._format_money(gp_3y_end_raw) if gp_3y_end_raw else "--",
-                "gp_3y_label": gp_3y_label,
-                "rnd_adj_income": self._format_percent(rnd_raw / adj_income_raw) if rnd_raw and adj_income_raw else "--",
-                "cy_adj_inc": self._format_money(cy_adj_inc_raw) if cy_adj_inc_raw else "--",
-                "ny_adj_inc": self._format_money(ny_adj_inc_raw) if ny_adj_inc_raw else "--",
-                "market_cap": self._format_money(market_cap_raw),
-                "net_cash": self._format_money(net_cash_raw),
-                "derived_enterprise_value": self._format_money(derived_enterprise_value_raw),
-                "revenue": self._format_money(revenue_raw),
-                "operating_margin": self._format_percent(operating_margin_ratio) if operating_margin_ratio else "--",
-                "da_minus_capex": self._format_money(da_minus_capex_raw) if da_minus_capex_raw else "0",
-                "cy_revenue": self._format_money(cy_revenue_raw) if cy_revenue_raw else "--",
-                "ny_revenue": self._format_money(ny_revenue_raw) if ny_revenue_raw else "--",
-                "gross_ppe": self._format_money(gross_ppe_raw),
-                "adj_ebit_gross_ppe": self._format_percent(adj_income_raw / gross_ppe_raw) if adj_income_raw and gross_ppe_raw else "--",
-                "capex_adj_income": self._format_percent(investment_capex_raw / adj_income_raw) if adj_income_raw else "--",
-                "investment_capex": self._format_money(investment_capex_raw) if investment_capex_raw else "0",
-                "roc": self._format_percent(adj_income_raw / roc_denominator_raw) if adj_income_raw and roc_denominator_raw else "--",
-                "net_working_capital": self._format_money(nwc_raw),
-                "net_fixed_assets": self._format_money(net_fixed_assets_raw),
-                "receivables": self._format_money(receivables_raw),
-                "inventory": self._format_money(inventory_raw),
-                "accounts_payable": self._format_money(accounts_payable_raw),
-                "financial_currency": financial_currency,
-                "usd_fx_rate": quote_fx_rate,
-                "company_name": company_name,
-                "income_statement": income_statement,
-                "balance_statement": balance_statement,
-                "cash_flow_statement": cash_flow_statement,
-                "current_price": self._format_3sig(current_price_raw),
-                "target_mean_price": self._format_3sig(target_mean_raw),
-                "target_low_price": self._format_3sig(target_low_raw),
-                "target_high_price": self._format_3sig(target_high_raw),
-                "target_move": self._format_percent(target_move_raw) if target_move_raw is not None else "--",
-                "recommendation_mean": self._format_3sig(self._raw(fd.get("recommendationMean"))),
-                "recommendation_key": fd.get("recommendationKey") or "--",
-                "analyst_recommendations": analyst_recommendations,
-                "valuation_basis": valuation_basis,
-                "valuation_prefix": valuation_prefix,
-                "valuation_numerator_label": valuation_numerator_label,
-                "current_year_eps": self._format_3sig(cy_eps_raw),
-                "next_year_eps": self._format_3sig(ny_eps_raw),
-                "year_ago_eps": self._format_3sig(year_ago_eps_raw),
-                "current_year_eps_growth": self._format_percent(cy_eps_growth_raw) if cy_eps_growth_raw is not None else "--",
-                "next_year_eps_growth": self._format_percent(ny_eps_growth_raw) if ny_eps_growth_raw is not None else "--",
-                "price_current_eps": self._format_3sig(current_price_raw / year_ago_eps_raw) if current_price_raw and year_ago_eps_raw else "--",
-                "price_cy_eps": self._format_3sig(current_price_raw / cy_eps_raw) if current_price_raw and cy_eps_raw else "--",
-                "price_ny_eps": self._format_3sig(current_price_raw / ny_eps_raw) if current_price_raw and ny_eps_raw else "--",
-                "short_float": self._format_percent(self._raw(fd.get("shortPercentOfFloat"))) if fd.get("shortPercentOfFloat") else "--",
-            }
-            return tuple(values[key] for key in FETCH_RESULT_FIELDS)
+            result = self.fetch_yfinance_data(ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics={})
+            print(f"[yfinance] Successfully fetched data for {ticker}")
+            return result
         except Exception as e:
-            print("Yahoo error:", e)
+            print(f"[yfinance] Failed for {ticker}: {e}")
             return self._empty_fetch_tuple(ticker)
 
     def _prune_latest(self, payload):
