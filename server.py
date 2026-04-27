@@ -1651,8 +1651,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             quarterly_balance = stock.quarterly_balance_sheet
             annual_cashflow = stock.cashflow
             quarterly_cashflow = stock.quarterly_cashflow
-            # Each of the above properties in yfinance triggers a separate HTTP call
-            self._request_fetch_count += 6
+            # Modern yfinance fetches all financials in a single API call under the hood
+            self._request_fetch_count += 1
 
             income_statement = {
                 "annual": self._df_to_statement(annual_income, formatter=fx_formatter, order_map=INCOME_STATEMENT_TYPES, quarterly_df=quarterly_income),
