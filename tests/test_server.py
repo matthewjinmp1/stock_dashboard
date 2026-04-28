@@ -792,6 +792,23 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(merged.loc["Diluted Average Shares", "TTM"], 7462000000)
         self.assertEqual(merged.loc["Diluted Average Shares", pd.Timestamp("2025-06-30")], 7462000000)
 
+    def test_df_history_columns_excludes_ttm_column_before_sorting(self):
+        import pandas as pd
+
+        frame = pd.DataFrame(
+            {
+                pd.Timestamp("2025-06-30"): [100],
+                "TTM": [120],
+                pd.Timestamp("2024-06-30"): [90],
+            },
+            index=["Total Revenue"],
+        )
+
+        self.assertEqual(
+            self.handler._df_history_columns(frame),
+            [pd.Timestamp("2025-06-30"), pd.Timestamp("2024-06-30")],
+        )
+
     def test_df_ttm_value_does_not_sum_share_count_rows(self):
         import pandas as pd
 

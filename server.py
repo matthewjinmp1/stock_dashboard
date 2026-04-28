@@ -1354,7 +1354,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # 3-year growth from annual income statement
             gp_3y_growth_raw, gp_3y_start_raw, gp_3y_end_raw, gp_3y_label = None, 0, 0, "3Y Annual GP Growth"
             if annual_income is not None and not annual_income.empty:
-                cols = sorted(annual_income.columns, reverse=True)
+                cols = self._df_history_columns(annual_income)
                 gp_label_candidates = ["Gross Profit", "GrossProfit"]
                 rev_label_candidates = ["Total Revenue", "TotalRevenue"]
                 for candidates, label_out in [(gp_label_candidates, "3Y Annual GP Growth"), (rev_label_candidates, "3Y Annual Sales Growth")]:
