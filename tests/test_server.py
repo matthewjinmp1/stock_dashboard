@@ -774,6 +774,45 @@ class StatementPageBuilderTests(unittest.TestCase):
 
         self.assertEqual(value, 1100)
 
+    def test_df_with_ttm_column_adds_yfinance_ttm_frame_to_annuals(self):
+        import pandas as pd
+
+        annual = pd.DataFrame(
+            {pd.Timestamp("2025-06-30"): [7462000000]},
+            index=["Diluted Average Shares"],
+        )
+        ttm = pd.DataFrame(
+            {pd.Timestamp("2025-12-31"): [7462000000]},
+            index=["Diluted Average Shares"],
+        )
+
+        merged = self.handler._df_with_ttm_column(annual, ttm)
+
+        self.assertIn("TTM", merged.columns)
+        self.assertEqual(merged.loc["Diluted Average Shares", "TTM"], 7462000000)
+        self.assertEqual(merged.loc["Diluted Average Shares", pd.Timestamp("2025-06-30")], 7462000000)
+
+    def test_df_ttm_value_does_not_sum_share_count_rows(self):
+        import pandas as pd
+
+        annual = pd.DataFrame(
+            {pd.Timestamp("2025-06-30"): [7462000000]},
+            index=["Diluted Average Shares"],
+        )
+        quarterly = pd.DataFrame(
+            {
+                pd.Timestamp("2025-06-30"): [7462000000],
+                pd.Timestamp("2025-03-31"): [7470000000],
+                pd.Timestamp("2024-12-31"): [7470000000],
+                pd.Timestamp("2024-09-30"): [7470000000],
+            },
+            index=["Diluted Average Shares"],
+        )
+
+        value = self.handler._df_ttm_value(quarterly, annual, ["Diluted Average Shares"])
+
+        self.assertEqual(value, 7462000000)
+
     def test_income_statement_ttm_falls_back_to_annual_when_quarters_are_partial(self):
         selected_results = [
             {

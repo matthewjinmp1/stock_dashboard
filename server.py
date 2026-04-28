@@ -1101,6 +1101,39 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         return float(val)
         return None
 
+    def _df_with_ttm_column(self, annual_df, ttm_df):
+        """Attach yfinance's TTM statement frame to the annual frame under a stable TTM column."""
+        if ttm_df is None or ttm_df.empty:
+            return annual_df
+        import pandas as pd
+        if annual_df is None or annual_df.empty:
+            result = pd.DataFrame(index=ttm_df.index)
+        else:
+            result = annual_df.copy()
+
+        ttm_cols = sorted(ttm_df.columns, reverse=True)
+        if not ttm_cols:
+            return result
+        if "TTM" in result.columns:
+            result = result.drop(columns=["TTM"])
+        result["TTM"] = ttm_df[ttm_cols[0]]
+        return result
+
+    def _can_sum_ttm_label(self, label):
+        """Return False for per-share/count/rate rows where summing quarters is invalid."""
+        normalized = str(label).replace(" ", "").lower()
+        non_additive_tokens = (
+            "averageshares",
+            "shares",
+            "eps",
+            "perShare",
+            "perbasicshare",
+            "perdilutedshare",
+            "rate",
+            "margin",
+        )
+        return not any(token.lower() in normalized for token in non_additive_tokens)
+
     def _df_to_statement(self, df, formatter=None, ttm_label="TTM", order_map=None, quarterly_df=None):
         """Convert a pandas DataFrame (rows=line items, columns=dates) to our statement format."""
         formatter = formatter or self._format_money
@@ -1198,6 +1231,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             cols = self._df_history_columns(quarterly_df)
             for label in row_labels:
                 if label in quarterly_df.index:
+                    if not self._can_sum_ttm_label(label):
+                        continue
                     vals = [quarterly_df.loc[label, c] for c in cols[:4]]
                     valid = [float(v) for v in vals if pd.notna(v)]
                     if len(valid) >= 4:
@@ -1262,13 +1297,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     return "--"
 
             annual_income = stock.financials
+            ttm_income = stock.ttm_income_stmt
             quarterly_income = stock.quarterly_financials
             annual_balance = stock.balance_sheet
             quarterly_balance = stock.quarterly_balance_sheet
             annual_cashflow = stock.cashflow
+            ttm_cashflow = stock.ttm_cash_flow
             quarterly_cashflow = stock.quarterly_cashflow
             # Modern yfinance fetches all financials in a single API call under the hood
             self._request_fetch_count += 1
+
+            annual_income = self._df_with_ttm_column(annual_income, ttm_income)
+            annual_cashflow = self._df_with_ttm_column(annual_cashflow, ttm_cashflow)
 
             income_statement = {
                 "annual": self._df_to_statement(annual_income, formatter=fx_formatter, order_map=INCOME_STATEMENT_TYPES, quarterly_df=quarterly_income),
