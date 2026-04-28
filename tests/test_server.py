@@ -722,6 +722,58 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(revenue_row["values"], ["305B", "282B", "245B", "212B", "198B"])
         self.assertEqual(income_row["values"], ["143B", "129B", "109B", "88.5B", "83.4B"])
 
+    def test_df_statement_prefers_official_annual_ttm_over_quarter_sum(self):
+        import pandas as pd
+
+        annual = pd.DataFrame(
+            {
+                "TTM": [1100],
+                pd.Timestamp("2025-12-31"): [900],
+                pd.Timestamp("2024-12-31"): [800],
+            },
+            index=["Total Revenue"],
+        )
+        quarterly = pd.DataFrame(
+            {
+                pd.Timestamp("2025-12-31"): [250],
+                pd.Timestamp("2025-09-30"): [250],
+                pd.Timestamp("2025-06-30"): [250],
+                pd.Timestamp("2025-03-31"): [250],
+            },
+            index=["Total Revenue"],
+        )
+
+        statement = self.handler._df_to_statement(
+            annual,
+            formatter=lambda value: str(int(value)),
+            quarterly_df=quarterly,
+        )
+
+        revenue_row = statement["rows"][0]
+        self.assertEqual(statement["periods"], ["TTM", "2025-12-31", "2024-12-31"])
+        self.assertEqual(revenue_row["values"], ["1100", "900", "800"])
+
+    def test_df_ttm_value_prefers_official_annual_ttm_over_quarter_sum(self):
+        import pandas as pd
+
+        annual = pd.DataFrame(
+            {"TTM": [1100], pd.Timestamp("2025-12-31"): [900]},
+            index=["Total Revenue"],
+        )
+        quarterly = pd.DataFrame(
+            {
+                pd.Timestamp("2025-12-31"): [250],
+                pd.Timestamp("2025-09-30"): [250],
+                pd.Timestamp("2025-06-30"): [250],
+                pd.Timestamp("2025-03-31"): [250],
+            },
+            index=["Total Revenue"],
+        )
+
+        value = self.handler._df_ttm_value(quarterly, annual, ["Total Revenue"])
+
+        self.assertEqual(value, 1100)
+
     def test_income_statement_ttm_falls_back_to_annual_when_quarters_are_partial(self):
         selected_results = [
             {

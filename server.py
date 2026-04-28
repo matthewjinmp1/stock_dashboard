@@ -1077,36 +1077,63 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # CamelCase → spaced (only for true CamelCase labels)
         return re.sub(r"(?<!^)(?=[A-Z])", " ", str(label)).replace("And", "and")
 
+    def _is_ttm_column(self, col):
+        label = str(col).strip().lower().replace("_", " ")
+        normalized = label.replace(" ", "")
+        return normalized in {"ttm", "trailing", "trailingtwelvemonths"}
+
+    def _df_history_columns(self, df):
+        return sorted([c for c in df.columns if not self._is_ttm_column(c)], reverse=True)
+
+    def _df_official_ttm_value(self, annual_df, row_labels):
+        """Get Yahoo's reported TTM value from an annual yfinance DataFrame when present."""
+        if annual_df is None or annual_df.empty:
+            return None
+        import pandas as pd
+        ttm_cols = [c for c in annual_df.columns if self._is_ttm_column(c)]
+        if not ttm_cols:
+            return None
+        for label in row_labels:
+            if label in annual_df.index:
+                for col in ttm_cols:
+                    val = annual_df.loc[label, col]
+                    if pd.notna(val):
+                        return float(val)
+        return None
+
     def _df_to_statement(self, df, formatter=None, ttm_label="TTM", order_map=None, quarterly_df=None):
         """Convert a pandas DataFrame (rows=line items, columns=dates) to our statement format."""
         formatter = formatter or self._format_money
         if df is None or df.empty:
             return {"periods": [], "rows": []}
         import pandas as pd
-        all_cols = sorted(df.columns, reverse=True)
-        if not all_cols:
+        cols = self._df_history_columns(df)
+        ttm_cols = [c for c in df.columns if self._is_ttm_column(c)]
+        if not cols and not ttm_cols:
             return {"periods": [], "rows": []}
         # Determine active rows: most recent column has data
         ordered_index = self._ordered_df_index(df, order_map)
-        active_labels = [lbl for lbl in ordered_index if pd.notna(df.loc[lbl, all_cols[0]])]
+        anchor_cols = (cols[:1] + ttm_cols[:1])
+        active_labels = [lbl for lbl in ordered_index if any(pd.notna(df.loc[lbl, c]) for c in anchor_cols)]
         if not active_labels:
             return {"periods": [], "rows": []}
         # Filter columns: keep only those where active rows have data
-        active_df = df.loc[active_labels]
-        cols = [c for c in all_cols if active_df[c].notna().any()]
-        if not cols:
+        if cols:
+            active_df = df.loc[active_labels]
+            cols = [c for c in cols if active_df[c].notna().any()]
+        if not cols and not ttm_cols:
             return {"periods": [], "rows": []}
         cols = cols[:4]  # Limit to 4 historical years
         periods = [ttm_label] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
         rows = []
         for label in active_labels:
             raw_values = df.loc[label, cols].tolist()
-            # Calculate TTM from quarterly_df if available, otherwise fallback to latest annual
-            ttm_val = None
+            # Prefer Yahoo's official annual TTM, then fall back to summing quarters.
+            ttm_val = self._df_official_ttm_value(df, [label])
             if quarterly_df is not None:
-                ttm_val = self._df_ttm_value(quarterly_df, df, [label])
+                ttm_val = ttm_val if ttm_val is not None else self._df_ttm_value(quarterly_df, df, [label])
             
-            if ttm_val is None:
+            if ttm_val is None and raw_values:
                 ttm_val = raw_values[0]
                 
             formatted = [formatter(ttm_val) if pd.notna(ttm_val) else "--"]
@@ -1154,7 +1181,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         import pandas as pd
         for label in row_labels:
             if label in df.index:
-                cols = sorted(df.columns, reverse=True)
+                cols = self._df_history_columns(df)
                 if col_index < len(cols):
                     val = df.loc[label, cols[col_index]]
                     if pd.notna(val):
@@ -1162,10 +1189,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return 0.0
 
     def _df_ttm_value(self, quarterly_df, annual_df, row_labels, absolute=False):
-        """Calculate TTM from last 4 quarters, falling back to latest annual."""
+        """Use reported annual TTM, then calculate from last 4 quarters, then latest annual."""
         import pandas as pd
+        official_ttm = self._df_official_ttm_value(annual_df, row_labels)
+        if official_ttm is not None:
+            return abs(official_ttm) if absolute else official_ttm
         if quarterly_df is not None and not quarterly_df.empty:
-            cols = sorted(quarterly_df.columns, reverse=True)
+            cols = self._df_history_columns(quarterly_df)
             for label in row_labels:
                 if label in quarterly_df.index:
                     vals = [quarterly_df.loc[label, c] for c in cols[:4]]
