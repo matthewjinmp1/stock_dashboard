@@ -762,6 +762,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         })
         return tuple(values[key] for key in FETCH_RESULT_FIELDS)
 
+    def _market_cap_from_info(self, info, quote_fx_rate=1.0):
+        api_market_cap = info.get("marketCap", 0) or 0
+        if api_market_cap:
+            return api_market_cap * quote_fx_rate
+
+        raw_price = info.get("currentPrice", 0) or info.get("regularMarketPrice", 0) or 0
+        raw_shares = info.get("impliedSharesOutstanding") or info.get("sharesOutstanding") or 0
+        return (raw_shares * raw_price * quote_fx_rate) if raw_shares and raw_price else 0
+
     def _parse_finviz_abbrev_to_raw(self, value):
         if not value or value == "--":
             return 0.0
@@ -1357,16 +1366,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             year_ago_eps_raw = (year_ago_eps_raw or 0) * financial_fx_rate
 
             # Market cap and valuation use quote_fx_rate
-            raw_shares = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding") or 0
-            raw_price = info.get("currentPrice", 0) or info.get("regularMarketPrice", 0) or 0
-            calculated_market_cap = (raw_shares * raw_price) if raw_shares and raw_price else 0
-            
-            # Use the calculated market cap if it exists and the API's marketCap is missing or significantly different
-            api_market_cap = info.get("marketCap", 0) or 0
-            if calculated_market_cap > 0 and (api_market_cap == 0 or abs(calculated_market_cap - api_market_cap) / calculated_market_cap > 0.5):
-                market_cap_raw = calculated_market_cap * quote_fx_rate
-            else:
-                market_cap_raw = api_market_cap * quote_fx_rate
+            market_cap_raw = self._market_cap_from_info(info, quote_fx_rate)
             # Balance sheet cash/debt values are in financial currency
             cash_bucket_raw = self._latest_row_raw(balance_statement, ["Cash, Equivalents & Short Term Investments", "Cash & Short Term Investments", "Cash Cash Equivalents and Short Term Investments"])
             if not cash_bucket_raw:

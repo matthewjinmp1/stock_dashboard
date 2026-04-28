@@ -230,6 +230,25 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
     def setUp(self):
         self.handler = make_handler()
 
+    def test_market_cap_prefers_yfinance_market_cap_over_share_class_math(self):
+        info = {
+            "marketCap": 4238063173632,
+            "sharesOutstanding": 5822000000,
+            "impliedSharesOutstanding": 12097000000,
+            "currentPrice": 350.34,
+        }
+
+        self.assertEqual(self.handler._market_cap_from_info(info), 4238063173632)
+
+    def test_market_cap_fallback_uses_implied_shares_when_api_market_cap_missing(self):
+        info = {
+            "sharesOutstanding": 5822000000,
+            "impliedSharesOutstanding": 12097000000,
+            "currentPrice": 350.34,
+        }
+
+        self.assertEqual(round(self.handler._market_cap_from_info(info)), 4238062980000)
+
     def test_delegates_to_yfinance_without_manual_fetches(self):
         expected = tuple(f"value-{idx}" for idx, _field in enumerate(FETCH_RESULT_FIELDS))
 
