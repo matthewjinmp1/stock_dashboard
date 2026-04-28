@@ -219,6 +219,11 @@ def make_fetch_result(**overrides):
         "price_cy_eps": "25.5",
         "price_ny_eps": "22.4",
         "short_float": "1.12%",
+        "structured_metrics": {
+            "revenue": {"raw": 305000000000, "display": "305B", "kind": "money", "currency": "USD"},
+            "margin": {"raw": 0.467, "display": "46.7%", "kind": "percent"},
+            "marketCap": {"raw": 3160000000000, "display": "3.16T", "kind": "money", "currency": "USD"},
+        },
     }
     values.update(overrides)
     return tuple(values[key] for key in FETCH_RESULT_FIELDS)
@@ -430,6 +435,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         "priceCyEps",
         "priceNyEps",
         "payloadVersion",
+        "metrics",
         "evSource",
         "marketCapSource",
         "dataDate",
@@ -523,6 +529,9 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["valuationBasis"], "derivedEV")
         self.assertEqual(payload["valuationPrefix"], "EV")
         self.assertEqual(payload["valuationNumeratorLabel"], "Derived Enterprise Value")
+        self.assertEqual(payload["metrics"]["revenue"]["raw"], 305000000000)
+        self.assertEqual(payload["metrics"]["revenue"]["display"], "305B")
+        self.assertEqual(payload["metrics"]["margin"]["raw"], 0.467)
         self.assertEqual(payload["evSource"], "derived")
         self.assertEqual(payload["marketCapSource"], "yahoo")
         self.assertEqual(payload["payloadVersion"], server.PAYLOAD_VERSION)

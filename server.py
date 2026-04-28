@@ -19,7 +19,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 9
+PAYLOAD_VERSION = 10
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -41,7 +41,7 @@ FETCH_RESULT_FIELDS = [
     "valuation_basis", "valuation_prefix", "valuation_numerator_label",
     "current_year_eps", "next_year_eps", "year_ago_eps", "current_year_eps_growth",
     "next_year_eps_growth", "price_current_eps", "price_cy_eps", "price_ny_eps",
-    "short_float",
+    "short_float", "structured_metrics",
 ]
 
 # Ordered dicts: keys define the preferred display order.
@@ -339,6 +339,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     _yahoo_crumb_cache = None
     _yahoo_crumb_cache_at = 0
 
+    def _metric_value(self, raw, display=None, kind="number", currency=None):
+        payload = {
+            "raw": raw if raw is not None else None,
+            "display": display if display is not None else "--",
+            "kind": kind,
+        }
+        if currency:
+            payload["currency"] = currency
+        return payload
+
+    def _structured_metrics(self, specs, currency=None):
+        metrics = {}
+        for key, raw, display, kind in specs:
+            metrics[key] = self._metric_value(raw, display, kind, currency if kind == "money" else None)
+        return metrics
+
     def build_test_payload(self, pulled_at=None):
         today = datetime.date.today().isoformat()
         pulled_at = pulled_at or datetime.datetime.now().isoformat(timespec="seconds")
@@ -479,6 +495,58 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         derived_ev_raw = market_cap_raw - net_cash_raw
         net_working_capital_raw = receivables_raw + inventory_raw - accounts_payable_raw
         roc_denominator_raw = net_working_capital_raw + net_fixed_assets_raw
+        metrics = self._structured_metrics([
+            ("income", operating_income_raw, self._format_money(operating_income_raw), "money"),
+            ("margin", adj_margin_ratio, self._format_percent(adj_margin_ratio), "percent"),
+            ("grossMargin", gross_margin_ratio, self._format_percent(gross_margin_ratio), "percent"),
+            ("ev_cy_ebit", derived_ev_raw / cy_adj_inc_raw, self._format_3sig(derived_ev_raw / cy_adj_inc_raw), "ratio"),
+            ("ev_ny_ebit", derived_ev_raw / ny_adj_inc_raw, self._format_3sig(derived_ev_raw / ny_adj_inc_raw), "ratio"),
+            ("adj_income", adj_income_raw, self._format_money(adj_income_raw), "money"),
+            ("capex", capex_raw, self._format_money(capex_raw), "money"),
+            ("da", da_raw, self._format_money(da_raw), "money"),
+            ("ev", derived_ev_raw, self._format_money(derived_ev_raw), "money"),
+            ("ev_adj_ebit", derived_ev_raw / adj_income_raw, self._format_3sig(derived_ev_raw / adj_income_raw), "ratio"),
+            ("cy_growth", cy_growth_raw, self._format_percent(cy_growth_raw), "percent"),
+            ("ny_growth", ny_growth_raw, self._format_percent(ny_growth_raw), "percent"),
+            ("gp_3y_growth", gp_3y_growth_raw, self._format_percent(gp_3y_growth_raw), "percent"),
+            ("gp_3y_start", gp_3y_start_raw, self._format_money(gp_3y_start_raw), "money"),
+            ("gp_3y_end", gp_3y_end_raw, self._format_money(gp_3y_end_raw), "money"),
+            ("rndAdjIncome", rnd_raw / adj_income_raw, self._format_percent(rnd_raw / adj_income_raw), "percent"),
+            ("cy_adj_inc", cy_adj_inc_raw, self._format_money(cy_adj_inc_raw), "money"),
+            ("ny_adj_inc", ny_adj_inc_raw, self._format_money(ny_adj_inc_raw), "money"),
+            ("marketCap", market_cap_raw, self._format_money(market_cap_raw), "money"),
+            ("netCash", net_cash_raw, self._format_money(net_cash_raw), "money"),
+            ("derivedEnterpriseValue", derived_ev_raw, self._format_money(derived_ev_raw), "money"),
+            ("revenue", revenue_raw, self._format_money(revenue_raw), "money"),
+            ("operating_margin", operating_income_raw / revenue_raw, self._format_percent(operating_income_raw / revenue_raw), "percent"),
+            ("da_minus_capex", da_minus_capex_raw, self._format_money(da_minus_capex_raw), "money"),
+            ("cy_revenue", cy_revenue_raw, self._format_money(cy_revenue_raw), "money"),
+            ("ny_revenue", ny_revenue_raw, self._format_money(ny_revenue_raw), "money"),
+            ("grossPpe", gross_ppe_raw, self._format_money(gross_ppe_raw), "money"),
+            ("adjEbitGrossPpe", adj_income_raw / gross_ppe_raw, self._format_percent(adj_income_raw / gross_ppe_raw), "percent"),
+            ("capexAdjIncome", investment_capex_raw / adj_income_raw, self._format_percent(investment_capex_raw / adj_income_raw), "percent"),
+            ("investmentCapex", investment_capex_raw, self._format_money(investment_capex_raw), "money"),
+            ("roc", adj_income_raw / roc_denominator_raw, self._format_percent(adj_income_raw / roc_denominator_raw), "percent"),
+            ("netWorkingCapital", net_working_capital_raw, self._format_money(net_working_capital_raw), "money"),
+            ("netFixedAssets", net_fixed_assets_raw, self._format_money(net_fixed_assets_raw), "money"),
+            ("receivables", receivables_raw, self._format_money(receivables_raw), "money"),
+            ("inventory", inventory_raw, self._format_money(inventory_raw), "money"),
+            ("accountsPayable", accounts_payable_raw, self._format_money(accounts_payable_raw), "money"),
+            ("shortFloat", 0.042, "4.2%", "percent"),
+            ("currentPrice", 100, "100", "money"),
+            ("targetMeanPrice", 125, "125", "money"),
+            ("targetLowPrice", 90, "90", "money"),
+            ("targetHighPrice", 160, "160", "money"),
+            ("targetMove", 0.25, "25%", "percent"),
+            ("currentYearEps", 10, "10", "number"),
+            ("nextYearEps", 12, "12", "number"),
+            ("yearAgoEps", 8, "8", "number"),
+            ("currentYearEpsGrowth", 0.25, "25%", "percent"),
+            ("nextYearEpsGrowth", 0.20, "20%", "percent"),
+            ("priceCurrentEps", 12.5, "12.5", "ratio"),
+            ("priceCyEps", 10, "10", "ratio"),
+            ("priceNyEps", 8.33, "8.33", "ratio"),
+        ], currency="USD")
 
         return {
             "ticker": "TEST",
@@ -553,6 +621,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "priceCyEps": "10",
             "priceNyEps": "8.33",
             "payloadVersion": PAYLOAD_VERSION,
+            "metrics": metrics,
             "evSource": "test-fixture",
             "marketCapSource": "test-fixture",
             "dataDate": today,
@@ -639,6 +708,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "balance_statement": {**empty_stmt},
             "cash_flow_statement": {**empty_stmt},
             "analyst_recommendations": {},
+            "structured_metrics": {},
         })
         return tuple(values[key] for key in FETCH_RESULT_FIELDS)
 
@@ -966,6 +1036,66 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             company_name = info.get("longName") or info.get("shortName") or ticker
 
+            def safe_ratio(num, denom):
+                return (num / denom) if num and denom else None
+
+            def safe_display(value, formatter):
+                return formatter(value) if value is not None else "--"
+
+            short_float_raw = info.get("shortPercentOfFloat") if info.get("shortPercentOfFloat") else None
+            structured_metrics = self._structured_metrics([
+                ("income", operating_income_raw, self._format_money(operating_income_raw), "money"),
+                ("margin", adj_margin_ratio or None, self._format_percent(adj_margin_ratio) if adj_margin_ratio else "--", "percent"),
+                ("grossMargin", gross_margin_ratio, self._format_percent(gross_margin_ratio) if gross_margin_ratio is not None else "--", "percent"),
+                ("ev_cy_ebit", safe_ratio(valuation_raw, cy_adj_inc_raw), safe_display(safe_ratio(valuation_raw, cy_adj_inc_raw), self._format_3sig), "ratio"),
+                ("ev_ny_ebit", safe_ratio(valuation_raw, ny_adj_inc_raw), safe_display(safe_ratio(valuation_raw, ny_adj_inc_raw), self._format_3sig), "ratio"),
+                ("adj_income", adj_income_raw, self._format_money(adj_income_raw), "money"),
+                ("capex", capex_raw, self._format_money(capex_raw), "money"),
+                ("da", da_raw, self._format_money(da_raw), "money"),
+                ("ev", valuation_raw, self._format_money(valuation_raw), "money"),
+                ("ev_adj_ebit", safe_ratio(valuation_raw, adj_income_raw), safe_display(safe_ratio(valuation_raw, adj_income_raw), self._format_3sig), "ratio"),
+                ("cy_growth", cy_growth_raw, self._format_percent(cy_growth_raw) if cy_growth_raw is not None else "--", "percent"),
+                ("ny_growth", ny_growth_raw, self._format_percent(ny_growth_raw) if ny_growth_raw is not None else "--", "percent"),
+                ("gp_3y_growth", gp_3y_growth_raw, self._format_percent(gp_3y_growth_raw) if gp_3y_growth_raw is not None else "--", "percent"),
+                ("gp_3y_start", gp_3y_start_raw or None, self._format_money(gp_3y_start_raw) if gp_3y_start_raw else "--", "money"),
+                ("gp_3y_end", gp_3y_end_raw or None, self._format_money(gp_3y_end_raw) if gp_3y_end_raw else "--", "money"),
+                ("rndAdjIncome", safe_ratio(rnd_raw, adj_income_raw), safe_display(safe_ratio(rnd_raw, adj_income_raw), self._format_percent), "percent"),
+                ("cy_adj_inc", cy_adj_inc_raw or None, self._format_money(cy_adj_inc_raw) if cy_adj_inc_raw else "--", "money"),
+                ("ny_adj_inc", ny_adj_inc_raw or None, self._format_money(ny_adj_inc_raw) if ny_adj_inc_raw else "--", "money"),
+                ("marketCap", market_cap_raw, self._format_money(market_cap_raw), "money"),
+                ("netCash", net_cash_raw, self._format_money(net_cash_raw), "money"),
+                ("derivedEnterpriseValue", derived_enterprise_value_raw, self._format_money(derived_enterprise_value_raw), "money"),
+                ("revenue", revenue_raw, self._format_money(revenue_raw), "money"),
+                ("operating_margin", operating_margin_ratio or None, self._format_percent(operating_margin_ratio) if operating_margin_ratio else "--", "percent"),
+                ("da_minus_capex", da_minus_capex_raw, self._format_money(da_minus_capex_raw) if da_minus_capex_raw else "0", "money"),
+                ("cy_revenue", cy_revenue_raw or None, self._format_money(cy_revenue_raw) if cy_revenue_raw else "--", "money"),
+                ("ny_revenue", ny_revenue_raw or None, self._format_money(ny_revenue_raw) if ny_revenue_raw else "--", "money"),
+                ("grossPpe", gross_ppe_raw, self._format_money(gross_ppe_raw), "money"),
+                ("adjEbitGrossPpe", safe_ratio(adj_income_raw, gross_ppe_raw), safe_display(safe_ratio(adj_income_raw, gross_ppe_raw), self._format_percent), "percent"),
+                ("capexAdjIncome", safe_ratio(investment_capex_raw, adj_income_raw), safe_display(safe_ratio(investment_capex_raw, adj_income_raw), self._format_percent), "percent"),
+                ("investmentCapex", investment_capex_raw, self._format_money(investment_capex_raw) if investment_capex_raw else "0", "money"),
+                ("roc", safe_ratio(adj_income_raw, roc_denominator_raw), safe_display(safe_ratio(adj_income_raw, roc_denominator_raw), self._format_percent), "percent"),
+                ("netWorkingCapital", nwc_raw, self._format_money(nwc_raw), "money"),
+                ("netFixedAssets", net_fixed_assets_raw, self._format_money(net_fixed_assets_raw), "money"),
+                ("receivables", receivables_raw, self._format_money(receivables_raw), "money"),
+                ("inventory", inventory_raw, self._format_money(inventory_raw), "money"),
+                ("accountsPayable", accounts_payable_raw, self._format_money(accounts_payable_raw), "money"),
+                ("shortFloat", short_float_raw, self._format_percent(short_float_raw) if short_float_raw else "--", "percent"),
+                ("currentPrice", current_price_raw, self._format_3sig(current_price_raw), "money"),
+                ("targetMeanPrice", target_mean_raw, self._format_3sig(target_mean_raw), "money"),
+                ("targetLowPrice", target_low_raw, self._format_3sig(target_low_raw), "money"),
+                ("targetHighPrice", target_high_raw, self._format_3sig(target_high_raw), "money"),
+                ("targetMove", target_move_raw, self._format_percent(target_move_raw) if target_move_raw is not None else "--", "percent"),
+                ("currentYearEps", cy_eps_raw, self._format_3sig(cy_eps_raw), "number"),
+                ("nextYearEps", ny_eps_raw, self._format_3sig(ny_eps_raw), "number"),
+                ("yearAgoEps", year_ago_eps_raw, self._format_3sig(year_ago_eps_raw), "number"),
+                ("currentYearEpsGrowth", cy_eps_growth_raw, self._format_percent(cy_eps_growth_raw) if cy_eps_growth_raw is not None else "--", "percent"),
+                ("nextYearEpsGrowth", ny_eps_growth_raw, self._format_percent(ny_eps_growth_raw) if ny_eps_growth_raw is not None else "--", "percent"),
+                ("priceCurrentEps", safe_ratio(current_price_raw, year_ago_eps_raw), safe_display(safe_ratio(current_price_raw, year_ago_eps_raw), self._format_3sig), "ratio"),
+                ("priceCyEps", safe_ratio(current_price_raw, cy_eps_raw), safe_display(safe_ratio(current_price_raw, cy_eps_raw), self._format_3sig), "ratio"),
+                ("priceNyEps", safe_ratio(current_price_raw, ny_eps_raw), safe_display(safe_ratio(current_price_raw, ny_eps_raw), self._format_3sig), "ratio"),
+            ], currency="USD")
+
             values = {
                 "income": self._format_money(operating_income_raw),
                 "margin": self._format_percent(adj_margin_ratio) if adj_margin_ratio else "--",
@@ -1030,6 +1160,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "price_cy_eps": self._format_3sig(current_price_raw / cy_eps_raw) if current_price_raw and cy_eps_raw else "--",
                 "price_ny_eps": self._format_3sig(current_price_raw / ny_eps_raw) if current_price_raw and ny_eps_raw else "--",
                 "short_float": self._format_percent(info.get("shortPercentOfFloat")) if info.get("shortPercentOfFloat") else "--",
+                "structured_metrics": structured_metrics,
             }
             return tuple(values[key] for key in FETCH_RESULT_FIELDS)
         except Exception as e:
@@ -1227,6 +1358,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "priceCyEps": result["price_cy_eps"],
             "priceNyEps": result["price_ny_eps"],
             "payloadVersion": PAYLOAD_VERSION,
+            "metrics": result.get("structured_metrics") or {},
             "evSource": "derived" if result["valuation_basis"] == "derivedEV" else "finviz" if finviz_enterprise_value_raw and result["valuation_basis"] == "enterpriseValue" else "unavailable",
             "marketCapSource": "yahoo",
             "dataDate": today,
