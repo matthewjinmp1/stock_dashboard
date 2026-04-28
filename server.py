@@ -1,12 +1,13 @@
 import http.server
 import socketserver
-import re
 import json
 import os
-import sqlite3
 import datetime
-import time
 from urllib.parse import urlparse, parse_qs
+
+import cache_store
+import statements
+from formatters import format_3sig, format_money, format_percent, parse_abbrev_to_raw, parse_money_to_raw
 
 try:
     import yfinance as yf
@@ -312,109 +313,27 @@ CASH_FLOW_STATEMENT_TYPES = {
 }
 
 def init_cache_db(conn):
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS ticker_cache (
-            ticker TEXT PRIMARY KEY,
-            data_date TEXT NOT NULL,
-            pulled_at TEXT,
-            payload_version INTEGER,
-            payload_json TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_ticker_cache_data_date ON ticker_cache(data_date)"
-    )
+    return cache_store.init_cache_db(conn)
 
 
 def load_legacy_cache():
-    if os.path.exists(LEGACY_CACHE_FILE):
-        try:
-            with open(LEGACY_CACHE_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
+    return cache_store.load_legacy_cache(LEGACY_CACHE_FILE)
 
 
 def migrate_legacy_cache_if_needed(conn):
-    try:
-        row = conn.execute("SELECT COUNT(*) FROM ticker_cache").fetchone()
-        if row and row[0]:
-            return
-        legacy_cache = load_legacy_cache()
-        if legacy_cache:
-            write_cache_rows(conn, legacy_cache)
-    except Exception:
-        pass
+    return cache_store.migrate_legacy_cache_if_needed(conn, LEGACY_CACHE_FILE)
 
 
 def write_cache_rows(conn, cache_data):
-    now = datetime.datetime.now().isoformat()
-    rows = []
-    for ticker, entry in (cache_data or {}).items():
-        if not isinstance(entry, dict):
-            continue
-        payload = entry.get("data", {})
-        rows.append(
-            (
-                str(ticker).upper(),
-                entry.get("date") or datetime.date.today().isoformat(),
-                entry.get("pulledAt"),
-                payload.get("payloadVersion") if isinstance(payload, dict) else None,
-                json.dumps(payload),
-                now,
-            )
-        )
-
-    conn.executemany(
-        """
-        INSERT OR REPLACE INTO ticker_cache
-            (ticker, data_date, pulled_at, payload_version, payload_json, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        rows,
-    )
+    return cache_store.write_cache_rows(conn, cache_data)
 
 
 def load_cache():
-    try:
-        with sqlite3.connect(CACHE_DB_FILE) as conn:
-            init_cache_db(conn)
-            migrate_legacy_cache_if_needed(conn)
-            cache = {}
-            for ticker, data_date, pulled_at, payload_json in conn.execute(
-                """
-                SELECT ticker, data_date, pulled_at, payload_json
-                FROM ticker_cache
-                ORDER BY ticker
-                """
-            ):
-                try:
-                    payload = json.loads(payload_json)
-                except Exception:
-                    payload = {}
-                cache[ticker] = {
-                    "date": data_date,
-                    "pulledAt": pulled_at,
-                    "data": payload,
-                }
-            return cache
-    except Exception as exc:
-        print(f"Cache DB read failed: {exc}")
-        return {}
+    return cache_store.load_cache(CACHE_DB_FILE, LEGACY_CACHE_FILE)
 
 
 def save_cache(cache_data):
-    try:
-        with sqlite3.connect(CACHE_DB_FILE) as conn:
-            init_cache_db(conn)
-            conn.execute("DELETE FROM ticker_cache")
-            write_cache_rows(conn, cache_data)
-    except Exception as exc:
-        print(f"Cache DB write failed: {exc}")
+    return cache_store.save_cache(CACHE_DB_FILE, cache_data)
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     _yahoo_crumb_cache = None
@@ -676,48 +595,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return current_currency or "USD"
 
     def _format_3sig(self, val):
-        if val in (None, ""):
-            return "--"
-        try:
-            val = float(val)
-        except Exception:
-            return "--"
-        if val == 0:
-            return "0"
-        abs_val = abs(val)
-        # 3 significant figures, but never more than 2 decimal places
-        if abs_val >= 100:
-            res = f"{val:.0f}"
-        elif abs_val >= 10:
-            res = f"{val:.1f}"
-        else:
-            res = f"{val:.2f}"
-        if "." in res:
-            res = res.rstrip("0").rstrip(".")
-        return res
+        return format_3sig(val)
 
     def _format_percent(self, val):
-        if val in (None, ""):
-            return "--"
-        return f"{self._format_3sig(float(val) * 100)}%"
+        return format_percent(val)
 
     def _format_money(self, val):
-        if val in (None, ""):
-            return "--"
-        try:
-            val = float(val)
-        except Exception:
-            return "--"
-        if val == 0:
-            return "0"
-        abs_val = abs(val)
-        if abs_val >= 1e12:
-            return self._format_3sig(val / 1e12) + "T"
-        if abs_val >= 1e9:
-            return self._format_3sig(val / 1e9) + "B"
-        if abs_val >= 1e6:
-            return self._format_3sig(val / 1e6) + "M"
-        return self._format_3sig(val)
+        return format_money(val)
 
     def _raw(self, obj, default=0):
         if isinstance(obj, dict):
@@ -739,11 +623,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return float(obj.get("raw") or 0)
 
     def _parse_money_to_raw(self, value):
-        if value in (None, "", "--"):
-            return 0.0
-        if isinstance(value, (int, float)):
-            return float(value)
-        return self._parse_finviz_abbrev_to_raw(str(value))
+        return parse_money_to_raw(value)
 
     def _empty_fetch_tuple(self, ticker):
         empty_stmt = {"annual": {"periods": [], "rows": []}, "quarterly": {"periods": [], "rows": []}}
@@ -772,214 +652,28 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return (raw_shares * raw_price * quote_fx_rate) if raw_shares and raw_price else 0
 
     def _parse_finviz_abbrev_to_raw(self, value):
-        if not value or value == "--":
-            return 0.0
-        s = value.strip().upper().replace(",", "")
-        mult = 1.0
-        if s.endswith("T"):
-            mult = 1e12
-            s = s[:-1]
-        elif s.endswith("B"):
-            mult = 1e9
-            s = s[:-1]
-        elif s.endswith("M"):
-            mult = 1e6
-            s = s[:-1]
-        elif s.endswith("K"):
-            mult = 1e3
-            s = s[:-1]
-        try:
-            return float(s) * mult
-        except Exception:
-            return 0.0
+        return parse_abbrev_to_raw(value)
 
     def _unwrap_annual(self, statement):
-        """Get the annual sub-object from a nested statement, or the statement itself if flat."""
-        s = statement or {}
-        if "annual" in s:
-            return s["annual"] or {}
-        return s
+        return statements.unwrap_annual(statement)
 
     def _latest_row_raw(self, statement, labels):
-        flat = self._unwrap_annual(statement)
-        labels_lower = {label.lower() for label in labels}
-        for row in flat.get("rows", []):
-            if row.get("label", "").lower() in labels_lower:
-                for value in row.get("values", []):
-                    raw = self._parse_money_to_raw(value)
-                    if raw:
-                        return raw
-        return 0.0
+        return statements.latest_row_raw(statement, labels)
 
     def _statement_latest_value(self, statement, labels):
-        flat = self._unwrap_annual(statement)
-        labels_lower = {label.lower() for label in labels}
-        for row in flat.get("rows", []):
-            if row.get("label", "").lower() in labels_lower:
-                for value in row.get("values", []):
-                    if value not in (None, "", "--"):
-                        return value
-        return "--"
+        return statements.statement_latest_value(statement, labels)
 
     def _camel_to_label(self, key):
-        return re.sub(r"(?<!^)(?=[A-Z])", " ", key).replace("And", "and")
+        return statements.camel_to_label(key)
 
     def _statement_type_name(self, item):
-        meta_type = (item.get("meta", {}) or {}).get("type", [""])
-        return meta_type[0] if meta_type else ""
+        return statements.statement_type_name(item)
 
     def _series_points(self, item, key):
-        points = item.get(key, [])
-        out = []
-        for idx, point in enumerate(points):
-            value = (point.get("reportedValue", {}) or {}).get("raw")
-            if value is None:
-                continue
-            out.append({
-                "date": point.get("asOfDate") or f"idx-{idx:04d}",
-                "raw": float(value),
-            })
-        return out
+        return statements.series_points(item, key)
 
     def build_statement_from_timeseries_results(self, selected_results, type_map, formatter):
-        annual_rows = {}
-        quarterly_rows = {}
-        period_dates = set()
-
-        quarterly_period_dates = set()
-        for item in selected_results or []:
-            type_name = self._statement_type_name(item)
-            prefix = "annual" if type_name.startswith("annual") else "quarterly" if type_name.startswith("quarterly") else ""
-            if not prefix:
-                continue
-            base_key = type_name[len(prefix):]
-            label = type_map.get(base_key)
-            if not label:
-                continue
-            points = self._series_points(item, type_name)
-            if not points:
-                continue
-            if prefix == "annual":
-                if label not in annual_rows:
-                    annual_rows[label] = sorted(points, key=lambda p: p["date"], reverse=True)
-                    for point in points:
-                        if not point["date"].startswith("idx-"):
-                            period_dates.add(point["date"])
-            else:
-                if label not in quarterly_rows:
-                    quarterly_rows[label] = sorted(points, key=lambda p: p["date"], reverse=True)
-                    for point in points:
-                        if not point["date"].startswith("idx-"):
-                            quarterly_period_dates.add(point["date"])
-
-        sorted_periods = sorted(period_dates, reverse=True)[:4]
-        periods = ["TTM"] + sorted_periods
-        rows = []
-
-        # Map base keys to their official "trailing" counterparts if they exist
-        trailing_map = {
-            "TotalRevenue": "trailingTotalRevenue",
-            "CostOfRevenue": "trailingCostOfRevenue",
-            "GrossProfit": "trailingGrossProfit",
-            "OperatingIncome": "trailingOperatingIncome",
-            "NetIncome": "trailingNetIncome",
-            "OperatingCashFlow": "trailingOperatingCashFlow",
-            "FreeCashFlow": "trailingFreeCashFlow",
-            "CapitalExpenditure": "trailingCapitalExpenditure",
-            "Ebitda": "trailingEbitda",
-            "BasicEPS": "trailingBasicEPS",
-            "DilutedEPS": "trailingDilutedEPS",
-        }
-
-        # Pre-process all points into a lookup for fast access
-        ttm_official_lookup = {}
-        for item in selected_results or []:
-            type_name = self._statement_type_name(item)
-            if type_name.startswith("trailing"):
-                points = self._series_points(item, type_name)
-                if points:
-                    # Trailing series usually have a single point
-                    # We map it to the "base" label this trailing series belongs to
-                    for base, trailing in trailing_map.items():
-                        if type_name == trailing:
-                            label = type_map.get(base)
-                            if label:
-                                ttm_official_lookup[label] = points[0]["raw"]
-                            break
-
-        q_sorted_periods = sorted(quarterly_period_dates, reverse=True)[:5]
-        q_periods = q_sorted_periods
-        q_rows_out = []
-
-        seen_labels = set()
-        ordered_labels = []
-        for label in type_map.values():
-            if label in seen_labels:
-                continue
-            if label in annual_rows or label in quarterly_rows:
-                ordered_labels.append(label)
-                seen_labels.add(label)
-        for lbl in list(annual_rows.keys()) + list(quarterly_rows.keys()):
-            if lbl not in seen_labels:
-                ordered_labels.append(lbl)
-                seen_labels.add(lbl)
-
-        for label in ordered_labels:
-            annual_points = annual_rows.get(label, [])
-            annual_by_date = {p["date"]: p["raw"] for p in annual_points}
-            quarter_points = quarterly_rows.get(label, [])
-            quarter_by_date = {p["date"]: p["raw"] for p in quarter_points}
-
-            ttm_raw = ttm_official_lookup.get(label)
-            if ttm_raw is None:
-                if len(quarter_points) >= 4:
-                    latest_four = quarter_points[:4]
-                    ttm_raw = sum(point["raw"] for point in latest_four)
-                elif annual_points:
-                    ttm_raw = annual_points[0]["raw"]
-
-            values = [formatter(ttm_raw) if ttm_raw is not None else "--"]
-            for period in sorted_periods:
-                raw = annual_by_date.get(period)
-                values.append(formatter(raw) if raw is not None else "--")
-            rows.append({"label": label, "values": values})
-
-            q_values = []
-            for period in q_sorted_periods:
-                raw = quarter_by_date.get(period)
-                q_values.append(formatter(raw) if raw is not None else "--")
-            q_rows_out.append({"label": label, "values": q_values})
-
-        def _prune(stmt):
-            periods = stmt.get("periods") or []
-            rows = stmt.get("rows") or []
-            if not periods or not rows:
-                return stmt
-            
-            # Count non-empty values for each column index
-            # Index 0 is TTM/LATEST, we usually keep that.
-            valid_indices = [0]
-            for i in range(1, len(periods)):
-                non_empty_count = sum(1 for row in rows if i < len(row["values"]) and row["values"][i] != "--")
-                # Prune if less than 10% of rows have data
-                if non_empty_count >= 1 and (non_empty_count / len(rows)) >= 0.10:
-                    valid_indices.append(i)
-            
-            if len(valid_indices) == len(periods):
-                return stmt
-                
-            return {
-                "periods": [periods[i] for i in valid_indices],
-                "rows": [{"label": r["label"], "values": [r["values"][i] for i in valid_indices]} for r in rows]
-            }
-
-        res = {
-            "annual": {"periods": periods if rows else [], "rows": rows},
-            "quarterly": {"periods": q_periods if q_rows_out else [], "rows": q_rows_out}
-        }
-        res["annual"] = _prune(res["annual"])
-        res["quarterly"] = _prune(res["quarterly"])
-        return res
+        return statements.build_statement_from_timeseries_results(selected_results, type_map, formatter)
 
     def build_income_statement_from_timeseries_results(self, selected_results, _identity_formatter=None, formatter=None):
         formatter = formatter or self._format_money
@@ -992,255 +686,40 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return self.build_statement_from_timeseries_results(selected_results, CASH_FLOW_STATEMENT_TYPES, formatter or self._format_money)
 
     def _merge_statement_rows(self, primary, secondary):
-        def _merge(p, s):
-            p = p or {"periods": [], "rows": []}
-            s = s or {"periods": [], "rows": []}
-            periods = []
-            for period in p.get("periods", []) + s.get("periods", []):
-                if period not in periods:
-                    periods.append(period)
-
-            labels = []
-            rows_by_label = {}
-            for statement in (p, s):
-                source_periods = statement.get("periods", [])
-                for row in statement.get("rows", []):
-                    label = row.get("label")
-                    if not label:
-                        continue
-                    if label not in labels:
-                        labels.append(label)
-                    target = rows_by_label.setdefault(label, {period: "--" for period in periods})
-                    for idx, value in enumerate(row.get("values", [])):
-                        if idx >= len(source_periods):
-                            continue
-                        p_val = source_periods[idx]
-                        if value and value != "--":
-                            if target[p_val] == "--":
-                                target[p_val] = value
-
-            sorted_rows = []
-            for label in labels:
-                target = rows_by_label[label]
-                sorted_rows.append({"label": label, "values": [target[period] for period in periods]})
-            return {"periods": periods, "rows": sorted_rows}
-
-        if "annual" in (primary or {}) or "quarterly" in (primary or {}) or "annual" in (secondary or {}):
-            return {
-                "annual": _merge((primary or {}).get("annual"), (secondary or {}).get("annual")),
-                "quarterly": _merge((primary or {}).get("quarterly"), (secondary or {}).get("quarterly"))
-            }
-        else:
-            return _merge(primary, secondary)
+        return statements.merge_statement_rows(primary, secondary)
 
     def _ordered_df_index(self, df, order_map):
-        """Return the DataFrame index sorted by order_map key order, with extras at the end."""
-        if order_map is None:
-            return list(df.index)
-        ordered_keys = list(order_map.keys())
-        index_list = list(df.index)
-        # Build a lowercase-no-spaces lookup for matching
-        normalized_index = {lbl.replace(" ", "").lower(): lbl for lbl in index_list}
-        seen = set()
-        result = []
-        for key in ordered_keys:
-            key_norm = key.lower()
-            # Direct match
-            if key in index_list and key not in seen:
-                result.append(key)
-                seen.add(key)
-            elif key_norm in normalized_index:
-                lbl = normalized_index[key_norm]
-                if lbl not in seen:
-                    result.append(lbl)
-                    seen.add(lbl)
-        # Append remaining items not in order_map
-        for idx_label in index_list:
-            if idx_label not in seen:
-                result.append(idx_label)
-        return result
+        return statements.ordered_df_index(df, order_map)
 
     def _resolve_display_label(self, label, order_map):
-        """Get the display label for a DataFrame index label, using order_map if available."""
-        if order_map:
-            # Direct match
-            if label in order_map:
-                return order_map[label]
-            # Match by removing spaces (case-insensitive)
-            label_norm = label.replace(" ", "").lower()
-            for key, display in order_map.items():
-                if key.lower() == label_norm:
-                    return display
-        # Already contains spaces = already human-readable from yfinance, use as-is
-        if " " in str(label):
-            return str(label)
-        # CamelCase → spaced (only for true CamelCase labels)
-        return re.sub(r"(?<!^)(?=[A-Z])", " ", str(label)).replace("And", "and")
+        return statements.resolve_display_label(label, order_map)
 
     def _is_ttm_column(self, col):
-        label = str(col).strip().lower().replace("_", " ")
-        normalized = label.replace(" ", "")
-        return normalized in {"ttm", "trailing", "trailingtwelvemonths"}
+        return statements.is_ttm_column(col)
 
     def _df_history_columns(self, df):
-        return sorted([c for c in df.columns if not self._is_ttm_column(c)], reverse=True)
+        return statements.df_history_columns(df)
 
     def _df_official_ttm_value(self, annual_df, row_labels):
-        """Get Yahoo's reported TTM value from an annual yfinance DataFrame when present."""
-        if annual_df is None or annual_df.empty:
-            return None
-        import pandas as pd
-        ttm_cols = [c for c in annual_df.columns if self._is_ttm_column(c)]
-        if not ttm_cols:
-            return None
-        for label in row_labels:
-            if label in annual_df.index:
-                for col in ttm_cols:
-                    val = annual_df.loc[label, col]
-                    if pd.notna(val):
-                        return float(val)
-        return None
+        return statements.df_official_ttm_value(annual_df, row_labels)
 
     def _df_with_ttm_column(self, annual_df, ttm_df):
-        """Attach yfinance's TTM statement frame to the annual frame under a stable TTM column."""
-        if ttm_df is None or ttm_df.empty:
-            return annual_df
-        import pandas as pd
-        if annual_df is None or annual_df.empty:
-            result = pd.DataFrame(index=ttm_df.index)
-        else:
-            result = annual_df.copy()
-
-        ttm_cols = sorted(ttm_df.columns, reverse=True)
-        if not ttm_cols:
-            return result
-        if "TTM" in result.columns:
-            result = result.drop(columns=["TTM"])
-        result["TTM"] = ttm_df[ttm_cols[0]]
-        return result
+        return statements.df_with_ttm_column(annual_df, ttm_df)
 
     def _can_sum_ttm_label(self, label):
-        """Return False for per-share/count/rate rows where summing quarters is invalid."""
-        normalized = str(label).replace(" ", "").lower()
-        non_additive_tokens = (
-            "averageshares",
-            "shares",
-            "eps",
-            "perShare",
-            "perbasicshare",
-            "perdilutedshare",
-            "rate",
-            "margin",
-        )
-        return not any(token.lower() in normalized for token in non_additive_tokens)
+        return statements.can_sum_ttm_label(label)
 
     def _df_to_statement(self, df, formatter=None, ttm_label="TTM", order_map=None, quarterly_df=None):
-        """Convert a pandas DataFrame (rows=line items, columns=dates) to our statement format."""
-        formatter = formatter or self._format_money
-        if df is None or df.empty:
-            return {"periods": [], "rows": []}
-        import pandas as pd
-        cols = self._df_history_columns(df)
-        ttm_cols = [c for c in df.columns if self._is_ttm_column(c)]
-        if not cols and not ttm_cols:
-            return {"periods": [], "rows": []}
-        # Determine active rows: most recent column has data
-        ordered_index = self._ordered_df_index(df, order_map)
-        anchor_cols = (cols[:1] + ttm_cols[:1])
-        active_labels = [lbl for lbl in ordered_index if any(pd.notna(df.loc[lbl, c]) for c in anchor_cols)]
-        if not active_labels:
-            return {"periods": [], "rows": []}
-        # Filter columns: keep only those where active rows have data
-        if cols:
-            active_df = df.loc[active_labels]
-            cols = [c for c in cols if active_df[c].notna().any()]
-        if not cols and not ttm_cols:
-            return {"periods": [], "rows": []}
-        cols = cols[:4]  # Limit to 4 historical years
-        periods = [ttm_label] + [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
-        rows = []
-        for label in active_labels:
-            raw_values = df.loc[label, cols].tolist()
-            # Prefer Yahoo's official annual TTM, then fall back to summing quarters.
-            ttm_val = self._df_official_ttm_value(df, [label])
-            if quarterly_df is not None:
-                ttm_val = ttm_val if ttm_val is not None else self._df_ttm_value(quarterly_df, df, [label])
-            
-            if ttm_val is None and raw_values:
-                ttm_val = raw_values[0]
-                
-            formatted = [formatter(ttm_val) if pd.notna(ttm_val) else "--"]
-            for v in raw_values:
-                formatted.append(formatter(v) if pd.notna(v) else "--")
-            display_label = self._resolve_display_label(label, order_map)
-            rows.append({"label": display_label, "values": formatted})
-        return {"periods": periods, "rows": rows}
+        return statements.df_to_statement(df, formatter or self._format_money, ttm_label, order_map, quarterly_df)
 
     def _df_to_quarterly_statement(self, df, formatter=None, order_map=None):
-        """Convert a quarterly DataFrame to our statement format with LATEST anchor."""
-        formatter = formatter or self._format_money
-        if df is None or df.empty:
-            return {"periods": [], "rows": []}
-        import pandas as pd
-        all_cols = sorted(df.columns, reverse=True)
-        if not all_cols:
-            return {"periods": [], "rows": []}
-        # Determine active rows: most recent column has data
-        ordered_index = self._ordered_df_index(df, order_map)
-        active_labels = [lbl for lbl in ordered_index if pd.notna(df.loc[lbl, all_cols[0]])]
-        if not active_labels:
-            return {"periods": [], "rows": []}
-        # Filter columns: keep only those where active rows have data
-        active_df = df.loc[active_labels]
-        cols = [c for c in all_cols if active_df[c].notna().any()]
-        if not cols:
-            return {"periods": [], "rows": []}
-        cols = cols[:5]  # Limit to 5 quarters
-        periods = [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c) for c in cols]
-        rows = []
-        for label in active_labels:
-            raw_values = df.loc[label, cols].tolist()
-            formatted = []
-            for v in raw_values:
-                formatted.append(formatter(v) if pd.notna(v) else "--")
-            display_label = self._resolve_display_label(label, order_map)
-            rows.append({"label": display_label, "values": formatted})
-        return {"periods": periods, "rows": rows}
+        return statements.df_to_quarterly_statement(df, formatter or self._format_money, order_map)
 
     def _df_raw_value(self, df, row_labels, col_index=0):
-        """Get a raw numeric value from a DataFrame by row label and column index."""
-        if df is None or df.empty:
-            return 0.0
-        import pandas as pd
-        for label in row_labels:
-            if label in df.index:
-                cols = self._df_history_columns(df)
-                if col_index < len(cols):
-                    val = df.loc[label, cols[col_index]]
-                    if pd.notna(val):
-                        return float(val)
-        return 0.0
+        return statements.df_raw_value(df, row_labels, col_index)
 
     def _df_ttm_value(self, quarterly_df, annual_df, row_labels, absolute=False):
-        """Use reported annual TTM, then calculate from last 4 quarters, then latest annual."""
-        import pandas as pd
-        official_ttm = self._df_official_ttm_value(annual_df, row_labels)
-        if official_ttm is not None:
-            return abs(official_ttm) if absolute else official_ttm
-        if quarterly_df is not None and not quarterly_df.empty:
-            cols = self._df_history_columns(quarterly_df)
-            for label in row_labels:
-                if label in quarterly_df.index:
-                    if not self._can_sum_ttm_label(label):
-                        continue
-                    vals = [quarterly_df.loc[label, c] for c in cols[:4]]
-                    valid = [float(v) for v in vals if pd.notna(v)]
-                    if len(valid) >= 4:
-                        total = sum(valid)
-                        return abs(total) if absolute else total
-        # Fallback to latest annual
-        val = self._df_raw_value(annual_df, row_labels, 0)
-        return abs(val) if absolute else val
+        return statements.df_ttm_value(quarterly_df, annual_df, row_labels, absolute)
 
     def fetch_yfinance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics=None):
         """Fetch all data using yfinance package. Returns the same tuple as fetch_yahoo_finance_data."""
