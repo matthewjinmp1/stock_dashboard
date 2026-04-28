@@ -154,6 +154,76 @@ def fake_balance_statement():
     return {"annual": s, "quarterly": s}
 
 
+def make_fetch_result(**overrides):
+    values = {
+        "income": "143B",
+        "margin": "46.7%",
+        "gross_margin": "68.6%",
+        "ev_cy_ebit": "20.4",
+        "ev_ny_ebit": "17.7",
+        "adj_income": "143B",
+        "capex": "83.1B",
+        "da": "39.1B",
+        "ev": "3.12T",
+        "ev_adj_ebit": "21.9",
+        "cy_growth": "16.4%",
+        "ny_growth": "15.6%",
+        "gp_3y_growth": "12.7%",
+        "gp_3y_start": "136B",
+        "gp_3y_end": "194B",
+        "gp_3y_label": "3Y Annual GP Growth",
+        "rnd_adj_income": "23.6%",
+        "cy_adj_inc": "153B",
+        "ny_adj_inc": "177B",
+        "market_cap": "3.16T",
+        "net_cash": "34B",
+        "derived_enterprise_value": "3.12T",
+        "revenue": "305B",
+        "operating_margin": "46.7%",
+        "da_minus_capex": "0",
+        "cy_revenue": "328B",
+        "ny_revenue": "379B",
+        "gross_ppe": "323B",
+        "adj_ebit_gross_ppe": "44.1%",
+        "capex_adj_income": "30.8%",
+        "investment_capex": "44B",
+        "roc": "52.2%",
+        "net_working_capital": "43.1B",
+        "net_fixed_assets": "230B",
+        "receivables": "69.9B",
+        "inventory": "938M",
+        "accounts_payable": "27.7B",
+        "financial_currency": "USD",
+        "usd_fx_rate": 1.0,
+        "company_name": "Microsoft Corporation",
+        "income_statement": fake_statement("Income"),
+        "balance_statement": fake_statement("Balance"),
+        "cash_flow_statement": fake_statement("Cash"),
+        "current_price": "425",
+        "target_mean_price": "573",
+        "target_low_price": "392",
+        "target_high_price": "730",
+        "target_move": "34.8%",
+        "recommendation_mean": "1.29",
+        "recommendation_key": "strong_buy",
+        "analyst_recommendations": {"strongBuy": 12, "buy": 45, "hold": 1, "sell": 0, "strongSell": 0},
+        "valuation_basis": "derivedEV",
+        "valuation_prefix": "EV",
+        "valuation_numerator_label": "Derived Enterprise Value",
+        "current_year_eps": "16.7",
+        "next_year_eps": "19",
+        "year_ago_eps": "13.6",
+        "current_year_eps_growth": "22.3%",
+        "next_year_eps_growth": "13.7%",
+        "price_current_eps": "31.1",
+        "price_cy_eps": "25.5",
+        "price_ny_eps": "22.4",
+        "short_float": "1.12%",
+    }
+    values.update(overrides)
+    return tuple(values[key] for key in FETCH_RESULT_FIELDS)
+
+
 class CacheDatabaseTests(unittest.TestCase):
     def test_cache_round_trips_through_sqlite(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -294,6 +364,79 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(mapped["company_name"], "FAIL")
 
 class HandleApiRequestContractTests(unittest.TestCase):
+    REQUIRED_PUBLIC_PAYLOAD_KEYS = {
+        "ticker",
+        "shortFloat",
+        "income",
+        "margin",
+        "grossMargin",
+        "ev_cy_ebit",
+        "ev_ny_ebit",
+        "adj_income",
+        "capex",
+        "da",
+        "ev",
+        "ev_adj_ebit",
+        "cy_growth",
+        "ny_growth",
+        "gp_3y_growth",
+        "gp_3y_start",
+        "gp_3y_end",
+        "gp_3y_label",
+        "rndAdjIncome",
+        "cy_adj_inc",
+        "ny_adj_inc",
+        "marketCap",
+        "netCash",
+        "derivedEnterpriseValue",
+        "revenue",
+        "operating_margin",
+        "da_minus_capex",
+        "cy_revenue",
+        "ny_revenue",
+        "grossPpe",
+        "adjEbitGrossPpe",
+        "capexAdjIncome",
+        "investmentCapex",
+        "roc",
+        "netWorkingCapital",
+        "netFixedAssets",
+        "receivables",
+        "inventory",
+        "accountsPayable",
+        "financialCurrency",
+        "usdFxRate",
+        "companyName",
+        "incomeStatement",
+        "balanceStatement",
+        "cashFlowStatement",
+        "currentPrice",
+        "targetMeanPrice",
+        "targetLowPrice",
+        "targetHighPrice",
+        "targetMove",
+        "recommendationMean",
+        "recommendationKey",
+        "analystRecommendations",
+        "valuationBasis",
+        "valuationPrefix",
+        "valuationNumeratorLabel",
+        "currentYearEps",
+        "nextYearEps",
+        "yearAgoEps",
+        "currentYearEpsGrowth",
+        "nextYearEpsGrowth",
+        "priceCurrentEps",
+        "priceCyEps",
+        "priceNyEps",
+        "payloadVersion",
+        "evSource",
+        "marketCapSource",
+        "dataDate",
+        "pulledAt",
+        "fetchCount",
+    }
+
     def test_test_ticker_returns_complete_fixture_without_external_fetches(self):
         handler = make_handler()
         captured = {}
@@ -332,6 +475,89 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["balanceStatement"]["annual"]["rows"][2]["label"], "Cash, Equivalents & Short Term Investments")
         self.assertEqual(payload["cashFlowStatement"]["annual"]["rows"][1]["label"], "Capital Expenditures")
         mock_yahoo.assert_not_called()
+
+    def test_test_ticker_fixture_has_frontend_contract_keys(self):
+        handler = make_handler()
+        captured = {}
+
+        def fake_send_response(status, payload):
+            captured["status"] = status
+            captured["payload"] = payload
+
+        with mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
+            handler.handle_api_request("TEST", refresh=True)
+
+        self.assertEqual(captured["status"], 200)
+        self.assertTrue(self.REQUIRED_PUBLIC_PAYLOAD_KEYS.issubset(captured["payload"].keys()))
+
+    def test_fetch_result_maps_to_public_payload_and_saved_cache(self):
+        handler = make_handler()
+        captured = {}
+        saved = {}
+
+        def fake_send_response(status, payload):
+            captured["status"] = status
+            captured["payload"] = payload
+
+        def fake_save_cache(cache):
+            saved.update(cache)
+
+        with mock.patch("server.load_cache", return_value={}), \
+             mock.patch("server.save_cache", side_effect=fake_save_cache), \
+             mock.patch.object(handler, "fetch_yahoo_finance_data", return_value=make_fetch_result()), \
+             mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
+            handler.handle_api_request("MSFT", refresh=True)
+
+        payload = captured["payload"]
+        self.assertEqual(captured["status"], 200)
+        self.assertTrue(self.REQUIRED_PUBLIC_PAYLOAD_KEYS.issubset(payload.keys()))
+        self.assertEqual(payload["ticker"], "MSFT")
+        self.assertEqual(payload["grossMargin"], "68.6%")
+        self.assertEqual(payload["rndAdjIncome"], "23.6%")
+        self.assertEqual(payload["marketCap"], "3.16T")
+        self.assertEqual(payload["netCash"], "34B")
+        self.assertEqual(payload["derivedEnterpriseValue"], "3.12T")
+        self.assertEqual(payload["grossPpe"], "323B")
+        self.assertEqual(payload["netWorkingCapital"], "43.1B")
+        self.assertEqual(payload["companyName"], "Microsoft Corporation")
+        self.assertEqual(payload["valuationBasis"], "derivedEV")
+        self.assertEqual(payload["valuationPrefix"], "EV")
+        self.assertEqual(payload["valuationNumeratorLabel"], "Derived Enterprise Value")
+        self.assertEqual(payload["evSource"], "derived")
+        self.assertEqual(payload["marketCapSource"], "yahoo")
+        self.assertEqual(payload["payloadVersion"], server.PAYLOAD_VERSION)
+        self.assertEqual(saved["MSFT"]["data"], payload)
+
+    def test_same_day_cache_with_old_payload_version_is_refetched(self):
+        handler = make_handler()
+        captured = {}
+        today = server.datetime.date.today().isoformat()
+        cached_payload = {
+            "ticker": "MSFT",
+            "companyName": "Old Microsoft",
+            "marketCap": "1T",
+            "payloadVersion": server.PAYLOAD_VERSION - 1,
+            "incomeStatement": fake_statement("Income"),
+            "balanceStatement": fake_statement("Balance"),
+            "cashFlowStatement": fake_statement("Cash"),
+        }
+
+        def fake_send_response(status, payload):
+            captured["status"] = status
+            captured["payload"] = payload
+
+        with mock.patch("server.load_cache", return_value={
+            "MSFT": {"date": today, "pulledAt": "2026-04-20T10:00:00", "data": cached_payload}
+        }), \
+             mock.patch("server.save_cache"), \
+             mock.patch.object(handler, "fetch_yahoo_finance_data", return_value=make_fetch_result()) as mock_fetch, \
+             mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
+            handler.handle_api_request("MSFT", refresh=False)
+
+        self.assertEqual(captured["status"], 200)
+        self.assertEqual(captured["payload"]["companyName"], "Microsoft Corporation")
+        self.assertEqual(captured["payload"]["payloadVersion"], server.PAYLOAD_VERSION)
+        mock_fetch.assert_called_once()
 
     def test_refresh_failure_preserves_existing_cached_payload(self):
         handler = make_handler()
