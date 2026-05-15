@@ -242,6 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const cyGrowth = assumptions.cy_growth ?? parsePercentValue(metricEntry(data, 'cy_growth'));
         const nyGrowth = assumptions.ny_growth ?? parsePercentValue(metricEntry(data, 'ny_growth'));
         const revenueRaw = parseMoney(metricEntry(data, 'revenue'));
+        const cyRevenueBaseRaw = lastYearRevenueRaw(data) || revenueRaw;
         const valuationRaw = parseMoney(metricEntry(data, 'ev'));
         const grossPpeRaw = parseMoney(metricEntry(data, 'grossPpe'));
         const investmentCapexRaw = parseMoney(metricEntry(data, 'investmentCapex'));
@@ -261,8 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (assumptions.ny_growth !== undefined) setMetric(data, 'ny_growth', nyGrowth, formatPercentDecimal(nyGrowth), 'percent');
 
         const effectiveAdjRaw = revenueRaw * margin;
-        const cyRevenueRaw = assumptions.cy_growth !== undefined && revenueRaw
-            ? revenueRaw * (1 + cyGrowth)
+        const cyRevenueRaw = assumptions.cy_growth !== undefined && cyRevenueBaseRaw
+            ? cyRevenueBaseRaw * (1 + cyGrowth)
             : parseMoney(metricEntry(data, 'cy_revenue'));
         const nyRevenueRaw = assumptions.ny_growth !== undefined && cyRevenueRaw
             ? cyRevenueRaw * (1 + nyGrowth)
@@ -907,6 +908,33 @@ document.addEventListener('DOMContentLoaded', () => {
         return '--';
     }
 
+    function latestAnnualStatementValue(statement, labels) {
+        const labelSet = new Set(labels.map((label) => label.toLowerCase()));
+        const rows = statement?.rows || [];
+        const periods = statement?.periods || [];
+        for (const row of rows) {
+            if (!labelSet.has(String(row.label || '').toLowerCase())) continue;
+            const values = row.values || [];
+            const annualIndex = periods.findIndex((period, idx) => !isSummaryPeriod(period) && values[idx] && values[idx] !== '--');
+            if (annualIndex >= 0) return values[annualIndex];
+            for (const value of values) {
+                if (value && value !== '--') return value;
+            }
+        }
+        return '--';
+    }
+
+    function lastYearRevenueRaw(data) {
+        const annualRevenue = latestAnnualStatementValue((data.incomeStatement || {}).annual, ['Total Revenue']);
+        const annualRaw = parseMoney(annualRevenue);
+        if (annualRaw) return annualRaw;
+
+        const cyRevenueRaw = parseMoney(metricEntry(data, 'cy_revenue'));
+        const cyGrowth = parsePercentValue(metricEntry(data, 'cy_growth'));
+        if (cyRevenueRaw && cyGrowth > -1) return cyRevenueRaw / (1 + cyGrowth);
+        return 0;
+    }
+
     function compactFormulaRows(rows) {
         return rows.filter(([label, value]) => label && value !== undefined && value !== null);
     }
@@ -930,6 +958,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const formulaValue = (formula, rows) => compactFormulaRows([['Formula', formula], ...rows]);
         const valuationLabel = data.valuationNumeratorLabel || 'Valuation Numerator';
         const gpLabel = '3Y Growth';
+        const cyRevenueBase = lastYearRevenueRaw(data);
+        const cyRevenueBaseDisplay = cyRevenueBase ? formatMoneyFront(cyRevenueBase) : '--';
         return {
             ev_adj: {
                 title: `${data.valuationPrefix || 'EV'} / Adj Op Inc`,
@@ -954,9 +984,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 divisor: val('cy_adj_inc'),
                 resultLabel: `${data.valuationPrefix || 'EV'} / CY Op Inc`,
                 result: val('ev_cy_ebit'),
-                rows: formulaValue(`${valuationLabel} / (Revenue x (1 + CY Growth) x Adj Op Inc Margin)`, [
+                rows: formulaValue(`${valuationLabel} / (Last Year Revenue x (1 + CY Growth) x Adj Op Inc Margin)`, [
                     [valuationLabel, val('ev')],
-                    ['Revenue', val('revenue')],
+                    ['Last Year Revenue', cyRevenueBaseDisplay],
                     ['CY Growth', val('cy_growth')],
                     ['CY Revenue', val('cy_revenue')],
                     ['Adj Op Inc Margin', val('margin')],

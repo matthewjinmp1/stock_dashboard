@@ -19,7 +19,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 11
+PAYLOAD_VERSION = 12
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -878,6 +878,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             income_statement = self._add_adjusted_operating_income(income_statement, cash_flow_statement)
 
             # Core metrics from DataFrames (TTM using quarterly sums) — all converted to USD
+            last_year_revenue_raw = self._df_raw_value(annual_income, ["Total Revenue", "TotalRevenue"]) * financial_fx_rate
             revenue_raw = (self._df_ttm_value(quarterly_income, annual_income, ["Total Revenue", "TotalRevenue"]) or info.get("totalRevenue", 0) or 0) * financial_fx_rate
             operating_income_raw = (self._df_ttm_value(quarterly_income, annual_income, ["Operating Income", "OperatingIncome"]) or info.get("operatingIncome", 0) or 0) * financial_fx_rate
             gross_profit_raw = (self._df_ttm_value(quarterly_income, annual_income, ["Gross Profit", "GrossProfit"]) or info.get("grossProfits", 0) or 0) * financial_fx_rate
@@ -950,7 +951,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # Revenue estimates from info (native currency — will be converted to USD below)
             cy_revenue_raw = info.get("revenueEstimates", {}).get("avg", 0) if isinstance(info.get("revenueEstimates"), dict) else 0
             ny_revenue_raw = 0
-            cy_growth_raw = info.get("revenueGrowth", None)
+            cy_growth_raw = None
             ny_growth_raw = None
 
             # Analyst estimates from yfinance only.
@@ -981,6 +982,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # Convert revenue estimates and 3Y GP values from native currency to USD
             cy_revenue_raw = (cy_revenue_raw or 0) * financial_fx_rate
             ny_revenue_raw = (ny_revenue_raw or 0) * financial_fx_rate
+            if cy_growth_raw is None and cy_revenue_raw and last_year_revenue_raw:
+                cy_growth_raw = (cy_revenue_raw / abs(last_year_revenue_raw)) - 1
             gp_3y_start_raw = (gp_3y_start_raw or 0) * financial_fx_rate
             gp_3y_end_raw = (gp_3y_end_raw or 0) * financial_fx_rate
 
