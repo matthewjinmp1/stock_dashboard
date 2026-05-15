@@ -462,6 +462,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ],
             },
         }
+        income_statement = self._add_adjusted_operating_income(income_statement, cash_flow_statement)
         revenue_raw = 100e9
         gross_profit_raw = 60e9
         operating_income_raw = 30e9
@@ -791,6 +792,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _df_ttm_value(self, quarterly_df, annual_df, row_labels, absolute=False):
         return statements.df_ttm_value(quarterly_df, annual_df, row_labels, absolute)
 
+    def _add_adjusted_operating_income(self, income_statement, cash_flow_statement, formatter=None):
+        return statements.add_adjusted_operating_income(income_statement, cash_flow_statement, formatter or self._format_money)
+
     def fetch_yfinance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics=None):
         """Fetch all data using yfinance package. Returns the same tuple as fetch_yahoo_finance_data."""
         import pandas as pd
@@ -871,6 +875,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "annual": self._df_to_statement(annual_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES, quarterly_df=quarterly_cashflow),
                 "quarterly": self._df_to_quarterly_statement(quarterly_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES),
             }
+            income_statement = self._add_adjusted_operating_income(income_statement, cash_flow_statement)
 
             # Core metrics from DataFrames (TTM using quarterly sums) — all converted to USD
             revenue_raw = (self._df_ttm_value(quarterly_income, annual_income, ["Total Revenue", "TotalRevenue"]) or info.get("totalRevenue", 0) or 0) * financial_fx_rate

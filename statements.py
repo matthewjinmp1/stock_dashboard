@@ -230,6 +230,74 @@ def merge_statement_rows(primary, secondary):
     return _merge(primary, secondary)
 
 
+def _row_by_label(statement, labels):
+    labels_lower = {label.lower() for label in labels}
+    for row in (statement or {}).get("rows", []):
+        if str(row.get("label", "")).lower() in labels_lower:
+            return row
+    return None
+
+
+def _period_value(statement, row, period):
+    periods = (statement or {}).get("periods") or []
+    if not row or period not in periods:
+        return None
+    idx = periods.index(period)
+    values = row.get("values") or []
+    if idx >= len(values) or values[idx] in (None, "", "--"):
+        return None
+    return parse_money_to_raw(values[idx])
+
+
+def add_adjusted_operating_income(income_statement, cash_flow_statement, formatter=None):
+    formatter = formatter or format_money
+    income_statement = income_statement or {}
+    cash_flow_statement = cash_flow_statement or {}
+
+    for period_key in ("annual", "quarterly"):
+        income = income_statement.get(period_key)
+        cash_flow = cash_flow_statement.get(period_key)
+        if not isinstance(income, dict) or not isinstance(cash_flow, dict):
+            continue
+        rows = income.get("rows") or []
+        if any(row.get("label") == "Adjusted Operating Income" for row in rows):
+            continue
+
+        operating_row = _row_by_label(income, ["Operating Income"])
+        da_row = _row_by_label(cash_flow, [
+            "Depreciation & Amortization",
+            "Depreciation And Amortization",
+            "Depreciation, Amortization & Depletion",
+            "Reconciled Depreciation",
+            "Depreciation",
+        ])
+        capex_row = _row_by_label(cash_flow, [
+            "Capital Expenditures",
+            "Capital Expenditure",
+            "Purchase Of PP&E",
+            "Purchase Of PPE",
+        ])
+        if not operating_row:
+            continue
+
+        values = []
+        for period in income.get("periods") or []:
+            operating_raw = _period_value(income, operating_row, period)
+            if operating_raw is None:
+                values.append("--")
+                continue
+            da_raw = _period_value(cash_flow, da_row, period) or 0
+            capex_raw = _period_value(cash_flow, capex_row, period) or 0
+            adjusted_raw = operating_raw + max(da_raw - abs(capex_raw), 0)
+            values.append(formatter(adjusted_raw))
+
+        insert_idx = rows.index(operating_row) + 1
+        rows.insert(insert_idx, {"label": "Adjusted Operating Income", "values": values})
+        income["rows"] = rows
+
+    return income_statement
+
+
 def ordered_df_index(df, order_map):
     if order_map is None:
         return list(df.index)

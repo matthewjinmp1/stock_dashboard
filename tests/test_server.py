@@ -957,6 +957,49 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(revenue_row["values"], ["305B", "282B", "245B", "212B", "198B"])
         self.assertEqual(income_row["values"], ["143B", "129B", "109B", "88.5B", "83.4B"])
 
+    def test_add_adjusted_operating_income_uses_metric_formula_by_period(self):
+        income = {
+            "annual": {
+                "periods": ["TTM", "2025-12-31"],
+                "rows": [
+                    {"label": "Total Revenue", "values": ["120B", "100B"]},
+                    {"label": "Operating Income", "values": ["30B", "20B"]},
+                    {"label": "Net Income", "values": ["18B", "12B"]},
+                ],
+            },
+            "quarterly": {
+                "periods": ["2026-03-31"],
+                "rows": [{"label": "Operating Income", "values": ["5B"]}],
+            },
+        }
+        cash_flow = {
+            "annual": {
+                "periods": ["TTM", "2025-12-31"],
+                "rows": [
+                    {"label": "Depreciation & Amortization", "values": ["12B", "4B"]},
+                    {"label": "Capital Expenditures", "values": ["-7B", "-6B"]},
+                ],
+            },
+            "quarterly": {
+                "periods": ["2026-03-31"],
+                "rows": [
+                    {"label": "Depreciation & Amortization", "values": ["2B"]},
+                    {"label": "Capital Expenditures", "values": ["-1B"]},
+                ],
+            },
+        }
+
+        enriched = self.handler._add_adjusted_operating_income(income, cash_flow)
+
+        annual_rows = enriched["annual"]["rows"]
+        annual_labels = [row["label"] for row in annual_rows]
+        adjusted_annual = next(row for row in annual_rows if row["label"] == "Adjusted Operating Income")
+        adjusted_quarterly = enriched["quarterly"]["rows"][1]
+
+        self.assertEqual(annual_labels[annual_labels.index("Operating Income") + 1], "Adjusted Operating Income")
+        self.assertEqual(adjusted_annual["values"], ["35B", "20B"])
+        self.assertEqual(adjusted_quarterly, {"label": "Adjusted Operating Income", "values": ["6B"]})
+
     def test_df_statement_prefers_official_annual_ttm_over_quarter_sum(self):
         import pandas as pd
 
