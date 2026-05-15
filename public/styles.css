@@ -237,6 +237,17 @@ button:active {
     letter-spacing: 2px;
 }
 
+.result-identity {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.result-identity h2 {
+    margin: 0;
+}
+
 .badge {
     background: rgba(99, 102, 241, 0.15);
     color: #818cf8;
@@ -281,7 +292,7 @@ button:active {
     font-size: 0.95rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    margin-top: 0.35rem;
+    margin-top: 0;
 }
 
 .fetch-info,

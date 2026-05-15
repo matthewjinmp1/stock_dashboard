@@ -376,7 +376,7 @@ document.addEventListener('DOMContentLoaded', () => {
             $('result-ticker').textContent = data.ticker || ticker;
             const title = $('result-ticker').parentElement;
             if (title && !title.querySelector('.company-name')) {
-                title.insertAdjacentHTML('beforeend', '<div class="company-name"></div>');
+                $('result-ticker').insertAdjacentHTML('afterend', '<div class="company-name"></div>');
             }
             const company = title ? title.querySelector('.company-name') : null;
             if (company) company.textContent = data.companyName || '--';
