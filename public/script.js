@@ -666,21 +666,23 @@ document.addEventListener('DOMContentLoaded', () => {
         ];
         const activeTab = tabs.find(t => t[0] === state.statementTab) || tabs[0];
         panel.innerHTML = `<div class="statement-header">
-            <div>
-                <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 0.5rem;">
+            <div class="statement-heading-row">
+                <div>
                     <h2>${state.statementTab === 'starred' ? 'Starred Statements' : activeTab[1]}</h2>
-                    <div class="statement-actions" style="margin-left: 1rem;">
+                    <p>${state.periodicity === 'annual' ? 'Annual' : 'Quarterly'} figures shown in USD-normalized values</p>
+                </div>
+                <div class="statement-period-actions">
                         <button class="mini-btn ${state.periodicity === 'annual' ? 'on blue' : ''}" data-periodicity="annual">Annual</button>
                         <button class="mini-btn ${state.periodicity === 'quarterly' ? 'on blue' : ''}" data-periodicity="quarterly">Quarterly</button>
-                    </div>
                 </div>
-                <p>${state.periodicity === 'annual' ? 'Annual' : 'Quarterly'} figures shown in USD-normalized values</p>
+            </div>
+            <div class="statement-toolbar">
                 <label class="statement-search">
                     <span class="sr-only">Search statement line items</span>
                     <input type="search" value="${escapeAttr(state.statementSearch)}" placeholder="Search line items" data-statement-search autocomplete="off">
                 </label>
+                <div class="statement-tabs">${tabs.map(([key, label]) => `<button class="tab-btn ${state.statementTab === key ? 'active' : ''}" data-statement-tab="${key}">${label}</button>`).join('')}</div>
             </div>
-            <div class="statement-tabs">${tabs.map(([key, label]) => `<button class="tab-btn ${state.statementTab === key ? 'active' : ''}" data-statement-tab="${key}">${label}</button>`).join('')}</div>
         </div>
         <div id="statement-results">${renderStatementResults(data)}</div>`;
     }
