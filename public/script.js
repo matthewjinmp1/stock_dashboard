@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
         assumptions: JSON.parse(localStorage.getItem('stock_assumptions') || '{}'),
         statementTab: localStorage.getItem('stock_statement_tab') || 'income',
         periodicity: localStorage.getItem('stock_periodicity') || 'annual',
+        statementSearch: localStorage.getItem('stock_statement_search') || '',
         starredAccounts: JSON.parse(localStorage.getItem('stock_starred_accounts') || '{}'),
         statementToggles: JSON.parse(localStorage.getItem('stock_statement_toggles') || '{}'),
         groups: [],
@@ -568,6 +569,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    document.body.addEventListener('input', (event) => {
+        const statementSearch = event.target.closest('[data-statement-search]');
+        if (!statementSearch) return;
+        state.statementSearch = statementSearch.value;
+        localStorage.setItem('stock_statement_search', state.statementSearch);
+        const results = $('statement-results');
+        if (results) results.innerHTML = renderStatementResults(state.latest);
+    });
+
     function bindListForm(formId, inputId, listName, storageKey) {
         const form = $(formId);
         if (!form) return;
@@ -643,10 +653,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
                 <p>${state.periodicity === 'annual' ? 'Annual' : 'Quarterly'} figures shown in USD-normalized values</p>
+                <label class="statement-search">
+                    <span class="sr-only">Search statement line items</span>
+                    <input type="search" value="${escapeAttr(state.statementSearch)}" placeholder="Search line items" data-statement-search autocomplete="off">
+                </label>
             </div>
             <div class="statement-tabs">${tabs.map(([key, label]) => `<button class="tab-btn ${state.statementTab === key ? 'active' : ''}" data-statement-tab="${key}">${label}</button>`).join('')}</div>
         </div>
-        ${state.statementTab === 'starred' ? renderStarredStatementTable(data) : renderStatementTable(statementForTab(data, state.statementTab), state.statementTab)}`;
+        <div id="statement-results">${renderStatementResults(data)}</div>`;
+    }
+
+    function renderStatementResults(data) {
+        if (!data) return '';
+        return state.statementTab === 'starred'
+            ? renderStarredStatementTable(data)
+            : renderStatementTable(statementForTab(data, state.statementTab), state.statementTab);
     }
 
     function statementForTab(data, tab) {
@@ -692,14 +713,29 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderStatementTable(statement, statementKey, hideHeader = false) {
         statement = statementForDisplay(statement);
         const periods = statement.periods || [];
-        const rows = statement.rows || [];
-        if (!rows.length) return '<p class="empty-note">No statement data available.</p>';
+        const allRows = statement.rows || [];
+        const rows = filterStatementRows(allRows);
+        if (!rows.length) {
+            return allRows.length && statementSearchTerm()
+                ? '<p class="empty-note">No matching line items.</p>'
+                : '<p class="empty-note">No statement data available.</p>';
+        }
         return `<div class="statement-table-wrapper">
             <table class="statement-table">
                 ${hideHeader ? '' : `<thead><tr><th>Actions</th><th>Line Item</th>${periods.map(p => `<th>${p}</th>`).join('')}</tr></thead>`}
                 <tbody>${rows.map(row => renderStatementRow(row, periods, statementKey, statement)).join('')}</tbody>
             </table>
         </div>`;
+    }
+
+    function statementSearchTerm() {
+        return String(state.statementSearch || '').trim().toLowerCase();
+    }
+
+    function filterStatementRows(rows) {
+        const term = statementSearchTerm();
+        if (!term) return rows;
+        return rows.filter((row) => String(row.label || '').toLowerCase().includes(term));
     }
 
     function statementForDisplay(statement) {
