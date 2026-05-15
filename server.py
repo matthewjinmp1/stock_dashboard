@@ -19,7 +19,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 10
+PAYLOAD_VERSION = 11
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -1244,6 +1244,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         return True
             return False
 
+        def cache_has_missing_adjusted_operating_income(payload):
+            statement = payload.get("incomeStatement") or {}
+            flat = self._unwrap_annual(statement)
+            return not any(
+                row.get("label") == "Adjusted Operating Income"
+                for row in flat.get("rows", [])
+            )
+
         def cache_is_usable(payload):
             return (
                 isinstance(payload, dict)
@@ -1253,6 +1261,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 and payload.get("balanceStatement")
                 and payload.get("cashFlowStatement")
                 and not cache_has_missing_ttm_anchor(payload)
+                and not cache_has_missing_adjusted_operating_income(payload)
             )
 
         def enrich_cached_payload(cached_payload, cached_entry, fetch_count=0, refresh_error=False):
@@ -1284,7 +1293,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         )))
 
         if result.get("company_name") == ticker and result.get("valuation_basis") == "unavailable":
-            if cache_is_usable(previous_payload):
+            can_preserve_previous = (
+                refresh
+                and isinstance(previous_payload, dict)
+                and previous_payload.get("marketCap") not in (None, "", "--")
+            ) or cache_is_usable(previous_payload)
+            if can_preserve_previous:
                 self._send_response(
                     200,
                     self._prune_latest(enrich_cached_payload(
