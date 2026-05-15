@@ -89,9 +89,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function displayDate(data) {
-        const date = data.dataDate || '--';
-        const time = data.pulledAt ? data.pulledAt.split('T')[1] || data.pulledAt.split(' ')[1] || '' : '';
-        return `As of ${date}${time ? ` ${time}` : ''}`;
+        const source = data.pulledAt || data.dataDate || '';
+        const match = String(source).match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+        if (!match) return `As of ${data.dataDate || '--'}`;
+
+        const [, year, month, day, hour, minute] = match;
+        const monthName = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December',
+        ][Number(month) - 1];
+        const dayNumber = Number(day);
+        const suffix = dayNumber % 10 === 1 && dayNumber % 100 !== 11 ? 'st'
+            : dayNumber % 10 === 2 && dayNumber % 100 !== 12 ? 'nd'
+            : dayNumber % 10 === 3 && dayNumber % 100 !== 13 ? 'rd'
+            : 'th';
+
+        if (!hour || !minute) return `As of ${monthName} ${dayNumber}${suffix}, ${year}`;
+
+        const hourNumber = Number(hour);
+        const period = hourNumber >= 12 ? 'pm' : 'am';
+        const displayHour = hourNumber % 12 || 12;
+        return `As of ${monthName} ${dayNumber}${suffix}, ${displayHour}:${minute}${period}, ${year}`;
     }
 
     function displayFetchInfo(data) {
