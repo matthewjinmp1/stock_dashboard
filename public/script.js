@@ -11,13 +11,14 @@ document.addEventListener('DOMContentLoaded', () => {
         assumptions: {},
         statementTab: localStorage.getItem('stock_statement_tab') || 'income',
         periodicity: localStorage.getItem('stock_periodicity') || 'annual',
-        statementSearch: localStorage.getItem('stock_statement_search') || '',
+        statementSearch: '',
         starredAccounts: JSON.parse(localStorage.getItem('stock_starred_accounts') || '{}'),
         statementToggles: JSON.parse(localStorage.getItem('stock_statement_toggles') || '{}'),
         groups: [],
         sort: {},
     };
     localStorage.removeItem('stock_assumptions');
+    localStorage.removeItem('stock_statement_search');
 
     const views = {
         scanner: $('view-scanner'),
@@ -593,7 +594,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const statementSearch = event.target.closest('[data-statement-search]');
         if (!statementSearch) return;
         state.statementSearch = statementSearch.value;
-        localStorage.setItem('stock_statement_search', state.statementSearch);
         const results = $('statement-results');
         if (results) results.innerHTML = renderStatementResults(state.latest);
     });
