@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
         watchlist: JSON.parse(localStorage.getItem('stock_watchlist') || '[]'),
         starred: JSON.parse(localStorage.getItem('stock_starred_tickers') || '[]'),
         most: JSON.parse(localStorage.getItem('stock_search_counts') || '{}'),
-        assumptions: JSON.parse(localStorage.getItem('stock_assumptions') || '{}'),
+        assumptions: {},
         statementTab: localStorage.getItem('stock_statement_tab') || 'income',
         periodicity: localStorage.getItem('stock_periodicity') || 'annual',
         statementSearch: localStorage.getItem('stock_statement_search') || '',
@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
         groups: [],
         sort: {},
     };
+    localStorage.removeItem('stock_assumptions');
 
     const views = {
         scanner: $('view-scanner'),
@@ -228,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     node.blur();
                 }
             });
-            node.title = 'Edit directly. Press Enter or click away to save.';
+            node.title = 'Edit directly. Press Enter or click away to apply.';
         });
     }
 
@@ -305,7 +306,6 @@ document.addEventListener('DOMContentLoaded', () => {
             state.assumptions[ticker][key] = parsed / 100;
         }
         if (!Object.keys(state.assumptions[ticker]).length) delete state.assumptions[ticker];
-        save('stock_assumptions', state.assumptions);
         renderStats(state.latest);
     }
 
@@ -351,6 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function fetchTicker(ticker, refresh = false) {
+        delete state.assumptions[ticker];
         const started = performance.now();
         const url = `/api/short-interest/${ticker}${refresh ? '?refresh=1' : ''}`;
         const response = await fetch(url);
