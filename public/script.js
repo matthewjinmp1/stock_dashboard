@@ -661,12 +661,14 @@ document.addEventListener('DOMContentLoaded', () => {
             ['income', 'Income Statement'],
             ['balance', 'Balance Sheet'],
             ['cash', 'Cash Flow'],
+            ['all', 'All Accounts'],
             ['starred', 'Starred'],
         ];
+        const activeTab = tabs.find(t => t[0] === state.statementTab) || tabs[0];
         panel.innerHTML = `<div class="statement-header">
             <div>
                 <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 0.5rem;">
-                    <h2>${state.statementTab === 'starred' ? 'Starred Statements' : tabs.find(t => t[0] === state.statementTab)[1]}</h2>
+                    <h2>${state.statementTab === 'starred' ? 'Starred Statements' : activeTab[1]}</h2>
                     <div class="statement-actions" style="margin-left: 1rem;">
                         <button class="mini-btn ${state.periodicity === 'annual' ? 'on blue' : ''}" data-periodicity="annual">Annual</button>
                         <button class="mini-btn ${state.periodicity === 'quarterly' ? 'on blue' : ''}" data-periodicity="quarterly">Quarterly</button>
@@ -685,9 +687,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderStatementResults(data) {
         if (!data) return '';
-        return state.statementTab === 'starred'
-            ? renderStarredStatementTable(data)
-            : renderStatementTable(statementForTab(data, state.statementTab), state.statementTab);
+        if (state.statementTab === 'starred') return renderStarredStatementTable(data);
+        if (state.statementTab === 'all') return renderAllStatementTable(data);
+        return renderStatementTable(statementForTab(data, state.statementTab), state.statementTab);
     }
 
     function statementForTab(data, tab) {
@@ -728,6 +730,23 @@ document.addEventListener('DOMContentLoaded', () => {
             return `<h3 class="statement-section-title">${label}</h3>${renderStatementTable({ periods: statement.periods, rows }, key, false)}`;
         }).join('');
         return blocks || '<p class="empty-note">Star accounts from a statement to show them here.</p>';
+    }
+
+    function renderAllStatementTable(data) {
+        const p = state.periodicity || 'annual';
+        const term = statementSearchTerm();
+        const blocks = [
+            ['income', 'Income Statement', (data.incomeStatement || {})[p] || {}],
+            ['balance', 'Balance Sheet', (data.balanceStatement || {})[p] || {}],
+            ['cash', 'Cash Flow Statement', (data.cashFlowStatement || {})[p] || {}],
+        ].map(([key, label, statement]) => {
+            const rows = term
+                ? (statement.rows || []).filter((row) => String(row.label || '').toLowerCase().includes(term))
+                : (statement.rows || []);
+            if (!rows.length) return '';
+            return `<h3 class="statement-section-title">${label}</h3>${renderStatementTable({ periods: statement.periods, rows }, key, false)}`;
+        }).join('');
+        return blocks || `<p class="empty-note">${term ? 'No matching line items.' : 'No statement data available.'}</p>`;
     }
 
     function renderStatementTable(statement, statementKey, hideHeader = false) {
