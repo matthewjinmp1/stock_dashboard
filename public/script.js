@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     const $ = (id) => document.getElementById(id);
+    const FORWARD_DISCOUNT_RATE = 0.10;
     const state = {
         activeView: 'scanner',
         previousScroll: 0,
@@ -272,15 +273,25 @@ document.addEventListener('DOMContentLoaded', () => {
             : parseMoney(metricEntry(data, 'ny_revenue'));
         const cyAdjRaw = cyRevenueRaw * margin;
         const nyAdjRaw = nyRevenueRaw * margin;
+        const cyDiscount = forwardDiscountInfo(data, 'cy');
+        const nyDiscount = forwardDiscountInfo(data, 'ny');
+        const cyDiscountedMultiple = discountedForwardMultiple(valuationRaw, cyAdjRaw, cyDiscount.factor);
+        const nyDiscountedMultiple = discountedForwardMultiple(valuationRaw, nyAdjRaw, nyDiscount.factor);
+        if (cyDiscountedMultiple !== null) {
+            setMetric(data, 'ev_cy_ebit', cyDiscountedMultiple, formatRatio(cyDiscountedMultiple), 'ratio');
+        }
+        if (nyDiscountedMultiple !== null) {
+            setMetric(data, 'ev_ny_ebit', nyDiscountedMultiple, formatRatio(nyDiscountedMultiple), 'ratio');
+        }
         if (assumptions.margin !== undefined || assumptions.cy_growth !== undefined) {
             setMetric(data, 'cy_revenue', cyRevenueRaw, formatMoneyFront(cyRevenueRaw), 'money');
             setMetric(data, 'cy_adj_inc', cyAdjRaw, formatMoneyFront(cyAdjRaw), 'money');
-            setMetric(data, 'ev_cy_ebit', valuationRaw && cyAdjRaw ? valuationRaw / cyAdjRaw : null, valuationRaw && cyAdjRaw ? formatRatio(valuationRaw / cyAdjRaw) : '--', 'ratio');
+            setMetric(data, 'ev_cy_ebit', cyDiscountedMultiple, cyDiscountedMultiple !== null ? formatRatio(cyDiscountedMultiple) : '--', 'ratio');
         }
         if (assumptions.margin !== undefined || assumptions.cy_growth !== undefined || assumptions.ny_growth !== undefined) {
             setMetric(data, 'ny_revenue', nyRevenueRaw, formatMoneyFront(nyRevenueRaw), 'money');
             setMetric(data, 'ny_adj_inc', nyAdjRaw, formatMoneyFront(nyAdjRaw), 'money');
-            setMetric(data, 'ev_ny_ebit', valuationRaw && nyAdjRaw ? valuationRaw / nyAdjRaw : null, valuationRaw && nyAdjRaw ? formatRatio(valuationRaw / nyAdjRaw) : '--', 'ratio');
+            setMetric(data, 'ev_ny_ebit', nyDiscountedMultiple, nyDiscountedMultiple !== null ? formatRatio(nyDiscountedMultiple) : '--', 'ratio');
         }
         if (assumptions.margin !== undefined && !effectiveAdjRaw) {
             setMetric(data, 'ev_adj_ebit', null, '--', 'ratio');
@@ -288,6 +299,11 @@ document.addEventListener('DOMContentLoaded', () => {
             setMetric(data, 'ev_ny_ebit', null, '--', 'ratio');
         }
         return data;
+    }
+
+    function discountedForwardMultiple(valuationRaw, forwardIncomeRaw, discountFactor) {
+        if (!valuationRaw || !forwardIncomeRaw || !discountFactor) return null;
+        return (valuationRaw / forwardIncomeRaw) * discountFactor;
     }
 
     function commitAssumptionInput(input) {
@@ -524,8 +540,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return sort && sort.direction === 'desc' ? sorted.reverse() : sorted;
         }
         return [...list].sort((a, b) => {
-            const av = sortableValue(metricEntry(state.dataByTicker[a], sort.key));
-            const bv = sortableValue(metricEntry(state.dataByTicker[b], sort.key));
+            const avData = state.dataByTicker[a] ? applyAssumptions(state.dataByTicker[a]) : null;
+            const bvData = state.dataByTicker[b] ? applyAssumptions(state.dataByTicker[b]) : null;
+            const av = sortableValue(metricEntry(avData, sort.key));
+            const bv = sortableValue(metricEntry(bvData, sort.key));
             return sort.direction === 'asc' ? av - bv : bv - av;
         });
     }
@@ -970,6 +988,62 @@ document.addEventListener('DOMContentLoaded', () => {
         return 0;
     }
 
+    function latestAnnualPeriodDate(data) {
+        const periods = ((data.incomeStatement || {}).annual || {}).periods || [];
+        for (const period of periods) {
+            if (isSummaryPeriod(period)) continue;
+            const date = parseDateOnly(period);
+            if (date) return date;
+        }
+        return null;
+    }
+
+    function parseDateOnly(value) {
+        const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (!match) return null;
+        const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+        return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    function payloadDate(data) {
+        return parseDateOnly(data.pulledAt || data.dataDate) || new Date();
+    }
+
+    function addYears(date, years) {
+        if (!date) return null;
+        const next = new Date(date.getTime());
+        next.setFullYear(next.getFullYear() + years);
+        return next;
+    }
+
+    function forwardMetricDate(data, period) {
+        const latestAnnual = latestAnnualPeriodDate(data);
+        return addYears(latestAnnual, period === 'ny' ? 2 : 1);
+    }
+
+    function yearsBetween(start, end) {
+        if (!start || !end) return 0;
+        return Math.max(0, (end.getTime() - start.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+    }
+
+    function forwardDiscountInfo(data, period) {
+        const date = forwardMetricDate(data, period);
+        const years = yearsBetween(payloadDate(data), date);
+        const factor = Math.pow(1 + FORWARD_DISCOUNT_RATE, years);
+        return { date, years, factor };
+    }
+
+    function formatDateShort(date) {
+        if (!date) return '--';
+        const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getMonth()];
+        return `${month} ${date.getDate()}, ${date.getFullYear()}`;
+    }
+
+    function discountedIncomeDisplay(value, discountFactor) {
+        const raw = parseMoney(value);
+        return raw && discountFactor ? formatMoneyFront(raw / discountFactor) : '--';
+    }
+
     function compactFormulaRows(rows) {
         return rows.filter(([label, value]) => label && value !== undefined && value !== null);
     }
@@ -995,6 +1069,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const gpLabel = '3Y Growth';
         const cyRevenueBase = lastYearRevenueRaw(data);
         const cyRevenueBaseDisplay = cyRevenueBase ? formatMoneyFront(cyRevenueBase) : '--';
+        const cyDiscount = forwardDiscountInfo(data, 'cy');
+        const nyDiscount = forwardDiscountInfo(data, 'ny');
+        const discountLabel = `${(FORWARD_DISCOUNT_RATE * 100).toFixed(0)}% Discount Rate`;
         return {
             ev_adj: {
                 title: `${data.valuationPrefix || 'EV'} / Adj Op Inc`,
@@ -1006,6 +1083,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 result: val('ev_adj_ebit'),
                 rows: formulaValue(`${valuationLabel} / Adj Op Inc`, [
                     [valuationLabel, val('ev')],
+                    ['Metric Date', `TTM as of ${formatDateShort(payloadDate(data))}`],
                     ['Revenue', val('revenue')],
                     ['Adj Op Inc Margin', val('margin')],
                     ['Adj Op Inc', val('adj_income')],
@@ -1019,13 +1097,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 divisor: val('cy_adj_inc'),
                 resultLabel: `${data.valuationPrefix || 'EV'} / CY Op Inc`,
                 result: val('ev_cy_ebit'),
-                rows: formulaValue(`${valuationLabel} / (Last Year Revenue x (1 + CY Growth) x Adj Op Inc Margin)`, [
+                rows: formulaValue(`${valuationLabel} / ((Last Year Revenue x (1 + CY Growth) x Adj Op Inc Margin) / Discount Factor)`, [
                     [valuationLabel, val('ev')],
+                    ['Metric Date', formatDateShort(cyDiscount.date)],
+                    ['Years Forward', cyDiscount.years.toFixed(2)],
+                    [discountLabel, `${cyDiscount.factor.toFixed(2)}x factor`],
                     ['Last Year Revenue', cyRevenueBaseDisplay],
                     ['CY Growth', val('cy_growth')],
                     ['CY Revenue', val('cy_revenue')],
                     ['Adj Op Inc Margin', val('margin')],
                     ['CY Adj Op Inc', val('cy_adj_inc')],
+                    ['Discounted CY Adj Op Inc', discountedIncomeDisplay(raw('cy_adj_inc'), cyDiscount.factor)],
                 ]),
             },
             ev_ny: {
@@ -1036,13 +1118,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 divisor: val('ny_adj_inc'),
                 resultLabel: `${data.valuationPrefix || 'EV'} / NY Op Inc`,
                 result: val('ev_ny_ebit'),
-                rows: formulaValue(`${valuationLabel} / (CY Revenue x (1 + NY Growth) x Adj Op Inc Margin)`, [
+                rows: formulaValue(`${valuationLabel} / ((CY Revenue x (1 + NY Growth) x Adj Op Inc Margin) / Discount Factor)`, [
                     [valuationLabel, val('ev')],
+                    ['Metric Date', formatDateShort(nyDiscount.date)],
+                    ['Years Forward', nyDiscount.years.toFixed(2)],
+                    [discountLabel, `${nyDiscount.factor.toFixed(2)}x factor`],
                     ['CY Revenue', val('cy_revenue')],
                     ['NY Growth', val('ny_growth')],
                     ['NY Revenue', val('ny_revenue')],
                     ['Adj Op Inc Margin', val('margin')],
                     ['NY Adj Op Inc', val('ny_adj_inc')],
+                    ['Discounted NY Adj Op Inc', discountedIncomeDisplay(raw('ny_adj_inc'), nyDiscount.factor)],
                 ]),
             },
             adj_margin: {
