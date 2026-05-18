@@ -441,6 +441,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         "dataDate",
         "pulledAt",
         "fetchCount",
+        "fetchTiming",
     }
 
     def test_test_ticker_returns_complete_fixture_without_external_fetches(self):

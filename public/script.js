@@ -37,6 +37,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!tab) return;
         tab.addEventListener('click', () => showView(name));
     });
+    const fetchInfoButton = $('result-fetch-info');
+    if (fetchInfoButton) {
+        fetchInfoButton.addEventListener('click', () => toggleFetchDetails());
+    }
 
     function save(key, value) {
         localStorage.setItem(key, JSON.stringify(value));
@@ -119,6 +123,79 @@ document.addEventListener('DOMContentLoaded', () => {
     function displayFetchInfo(data) {
         const fetches = data.fetchCount === undefined ? '--' : data.fetchCount;
         return `Fetch time: ${data.fetchTime || '--'} • Fetches: ${fetches}`;
+    }
+
+    function formatSeconds(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return '--';
+        return `${number.toFixed(2)}s`;
+    }
+
+    function fetchTimingRows(data) {
+        const timing = data?.fetchTiming || {};
+        const rows = [];
+        if (Number.isFinite(Number(timing.clientSeconds))) {
+            rows.push({
+                label: 'Browser round trip',
+                seconds: Number(timing.clientSeconds),
+                status: 'ok',
+            });
+        }
+        if (Number.isFinite(Number(timing.totalSeconds))) {
+            const sourceLabels = {
+                cache: 'Cache response',
+                'stale-cache': 'Stale cache response',
+                test: 'Test fixture',
+                fresh: 'Backend yfinance work',
+                error: 'Backend yfinance work',
+            };
+            rows.push({
+                label: sourceLabels[timing.source] || 'Backend yfinance work',
+                seconds: Number(timing.totalSeconds),
+                status: timing.source === 'error' ? 'error' : 'ok',
+            });
+        }
+        (timing.stages || []).forEach((stage) => {
+            rows.push({
+                label: stage.label || stage.key || 'Fetch stage',
+                seconds: Number(stage.seconds),
+                status: stage.status || 'ok',
+            });
+        });
+        return rows.filter((row) => Number.isFinite(row.seconds));
+    }
+
+    function renderFetchDetails(data) {
+        const panel = $('fetch-detail-panel');
+        if (!panel) return;
+        const rows = fetchTimingRows(data);
+        if (!rows.length) {
+            panel.innerHTML = '<div class="fetch-detail-empty">No fetch timing details for this response.</div>';
+            return;
+        }
+        const maxSeconds = Math.max(...rows.map((row) => row.seconds), 0.01);
+        panel.innerHTML = `<div class="fetch-detail-header">
+            <span>Fetch Breakdown</span>
+            <span>${data.fetchTime || formatSeconds(data.fetchTiming?.clientSeconds)}</span>
+        </div>
+        <div class="fetch-detail-rows">
+            ${rows.map((row) => {
+                const width = Math.max(4, Math.min(100, (row.seconds / maxSeconds) * 100));
+                const status = row.status && row.status !== 'ok' ? `<small>${escapeAttr(row.status)}</small>` : '';
+                return `<div class="fetch-detail-row">
+                    <div class="fetch-detail-label">${escapeAttr(row.label)}${status}</div>
+                    <div class="fetch-detail-bar"><span style="width:${width}%"></span></div>
+                    <div class="fetch-detail-time">${formatSeconds(row.seconds)}</div>
+                </div>`;
+            }).join('')}
+        </div>`;
+    }
+
+    function toggleFetchDetails() {
+        const panel = $('fetch-detail-panel');
+        if (!panel || !state.latest) return;
+        renderFetchDetails(state.latest);
+        panel.classList.toggle('hidden');
     }
 
     function displayCurrency(data) {
@@ -376,7 +453,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const response = await fetch(url);
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Failed to fetch data');
-        data.fetchTime = `${((performance.now() - started) / 1000).toFixed(2)}s`;
+        const clientSeconds = (performance.now() - started) / 1000;
+        data.fetchTime = `${clientSeconds.toFixed(2)}s`;
+        data.fetchTiming = {
+            ...(data.fetchTiming || {}),
+            clientSeconds,
+        };
         state.dataByTicker[ticker] = data;
         saveTickerData();
         return data;
@@ -395,6 +477,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (company) company.textContent = data.companyName || '--';
         $('result-data-date').textContent = displayDate(data);
         $('result-fetch-info').textContent = displayFetchInfo(data);
+        $('result-fetch-info').title = 'Click to see fetch timing details';
+        const fetchPanel = $('fetch-detail-panel');
+        if (fetchPanel) {
+            fetchPanel.classList.add('hidden');
+            renderFetchDetails(data);
+        }
         $('result-currency-info').textContent = displayCurrency(data);
         updateResultStarButton(ticker);
         renderStats(data);

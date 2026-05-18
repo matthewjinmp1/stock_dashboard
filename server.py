@@ -3,6 +3,7 @@ import socketserver
 import json
 import os
 import datetime
+import time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, parse_qs
 
@@ -630,6 +631,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "dataDate": today,
             "pulledAt": pulled_at,
             "fetchCount": 0,
+            "fetchTiming": {
+                "source": "test",
+                "totalSeconds": 0,
+                "stages": [],
+            },
         }
 
     def __init__(self, *args, **kwargs):
@@ -804,9 +810,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         """Fetch all data using yfinance package. Returns the same tuple as fetch_yahoo_finance_data."""
         import pandas as pd
         finviz_metrics = finviz_metrics or {}
+        fetch_started = time.perf_counter()
+        timing_stages = []
+
+        def record_stage(key, label, started, status="ok"):
+            timing_stages.append({
+                "key": key,
+                "label": label,
+                "seconds": round(time.perf_counter() - started, 3),
+                "status": status,
+            })
+
+        def timed(key, label, func):
+            stage_started = time.perf_counter()
+            try:
+                return func()
+            except Exception:
+                record_stage(key, label, stage_started, "error")
+                raise
+            finally:
+                if not any(stage.get("key") == key and stage.get("seconds") is not None for stage in timing_stages):
+                    record_stage(key, label, stage_started)
+
         try:
             stock = yf.Ticker(ticker)
-            info = stock.info or {}
+            info = timed("info", "Quote summary / info", lambda: stock.info or {})
             self._request_fetch_count = getattr(self, "_request_fetch_count", 0) + 1
 
             # Fetch currency rate early so all values can be USD-normalized
@@ -833,22 +861,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             def fetch_statement_frames():
                 statement_stock = yf.Ticker(ticker)
                 return {
-                    "annual_income": statement_stock.financials,
-                    "ttm_income": statement_stock.ttm_income_stmt,
-                    "quarterly_income": statement_stock.quarterly_financials,
-                    "annual_balance": statement_stock.balance_sheet,
-                    "quarterly_balance": statement_stock.quarterly_balance_sheet,
-                    "annual_cashflow": statement_stock.cashflow,
-                    "ttm_cashflow": statement_stock.ttm_cash_flow,
-                    "quarterly_cashflow": statement_stock.quarterly_cashflow,
+                    "annual_income": timed("annual_income", "Annual income statement", lambda: statement_stock.financials),
+                    "ttm_income": timed("ttm_income", "Official TTM income statement", lambda: statement_stock.ttm_income_stmt),
+                    "quarterly_income": timed("quarterly_income", "Quarterly income statement", lambda: statement_stock.quarterly_financials),
+                    "annual_balance": timed("annual_balance", "Annual balance sheet", lambda: statement_stock.balance_sheet),
+                    "quarterly_balance": timed("quarterly_balance", "Quarterly balance sheet", lambda: statement_stock.quarterly_balance_sheet),
+                    "annual_cashflow": timed("annual_cashflow", "Annual cash flow", lambda: statement_stock.cashflow),
+                    "ttm_cashflow": timed("ttm_cashflow", "Official TTM cash flow", lambda: statement_stock.ttm_cash_flow),
+                    "quarterly_cashflow": timed("quarterly_cashflow", "Quarterly cash flow", lambda: statement_stock.quarterly_cashflow),
                 }
 
             def fetch_estimate_frames():
                 try:
                     estimate_stock = yf.Ticker(ticker)
                     return {
-                        "earnings": estimate_stock.earnings_estimate,
-                        "revenue": estimate_stock.revenue_estimate,
+                        "earnings": timed("earnings_estimate", "Earnings estimates", lambda: estimate_stock.earnings_estimate),
+                        "revenue": timed("revenue_estimate", "Revenue estimates", lambda: estimate_stock.revenue_estimate),
                     }
                 except Exception as e:
                     print(f"yfinance estimates warning: {e}")
@@ -857,7 +885,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             def fetch_analyst_recommendations():
                 try:
                     rec_stock = yf.Ticker(ticker)
-                    recs = rec_stock.recommendations
+                    recs = timed("recommendations", "Analyst recommendations", lambda: rec_stock.recommendations)
                     if recs is not None and not recs.empty:
                         latest = recs.iloc[-1] if len(recs) > 0 else {}
                         return {
@@ -875,16 +903,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             with ThreadPoolExecutor(max_workers=5) as executor:
                 futures = {
-                    "statements": executor.submit(fetch_statement_frames),
-                    "estimates": executor.submit(fetch_estimate_frames),
+                    "statements": executor.submit(lambda: timed("statements_total", "Statements group", fetch_statement_frames)),
+                    "estimates": executor.submit(lambda: timed("estimates_total", "Estimates group", fetch_estimate_frames)),
                     "recommendations": executor.submit(fetch_analyst_recommendations),
                 }
                 self._request_fetch_count += 4  # statements, earnings estimates, revenue estimates, recommendations
                 if financial_currency != "USD":
-                    futures["financial_fx"] = executor.submit(fetch_fx_rate, financial_currency)
+                    futures["financial_fx"] = executor.submit(lambda: timed("financial_fx", f"{financial_currency}/USD FX", lambda: fetch_fx_rate(financial_currency)))
                     self._request_fetch_count += 1
                 if quote_currency != "USD" and quote_currency != financial_currency:
-                    futures["quote_fx"] = executor.submit(fetch_fx_rate, quote_currency)
+                    futures["quote_fx"] = executor.submit(lambda: timed("quote_fx", f"{quote_currency}/USD FX", lambda: fetch_fx_rate(quote_currency)))
                     self._request_fetch_count += 1
 
                 financial_fx_rate = futures["financial_fx"].result() if "financial_fx" in futures else 1.0
@@ -897,6 +925,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 analyst_recommendations = futures["recommendations"].result()
             
             print(f"[FX] Financial Rate: {financial_fx_rate}, Quote Rate: {quote_fx_rate}")
+
+            build_started = time.perf_counter()
 
             # Currency-aware formatter: multiplies raw values by FX rate before formatting
             def fx_formatter(val):
@@ -1208,8 +1238,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "short_float": self._format_percent(info.get("shortPercentOfFloat")) if info.get("shortPercentOfFloat") else "--",
                 "structured_metrics": structured_metrics,
             }
+            record_stage("build_payload", "Build metrics and statements", build_started)
+            total_seconds = round(time.perf_counter() - fetch_started, 3)
+            self._fetch_timing = {
+                "source": "fresh",
+                "totalSeconds": total_seconds,
+                "stages": sorted(timing_stages, key=lambda stage: stage.get("seconds", 0), reverse=True),
+            }
             return tuple(values[key] for key in FETCH_RESULT_FIELDS)
         except Exception as e:
+            self._fetch_timing = {
+                "source": "error",
+                "totalSeconds": round(time.perf_counter() - fetch_started, 3),
+                "stages": sorted(timing_stages, key=lambda stage: stage.get("seconds", 0), reverse=True),
+            }
             print(f"yfinance fetch error for {ticker}: {e}")
             raise
 
@@ -1256,6 +1298,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
 
         self._request_fetch_count = 0
+        self._fetch_timing = {
+            "source": "cache",
+            "totalSeconds": 0,
+            "stages": [],
+        }
         cache = load_cache()
         today = datetime.date.today().isoformat()
         now_dt = datetime.datetime.now()
@@ -1316,6 +1363,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if refresh_error:
                 payload["staleDueToRefreshError"] = True
                 payload["refreshError"] = "Data refresh failed; showing cached data."
+            payload["fetchTiming"] = {
+                "source": "cache" if fetch_count == 0 else "stale-cache",
+                "totalSeconds": 0,
+                "stages": [],
+            }
             return payload
 
         if not refresh and ticker in cache and cache[ticker].get('date') == today:
@@ -1424,6 +1476,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "dataDate": today,
             "pulledAt": pulled_at,
             "fetchCount": getattr(self, "_request_fetch_count", 0),
+            "fetchTiming": getattr(self, "_fetch_timing", {"source": "fresh", "totalSeconds": None, "stages": []}),
         }
 
         cache[ticker] = {'date': today, 'pulledAt': pulled_at, 'data': payload}
