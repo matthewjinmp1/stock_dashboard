@@ -20,7 +20,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 12
+PAYLOAD_VERSION = 13
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -464,6 +464,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             },
         }
         income_statement = self._add_adjusted_operating_income(income_statement, cash_flow_statement)
+        income_statement = self._add_tax_rate(income_statement)
         revenue_raw = 100e9
         gross_profit_raw = 60e9
         operating_income_raw = 30e9
@@ -796,6 +797,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _add_adjusted_operating_income(self, income_statement, cash_flow_statement, formatter=None):
         return statements.add_adjusted_operating_income(income_statement, cash_flow_statement, formatter or self._format_money)
 
+    def _add_tax_rate(self, income_statement, formatter=None):
+        return statements.add_tax_rate(income_statement, formatter or self._format_percent)
+
     def fetch_yfinance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics=None):
         """Fetch all data using yfinance package. Returns the same tuple as fetch_yahoo_finance_data."""
         import pandas as pd
@@ -928,6 +932,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "quarterly": self._df_to_quarterly_statement(quarterly_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES),
             }
             income_statement = self._add_adjusted_operating_income(income_statement, cash_flow_statement)
+            income_statement = self._add_tax_rate(income_statement)
 
             # Core metrics from DataFrames (TTM using quarterly sums) — all converted to USD
             last_year_revenue_raw = self._df_raw_value(annual_income, ["Total Revenue", "TotalRevenue"]) * financial_fx_rate

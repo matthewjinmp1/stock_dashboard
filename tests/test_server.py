@@ -1038,6 +1038,36 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(adjusted_annual["values"], ["35B", "20B"])
         self.assertEqual(adjusted_quarterly, {"label": "Adjusted Operating Income", "values": ["6B"]})
 
+    def test_add_tax_rate_uses_tax_provision_over_pretax_income(self):
+        income = {
+            "annual": {
+                "periods": ["TTM", "2025-12-31"],
+                "rows": [
+                    {"label": "Pretax Income", "values": ["100B", "80B"]},
+                    {"label": "Tax Provision", "values": ["21B", "16B"]},
+                    {"label": "Net Income", "values": ["79B", "64B"]},
+                ],
+            },
+            "quarterly": {
+                "periods": ["2026-03-31"],
+                "rows": [
+                    {"label": "Pretax Income", "values": ["25B"]},
+                    {"label": "Tax Provision", "values": ["5B"]},
+                ],
+            },
+        }
+
+        enriched = self.handler._add_tax_rate(income)
+
+        annual_rows = enriched["annual"]["rows"]
+        annual_labels = [row["label"] for row in annual_rows]
+        tax_rate_annual = next(row for row in annual_rows if row["label"] == "Tax Rate")
+        tax_rate_quarterly = enriched["quarterly"]["rows"][2]
+
+        self.assertEqual(annual_labels[annual_labels.index("Tax Provision") + 1], "Tax Rate")
+        self.assertEqual(tax_rate_annual["values"], ["21%", "20%"])
+        self.assertEqual(tax_rate_quarterly, {"label": "Tax Rate", "values": ["20%"]})
+
     def test_df_statement_prefers_official_annual_ttm_over_quarter_sum(self):
         import pandas as pd
 
