@@ -311,12 +311,27 @@ button:active {
     font-size: 0.8rem;
     text-align: left;
     cursor: pointer;
+    border-radius: 0;
+    box-shadow: none;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 0.18em;
+    transition: color 0.2s ease;
 }
 
 .fetch-info-button:hover,
 .fetch-info-button:focus-visible {
     color: var(--accent-blue);
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+    text-decoration-style: solid;
     outline: none;
+}
+
+.fetch-info-button:active {
+    transform: none;
+    box-shadow: none;
 }
 
 .fetch-detail-panel {
