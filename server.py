@@ -858,17 +858,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     print(f"yfinance FX warning for {currency}: {e}")
                     return 1.0
 
-            def fetch_statement_frames():
-                statement_stock = yf.Ticker(ticker)
+            def fetch_income_frames():
+                income_stock = yf.Ticker(ticker)
                 return {
-                    "annual_income": timed("annual_income", "Annual income statement", lambda: statement_stock.financials),
-                    "ttm_income": timed("ttm_income", "Official TTM income statement", lambda: statement_stock.ttm_income_stmt),
-                    "quarterly_income": timed("quarterly_income", "Quarterly income statement", lambda: statement_stock.quarterly_financials),
-                    "annual_balance": timed("annual_balance", "Annual balance sheet", lambda: statement_stock.balance_sheet),
-                    "quarterly_balance": timed("quarterly_balance", "Quarterly balance sheet", lambda: statement_stock.quarterly_balance_sheet),
-                    "annual_cashflow": timed("annual_cashflow", "Annual cash flow", lambda: statement_stock.cashflow),
-                    "ttm_cashflow": timed("ttm_cashflow", "Official TTM cash flow", lambda: statement_stock.ttm_cash_flow),
-                    "quarterly_cashflow": timed("quarterly_cashflow", "Quarterly cash flow", lambda: statement_stock.quarterly_cashflow),
+                    "annual_income": timed("annual_income", "Annual income statement", lambda: income_stock.financials),
+                    "ttm_income": timed("ttm_income", "Official TTM income statement", lambda: income_stock.ttm_income_stmt),
+                    "quarterly_income": timed("quarterly_income", "Quarterly income statement", lambda: income_stock.quarterly_financials),
+                }
+
+            def fetch_balance_frames():
+                balance_stock = yf.Ticker(ticker)
+                return {
+                    "annual_balance": timed("annual_balance", "Annual balance sheet", lambda: balance_stock.balance_sheet),
+                    "quarterly_balance": timed("quarterly_balance", "Quarterly balance sheet", lambda: balance_stock.quarterly_balance_sheet),
+                }
+
+            def fetch_cashflow_frames():
+                cashflow_stock = yf.Ticker(ticker)
+                return {
+                    "annual_cashflow": timed("annual_cashflow", "Annual cash flow", lambda: cashflow_stock.cashflow),
+                    "ttm_cashflow": timed("ttm_cashflow", "Official TTM cash flow", lambda: cashflow_stock.ttm_cash_flow),
+                    "quarterly_cashflow": timed("quarterly_cashflow", "Quarterly cash flow", lambda: cashflow_stock.quarterly_cashflow),
                 }
 
             def fetch_estimate_frames():
@@ -901,13 +911,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             quote_currency = self._infer_currency_from_ticker(ticker, info.get("currency")).upper()
 
-            with ThreadPoolExecutor(max_workers=5) as executor:
+            with ThreadPoolExecutor(max_workers=7) as executor:
+                statements_started = time.perf_counter()
                 futures = {
-                    "statements": executor.submit(lambda: timed("statements_total", "Statements group", fetch_statement_frames)),
+                    "income_frames": executor.submit(lambda: timed("income_statements_total", "Income statements group", fetch_income_frames)),
+                    "balance_frames": executor.submit(lambda: timed("balance_sheets_total", "Balance sheets group", fetch_balance_frames)),
+                    "cashflow_frames": executor.submit(lambda: timed("cash_flows_total", "Cash flow statements group", fetch_cashflow_frames)),
                     "estimates": executor.submit(lambda: timed("estimates_total", "Estimates group", fetch_estimate_frames)),
                     "recommendations": executor.submit(fetch_analyst_recommendations),
                 }
-                self._request_fetch_count += 4  # statements, earnings estimates, revenue estimates, recommendations
+                self._request_fetch_count += 5  # income, balance, cash flow, estimates, recommendations
                 if financial_currency != "USD":
                     futures["financial_fx"] = executor.submit(lambda: timed("financial_fx", f"{financial_currency}/USD FX", lambda: fetch_fx_rate(financial_currency)))
                     self._request_fetch_count += 1
@@ -915,14 +928,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     futures["quote_fx"] = executor.submit(lambda: timed("quote_fx", f"{quote_currency}/USD FX", lambda: fetch_fx_rate(quote_currency)))
                     self._request_fetch_count += 1
 
+                statement_frames = {}
+                statement_frames.update(futures["income_frames"].result())
+                statement_frames.update(futures["balance_frames"].result())
+                statement_frames.update(futures["cashflow_frames"].result())
+                record_stage("statements_total", "Statements group", statements_started)
+                estimate_frames = futures["estimates"].result()
+                analyst_recommendations = futures["recommendations"].result()
                 financial_fx_rate = futures["financial_fx"].result() if "financial_fx" in futures else 1.0
                 if quote_currency == financial_currency:
                     quote_fx_rate = financial_fx_rate
                 else:
                     quote_fx_rate = futures["quote_fx"].result() if "quote_fx" in futures else 1.0
-                statement_frames = futures["statements"].result()
-                estimate_frames = futures["estimates"].result()
-                analyst_recommendations = futures["recommendations"].result()
             
             print(f"[FX] Financial Rate: {financial_fx_rate}, Quote Rate: {quote_fx_rate}")
 
