@@ -4,6 +4,7 @@ import json
 import os
 import datetime
 import time
+import statistics
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, parse_qs
 
@@ -21,7 +22,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 13
+PAYLOAD_VERSION = 14
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -495,6 +496,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         cy_adj_inc_raw = cy_revenue_raw * adj_margin_ratio
         ny_adj_inc_raw = ny_revenue_raw * adj_margin_ratio
         gp_3y_growth_raw = (gp_3y_end_raw / gp_3y_start_raw) ** (1 / 3) - 1
+        median_tax_rate_raw = 0.20
         net_cash_raw = cash_bucket_raw - total_debt_raw
         derived_ev_raw = market_cap_raw - net_cash_raw
         net_working_capital_raw = receivables_raw + inventory_raw - accounts_payable_raw
@@ -515,6 +517,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ("gp_3y_growth", gp_3y_growth_raw, self._format_percent(gp_3y_growth_raw), "percent"),
             ("gp_3y_start", gp_3y_start_raw, self._format_money(gp_3y_start_raw), "money"),
             ("gp_3y_end", gp_3y_end_raw, self._format_money(gp_3y_end_raw), "money"),
+            ("medianTaxRate", median_tax_rate_raw, self._format_percent(median_tax_rate_raw), "percent"),
             ("rndAdjIncome", rnd_raw / adj_income_raw, self._format_percent(rnd_raw / adj_income_raw), "percent"),
             ("cy_adj_inc", cy_adj_inc_raw, self._format_money(cy_adj_inc_raw), "money"),
             ("ny_adj_inc", ny_adj_inc_raw, self._format_money(ny_adj_inc_raw), "money"),
@@ -571,6 +574,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "gp_3y_start": self._format_money(gp_3y_start_raw),
             "gp_3y_end": self._format_money(gp_3y_end_raw),
             "gp_3y_label": "3Y Annual GP Growth",
+            "medianTaxRate": self._format_percent(median_tax_rate_raw),
             "rndAdjIncome": self._format_percent(rnd_raw / adj_income_raw),
             "cy_adj_inc": self._format_money(cy_adj_inc_raw),
             "ny_adj_inc": self._format_money(ny_adj_inc_raw),
@@ -805,6 +809,30 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _add_tax_rate(self, income_statement, formatter=None):
         return statements.add_tax_rate(income_statement, formatter or self._format_percent)
+
+    def _median_annual_tax_rate(self, annual_income):
+        if annual_income is None or getattr(annual_income, "empty", True):
+            return None
+        import pandas as pd
+
+        tax_labels = ["Tax Provision", "TaxProvision"]
+        pretax_labels = ["Pretax Income", "PretaxIncome", "Income Before Tax", "IncomeBeforeTax"]
+        tax_label = next((label for label in tax_labels if label in annual_income.index), None)
+        pretax_label = next((label for label in pretax_labels if label in annual_income.index), None)
+        if not tax_label or not pretax_label:
+            return None
+
+        rates = []
+        for col in self._df_history_columns(annual_income):
+            tax_value = annual_income.loc[tax_label, col]
+            pretax_value = annual_income.loc[pretax_label, col]
+            if pd.isna(tax_value) or pd.isna(pretax_value):
+                continue
+            pretax_raw = float(pretax_value)
+            if not pretax_raw:
+                continue
+            rates.append(float(tax_value) / abs(pretax_raw))
+        return statistics.median(rates) if rates else None
 
     def fetch_yfinance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics=None):
         """Fetch all data using yfinance package. Returns the same tuple as fetch_yahoo_finance_data."""
@@ -1088,6 +1116,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 cy_growth_raw = (cy_revenue_raw / abs(last_year_revenue_raw)) - 1
             gp_3y_start_raw = (gp_3y_start_raw or 0) * financial_fx_rate
             gp_3y_end_raw = (gp_3y_end_raw or 0) * financial_fx_rate
+            median_tax_rate_raw = self._median_annual_tax_rate(annual_income)
 
             # Apply correct conversion to EPS based on quote vs financial currency
             cy_eps_raw = (cy_eps_raw or 0) * financial_fx_rate
@@ -1152,6 +1181,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("gp_3y_growth", gp_3y_growth_raw, self._format_percent(gp_3y_growth_raw) if gp_3y_growth_raw is not None else "--", "percent"),
                 ("gp_3y_start", gp_3y_start_raw or None, self._format_money(gp_3y_start_raw) if gp_3y_start_raw else "--", "money"),
                 ("gp_3y_end", gp_3y_end_raw or None, self._format_money(gp_3y_end_raw) if gp_3y_end_raw else "--", "money"),
+                ("medianTaxRate", median_tax_rate_raw, self._format_percent(median_tax_rate_raw) if median_tax_rate_raw is not None else "--", "percent"),
                 ("rndAdjIncome", safe_ratio(rnd_raw, adj_income_raw), safe_display(safe_ratio(rnd_raw, adj_income_raw), self._format_percent), "percent"),
                 ("cy_adj_inc", cy_adj_inc_raw or None, self._format_money(cy_adj_inc_raw) if cy_adj_inc_raw else "--", "money"),
                 ("ny_adj_inc", ny_adj_inc_raw or None, self._format_money(ny_adj_inc_raw) if ny_adj_inc_raw else "--", "money"),
@@ -1206,6 +1236,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "gp_3y_start": self._format_money(gp_3y_start_raw) if gp_3y_start_raw else "--",
                 "gp_3y_end": self._format_money(gp_3y_end_raw) if gp_3y_end_raw else "--",
                 "gp_3y_label": gp_3y_label,
+                "median_tax_rate": self._format_percent(median_tax_rate_raw) if median_tax_rate_raw is not None else "--",
                 "rnd_adj_income": self._format_percent(rnd_raw / adj_income_raw) if rnd_raw and adj_income_raw else "--",
                 "cy_adj_inc": self._format_money(cy_adj_inc_raw) if cy_adj_inc_raw else "--",
                 "ny_adj_inc": self._format_money(ny_adj_inc_raw) if ny_adj_inc_raw else "--",

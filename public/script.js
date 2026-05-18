@@ -265,6 +265,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('Investment Rate', val('capexAdjIncome'), 'capex_adj_income'),
                 metric('R&D / Adj Op Inc', val('rndAdjIncome')),
             ]),
+            metricGroup('Taxes', [
+                metric('Median Tax Rate', val('medianTaxRate')),
+            ]),
             metricGroup('Short Interest', [
                 metric('Short Float', val('shortFloat')),
             ]),

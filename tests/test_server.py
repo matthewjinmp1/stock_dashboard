@@ -1069,6 +1069,21 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(tax_rate_annual["values"], ["21%", "20%"])
         self.assertEqual(tax_rate_quarterly, {"label": "Tax Rate", "values": ["20%"]})
 
+    def test_median_annual_tax_rate_uses_historical_years_and_ignores_ttm(self):
+        import pandas as pd
+
+        annual_income = pd.DataFrame(
+            {
+                "TTM": [999, 999],
+                pd.Timestamp("2025-12-31"): [20, 100],
+                pd.Timestamp("2024-12-31"): [10, 50],
+                pd.Timestamp("2023-12-31"): [15, 100],
+            },
+            index=["Tax Provision", "Pretax Income"],
+        )
+
+        self.assertEqual(self.handler._median_annual_tax_rate(annual_income), 0.20)
+
     def test_df_statement_prefers_official_annual_ttm_over_quarter_sum(self):
         import pandas as pd
 
