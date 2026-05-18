@@ -406,25 +406,16 @@ document.addEventListener('DOMContentLoaded', () => {
         ticker = ticker.toUpperCase();
         const requestId = state.scanRequestId + 1;
         state.scanRequestId = requestId;
-        const cachedData = state.dataByTicker[ticker];
-        const hasCurrentResult = refresh
-            && state.latest
-            && (state.latest.ticker || '').toUpperCase() === ticker
-            && !$('result-stats').classList.contains('hidden');
         showView('scanner');
         $('result-container').classList.remove('hidden');
-        if (cachedData) {
-            renderTickerResult(cachedData, ticker);
-        } else if (!hasCurrentResult) {
-            $('result-stats').classList.add('hidden');
-            $('statement-panel').classList.add('hidden');
-            state.latest = null;
-            $('result-ticker').textContent = ticker;
-            $('result-data-date').textContent = '--';
-            $('result-fetch-info').textContent = 'Fetch time: -- • Fetches: --';
-            $('result-currency-info').textContent = 'Native currency: -- • USD rate: --';
-        }
-        $('glass-card').classList.toggle('refreshing', hasCurrentResult || !!cachedData);
+        $('result-stats').classList.add('hidden');
+        $('statement-panel').classList.add('hidden');
+        state.latest = null;
+        $('result-ticker').textContent = ticker;
+        $('result-data-date').textContent = '--';
+        $('result-fetch-info').textContent = 'Fetch time: -- • Fetches: --';
+        $('result-currency-info').textContent = 'Native currency: -- • USD rate: --';
+        $('glass-card').classList.remove('refreshing');
         $('loading-spinner').classList.remove('hidden');
         $('error-message').classList.add('hidden');
         $('glass-card').style.display = 'block';
@@ -441,14 +432,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (requestId !== state.scanRequestId) return;
             $('loading-spinner').classList.add('hidden');
             $('glass-card').classList.remove('refreshing');
-            $('error-message').textContent = cachedData ? 'Fresh data refresh failed; showing cached data.' : err.message;
+            $('error-message').textContent = err.message;
             $('error-message').classList.remove('hidden');
-            // Still show dashboard with whatever data we have
-            $('result-stats').classList.remove('hidden');
-            const emptyData = { ticker, companyName: ticker, incomeStatement: {}, balanceStatement: {}, cashFlowStatement: {} };
-            const data = state.latest && (state.latest.ticker || '').toUpperCase() === ticker ? state.latest : emptyData;
-            renderStats(data);
-            renderStatements(data);
         }
     }
 
