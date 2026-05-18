@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
         statementToggles: JSON.parse(localStorage.getItem('stock_statement_toggles') || '{}'),
         groups: [],
         sort: {},
+        scanRequestId: 0,
     };
     localStorage.removeItem('stock_assumptions');
     localStorage.removeItem('stock_statement_search');
@@ -365,25 +366,49 @@ document.addEventListener('DOMContentLoaded', () => {
         return data;
     }
 
+    function renderTickerResult(data, fallbackTicker) {
+        const ticker = data.ticker || fallbackTicker;
+        state.latest = data;
+        $('result-stats').classList.remove('hidden');
+        $('result-ticker').textContent = ticker;
+        const title = $('result-ticker').parentElement;
+        if (title && !title.querySelector('.company-name')) {
+            $('result-ticker').insertAdjacentHTML('afterend', '<div class="company-name"></div>');
+        }
+        const company = title ? title.querySelector('.company-name') : null;
+        if (company) company.textContent = data.companyName || '--';
+        $('result-data-date').textContent = displayDate(data);
+        $('result-fetch-info').textContent = displayFetchInfo(data);
+        $('result-currency-info').textContent = displayCurrency(data);
+        updateResultStarButton(ticker);
+        renderStats(data);
+        renderStatements(data);
+    }
+
     async function scanTicker(ticker, refresh = false) {
         if (!ticker) return;
         ticker = ticker.toUpperCase();
+        const requestId = state.scanRequestId + 1;
+        state.scanRequestId = requestId;
+        const cachedData = state.dataByTicker[ticker];
         const hasCurrentResult = refresh
             && state.latest
             && (state.latest.ticker || '').toUpperCase() === ticker
             && !$('result-stats').classList.contains('hidden');
         showView('scanner');
         $('result-container').classList.remove('hidden');
-        if (!hasCurrentResult) {
+        if (cachedData) {
+            renderTickerResult(cachedData, ticker);
+        } else if (!hasCurrentResult) {
             $('result-stats').classList.add('hidden');
             $('statement-panel').classList.add('hidden');
             state.latest = null;
             $('result-ticker').textContent = ticker;
-            $('result-data-date').textContent = 'As of --';
+            $('result-data-date').textContent = '--';
             $('result-fetch-info').textContent = 'Fetch time: -- • Fetches: --';
             $('result-currency-info').textContent = 'Native currency: -- • USD rate: --';
         }
-        $('glass-card').classList.toggle('refreshing', hasCurrentResult);
+        $('glass-card').classList.toggle('refreshing', hasCurrentResult || !!cachedData);
         $('loading-spinner').classList.remove('hidden');
         $('error-message').classList.add('hidden');
         $('glass-card').style.display = 'block';
@@ -391,27 +416,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const data = await fetchTicker(ticker, refresh);
+            if (requestId !== state.scanRequestId) return;
             state.latest = data;
             $('loading-spinner').classList.add('hidden');
             $('glass-card').classList.remove('refreshing');
-            $('result-stats').classList.remove('hidden');
-            $('result-ticker').textContent = data.ticker || ticker;
-            const title = $('result-ticker').parentElement;
-            if (title && !title.querySelector('.company-name')) {
-                $('result-ticker').insertAdjacentHTML('afterend', '<div class="company-name"></div>');
-            }
-            const company = title ? title.querySelector('.company-name') : null;
-            if (company) company.textContent = data.companyName || '--';
-            $('result-data-date').textContent = displayDate(data);
-            $('result-fetch-info').textContent = displayFetchInfo(data);
-            $('result-currency-info').textContent = displayCurrency(data);
-            updateResultStarButton(ticker);
-            renderStats(data);
-            renderStatements(data);
+            renderTickerResult(data, ticker);
         } catch (err) {
+            if (requestId !== state.scanRequestId) return;
             $('loading-spinner').classList.add('hidden');
             $('glass-card').classList.remove('refreshing');
-            $('error-message').textContent = err.message;
+            $('error-message').textContent = cachedData ? 'Fresh data refresh failed; showing cached data.' : err.message;
             $('error-message').classList.remove('hidden');
             // Still show dashboard with whatever data we have
             $('result-stats').classList.remove('hidden');
