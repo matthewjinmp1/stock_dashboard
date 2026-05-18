@@ -277,9 +277,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('Our EV', val('derivedEnterpriseValue')),
             ]),
             metricGroup('Valuation', [
-                metric(`${data.valuationPrefix || 'EV'}/AT Adj Op Inc`, val('ev_adj_ebit'), 'ev_adj'),
-                metric(`${data.valuationPrefix || 'EV'}/AT CY Op Inc`, val('ev_cy_ebit'), 'ev_cy'),
-                metric(`${data.valuationPrefix || 'EV'}/AT NY Op Inc`, val('ev_ny_ebit'), 'ev_ny'),
+                metric(`${data.valuationPrefix || 'EV'}/Adj Inc`, val('ev_adj_ebit'), 'ev_adj'),
+                metric(`${data.valuationPrefix || 'EV'}/CY Adj Inc`, val('ev_cy_ebit'), 'ev_cy'),
+                metric(`${data.valuationPrefix || 'EV'}/NY Adj Inc`, val('ev_ny_ebit'), 'ev_ny'),
             ]),
             metricGroup('P/E', [
                 metric('P/LY EPS', val('priceCurrentEps')),
@@ -597,8 +597,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ${sortableHeader('ticker', 'Ticker', kind)}${sortableHeader('margin', 'Adj Margin', kind)}
             ${sortableHeader('grossMargin', 'Gross Margin', kind)}${sortableHeader('cy_growth', 'CY Growth', kind)}
             ${sortableHeader('ny_growth', 'NY Growth', kind)}${sortableHeader('shortFloat', 'Short Float', kind)}
-            ${sortableHeader('ev_adj_ebit', 'EV/AT Adj', kind)}${sortableHeader('ev_cy_ebit', 'EV/AT CY', kind)}
-            ${sortableHeader('ev_ny_ebit', 'EV/AT NY', kind)}<th>Actions</th>
+            ${sortableHeader('ev_adj_ebit', 'EV/Adj Inc', kind)}${sortableHeader('ev_cy_ebit', 'EV/CY Adj Inc', kind)}
+            ${sortableHeader('ev_ny_ebit', 'EV/NY Adj Inc', kind)}<th>Actions</th>
         </tr>`;
     }
 
