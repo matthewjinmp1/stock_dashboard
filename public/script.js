@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         groups: $('view-groups'),
         starred: $('view-starred'),
         'most-searched': $('view-most-searched'),
+        fetchDetails: $('view-fetch-details'),
         calc: $('view-calc'),
     };
 
@@ -39,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     const fetchInfoButton = $('result-fetch-info');
     if (fetchInfoButton) {
-        fetchInfoButton.addEventListener('click', () => toggleFetchDetails());
+        fetchInfoButton.addEventListener('click', () => openFetchDetails());
     }
 
     function save(key, value) {
@@ -165,8 +166,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return rows.filter((row) => Number.isFinite(row.seconds));
     }
 
-    function renderFetchDetails(data) {
-        const panel = $('fetch-detail-panel');
+    function renderFetchDetails(data, targetId = 'fetch-detail-content') {
+        const panel = $(targetId);
         if (!panel) return;
         const rows = fetchTimingRows(data);
         if (!rows.length) {
@@ -191,11 +192,14 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>`;
     }
 
-    function toggleFetchDetails() {
-        const panel = $('fetch-detail-panel');
-        if (!panel || !state.latest) return;
+    function openFetchDetails() {
+        if (!state.latest) return;
+        state.previousScroll = window.scrollY;
+        $('fetch-ticker-badge').textContent = state.latest.ticker || '--';
         renderFetchDetails(state.latest);
-        panel.classList.toggle('hidden');
+        showView('fetchDetails');
+        document.querySelector('.tabs').classList.add('hidden');
+        window.scrollTo(0, 0);
     }
 
     function displayCurrency(data) {
@@ -478,11 +482,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('result-data-date').textContent = displayDate(data);
         $('result-fetch-info').textContent = displayFetchInfo(data);
         $('result-fetch-info').title = 'Click to see fetch timing details';
-        const fetchPanel = $('fetch-detail-panel');
-        if (fetchPanel) {
-            fetchPanel.classList.add('hidden');
-            renderFetchDetails(data);
-        }
         $('result-currency-info').textContent = displayCurrency(data);
         updateResultStarButton(ticker);
         renderStats(data);
@@ -1366,6 +1365,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     $('calc-back-btn').addEventListener('click', () => {
+        document.querySelector('.tabs').classList.remove('hidden');
+        showView('scanner');
+        window.scrollTo(0, state.previousScroll || 0);
+    });
+
+    $('fetch-back-btn').addEventListener('click', () => {
         document.querySelector('.tabs').classList.remove('hidden');
         showView('scanner');
         window.scrollTo(0, state.previousScroll || 0);

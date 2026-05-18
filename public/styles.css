@@ -320,11 +320,17 @@ button:active {
 }
 
 .fetch-detail-panel {
-    margin: -0.5rem 0 1.25rem;
+    margin: 0;
     padding: 1rem;
     border: 1px solid var(--card-border);
     border-radius: 16px;
     background: rgba(15, 23, 42, 0.48);
+}
+
+.fetch-detail-card {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2.5rem;
 }
 
 .fetch-detail-header,
