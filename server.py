@@ -3,6 +3,7 @@ import socketserver
 import json
 import os
 import datetime
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, parse_qs
 
 import cache_store
@@ -813,30 +814,83 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 financial_currency = "USD"
             
             print(f"[FETCH] Ticker: {ticker}, Raw Currency: {raw_currency}, Inferred: {financial_currency}")
-            
-            financial_fx_rate = 1.0
-            if financial_currency != "USD":
+
+            def fetch_fx_rate(currency):
+                if currency == "USD":
+                    return 1.0
                 try:
-                    fx_ticker = yf.Ticker(f"{financial_currency}USD=X")
-                    self._request_fetch_count += 1
+                    fx_ticker = yf.Ticker(f"{currency}USD=X")
                     fx_info = fx_ticker.fast_info
-                    financial_fx_rate = float(fx_info.last_price or 1.0) or 1.0
+                    return float(fx_info.last_price or 1.0) or 1.0
                 except Exception as e:
-                    print(f"yfinance FX warning for {financial_currency}: {e}")
+                    print(f"yfinance FX warning for {currency}: {e}")
+                    return 1.0
+
+            def fetch_statement_frames():
+                statement_stock = yf.Ticker(ticker)
+                return {
+                    "annual_income": statement_stock.financials,
+                    "ttm_income": statement_stock.ttm_income_stmt,
+                    "quarterly_income": statement_stock.quarterly_financials,
+                    "annual_balance": statement_stock.balance_sheet,
+                    "quarterly_balance": statement_stock.quarterly_balance_sheet,
+                    "annual_cashflow": statement_stock.cashflow,
+                    "ttm_cashflow": statement_stock.ttm_cash_flow,
+                    "quarterly_cashflow": statement_stock.quarterly_cashflow,
+                }
+
+            def fetch_estimate_frames():
+                try:
+                    estimate_stock = yf.Ticker(ticker)
+                    return {
+                        "earnings": estimate_stock.earnings_estimate,
+                        "revenue": estimate_stock.revenue_estimate,
+                    }
+                except Exception as e:
+                    print(f"yfinance estimates warning: {e}")
+                    return {"earnings": None, "revenue": None}
+
+            def fetch_analyst_recommendations():
+                try:
+                    rec_stock = yf.Ticker(ticker)
+                    recs = rec_stock.recommendations
+                    if recs is not None and not recs.empty:
+                        latest = recs.iloc[-1] if len(recs) > 0 else {}
+                        return {
+                            "strongBuy": int(latest.get("strongBuy", 0) or 0),
+                            "buy": int(latest.get("buy", 0) or 0),
+                            "hold": int(latest.get("hold", 0) or 0),
+                            "sell": int(latest.get("sell", 0) or 0),
+                            "strongSell": int(latest.get("strongSell", 0) or 0),
+                        }
+                except Exception:
+                    pass
+                return {}
 
             quote_currency = self._infer_currency_from_ticker(ticker, info.get("currency")).upper()
-            quote_fx_rate = 1.0
-            if quote_currency != "USD":
+
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = {
+                    "statements": executor.submit(fetch_statement_frames),
+                    "estimates": executor.submit(fetch_estimate_frames),
+                    "recommendations": executor.submit(fetch_analyst_recommendations),
+                }
+                self._request_fetch_count += 4  # statements, earnings estimates, revenue estimates, recommendations
+                if financial_currency != "USD":
+                    futures["financial_fx"] = executor.submit(fetch_fx_rate, financial_currency)
+                    self._request_fetch_count += 1
+                if quote_currency != "USD" and quote_currency != financial_currency:
+                    futures["quote_fx"] = executor.submit(fetch_fx_rate, quote_currency)
+                    self._request_fetch_count += 1
+
+                financial_fx_rate = futures["financial_fx"].result() if "financial_fx" in futures else 1.0
                 if quote_currency == financial_currency:
                     quote_fx_rate = financial_fx_rate
                 else:
-                    try:
-                        fx_ticker = yf.Ticker(f"{quote_currency}USD=X")
-                        self._request_fetch_count += 1
-                        fx_info = fx_ticker.fast_info
-                        quote_fx_rate = float(fx_info.last_price or 1.0) or 1.0
-                    except Exception as e:
-                        print(f"yfinance FX warning for {quote_currency}: {e}")
+                    quote_fx_rate = futures["quote_fx"].result() if "quote_fx" in futures else 1.0
+                statement_frames = futures["statements"].result()
+                estimate_frames = futures["estimates"].result()
+                analyst_recommendations = futures["recommendations"].result()
             
             print(f"[FX] Financial Rate: {financial_fx_rate}, Quote Rate: {quote_fx_rate}")
 
@@ -849,16 +903,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 except Exception:
                     return "--"
 
-            annual_income = stock.financials
-            ttm_income = stock.ttm_income_stmt
-            quarterly_income = stock.quarterly_financials
-            annual_balance = stock.balance_sheet
-            quarterly_balance = stock.quarterly_balance_sheet
-            annual_cashflow = stock.cashflow
-            ttm_cashflow = stock.ttm_cash_flow
-            quarterly_cashflow = stock.quarterly_cashflow
-            # Modern yfinance fetches all financials in a single API call under the hood
-            self._request_fetch_count += 1
+            annual_income = statement_frames["annual_income"]
+            ttm_income = statement_frames["ttm_income"]
+            quarterly_income = statement_frames["quarterly_income"]
+            annual_balance = statement_frames["annual_balance"]
+            quarterly_balance = statement_frames["quarterly_balance"]
+            annual_cashflow = statement_frames["annual_cashflow"]
+            ttm_cashflow = statement_frames["ttm_cashflow"]
+            quarterly_cashflow = statement_frames["quarterly_cashflow"]
 
             annual_income = self._df_with_ttm_column(annual_income, ttm_income)
             annual_cashflow = self._df_with_ttm_column(annual_cashflow, ttm_cashflow)
@@ -956,8 +1008,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             # Analyst estimates from yfinance only.
             try:
-                ee = stock.earnings_estimate
-                self._request_fetch_count += 1
+                ee = estimate_frames.get("earnings")
                 if ee is not None and not ee.empty:
                     if "0y" in ee.index:
                         cy_eps_raw = float(ee.loc["0y", "avg"]) if "avg" in ee.columns and pd.notna(ee.loc["0y", "avg"]) else cy_eps_raw
@@ -967,8 +1018,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         ny_eps_raw = float(ee.loc["+1y", "avg"]) if "avg" in ee.columns and pd.notna(ee.loc["+1y", "avg"]) else ny_eps_raw
                         ny_eps_growth_raw = float(ee.loc["+1y", "growth"]) if "growth" in ee.columns and pd.notna(ee.loc["+1y", "growth"]) else ny_eps_growth_raw
 
-                re_est = stock.revenue_estimate
-                self._request_fetch_count += 1
+                re_est = estimate_frames.get("revenue")
                 if re_est is not None and not re_est.empty:
                     if "0y" in re_est.index:
                         cy_revenue_raw = float(re_est.loc["0y", "avg"]) if "avg" in re_est.columns and pd.notna(re_est.loc["0y", "avg"]) else cy_revenue_raw
@@ -1024,23 +1074,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             recommendation_mean = info.get("recommendationMean", 0) or 0
             recommendation_key = info.get("recommendationKey", "--") or "--"
-
-            # Analyst recommendations breakdown
-            analyst_recommendations = {}
-            try:
-                recs = stock.recommendations
-                self._request_fetch_count += 1
-                if recs is not None and not recs.empty:
-                    latest = recs.iloc[-1] if len(recs) > 0 else {}
-                    analyst_recommendations = {
-                        "strongBuy": int(latest.get("strongBuy", 0) or 0),
-                        "buy": int(latest.get("buy", 0) or 0),
-                        "hold": int(latest.get("hold", 0) or 0),
-                        "sell": int(latest.get("sell", 0) or 0),
-                        "strongSell": int(latest.get("strongSell", 0) or 0),
-                    }
-            except Exception:
-                pass
 
             company_name = info.get("longName") or info.get("shortName") or ticker
 
