@@ -266,7 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('R&D / Adj Op Inc', val('rndAdjIncome')),
             ]),
             metricGroup('Taxes', [
-                metric('Median Tax Rate', val('medianTaxRate')),
+                metric('Median Tax Rate', val('medianTaxRate'), '', 'medianTaxRate'),
             ]),
             metricGroup('Short Interest', [
                 metric('Short Float', val('shortFloat')),
@@ -277,9 +277,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('Our EV', val('derivedEnterpriseValue')),
             ]),
             metricGroup('Valuation', [
-                metric(`${data.valuationPrefix || 'EV'}/Adj Op Inc`, val('ev_adj_ebit'), 'ev_adj'),
-                metric(`${data.valuationPrefix || 'EV'}/CY Op Inc`, val('ev_cy_ebit'), 'ev_cy'),
-                metric(`${data.valuationPrefix || 'EV'}/NY Op Inc`, val('ev_ny_ebit'), 'ev_ny'),
+                metric(`${data.valuationPrefix || 'EV'}/AT Adj Op Inc`, val('ev_adj_ebit'), 'ev_adj'),
+                metric(`${data.valuationPrefix || 'EV'}/AT CY Op Inc`, val('ev_cy_ebit'), 'ev_cy'),
+                metric(`${data.valuationPrefix || 'EV'}/AT NY Op Inc`, val('ev_ny_ebit'), 'ev_ny'),
             ]),
             metricGroup('P/E', [
                 metric('P/LY EPS', val('priceCurrentEps')),
@@ -328,27 +328,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const margin = assumptions.margin ?? parsePercentValue(metricEntry(data, 'margin'));
         const cyGrowth = assumptions.cy_growth ?? parsePercentValue(metricEntry(data, 'cy_growth'));
         const nyGrowth = assumptions.ny_growth ?? parsePercentValue(metricEntry(data, 'ny_growth'));
+        const taxRate = assumptions.medianTaxRate ?? parsePercentValue(metricEntry(data, 'medianTaxRate'));
+        const afterTaxFactor = 1 - taxRate;
         const revenueRaw = parseMoney(metricEntry(data, 'revenue'));
         const cyRevenueBaseRaw = lastYearRevenueRaw(data) || revenueRaw;
         const valuationRaw = parseMoney(metricEntry(data, 'ev'));
         const grossPpeRaw = parseMoney(metricEntry(data, 'grossPpe'));
         const investmentCapexRaw = parseMoney(metricEntry(data, 'investmentCapex'));
         const rocDenomRaw = parseMoney(metricEntry(data, 'netWorkingCapital')) + parseMoney(metricEntry(data, 'netFixedAssets'));
+        const baseAdjRaw = parseMoney(metricEntry(data, 'adj_income')) || (revenueRaw * margin);
+        const pretaxAdjRaw = assumptions.margin !== undefined ? revenueRaw * margin : baseAdjRaw;
+        const afterTaxAdjRaw = pretaxAdjRaw && afterTaxFactor > 0 ? pretaxAdjRaw * afterTaxFactor : 0;
 
         if (assumptions.margin !== undefined) {
-            const adjRaw = revenueRaw * margin;
             setMetric(data, 'margin', margin, formatPercentDecimal(margin), 'percent');
-            setMetric(data, 'adj_income', adjRaw, formatMoneyFront(adjRaw), 'money');
-            setMetric(data, 'ev_adj_ebit', valuationRaw && adjRaw ? valuationRaw / adjRaw : null, valuationRaw && adjRaw ? formatRatio(valuationRaw / adjRaw) : '--', 'ratio');
-            setMetric(data, 'adjEbitGrossPpe', grossPpeRaw && adjRaw ? adjRaw / grossPpeRaw : null, grossPpeRaw && adjRaw ? formatPercentDecimal(adjRaw / grossPpeRaw) : '--', 'percent');
-            setMetric(data, 'capexAdjIncome', adjRaw ? investmentCapexRaw / adjRaw : null, adjRaw ? formatPercentDecimal(investmentCapexRaw / adjRaw) : '--', 'percent');
-            setMetric(data, 'roc', rocDenomRaw && adjRaw ? adjRaw / rocDenomRaw : null, rocDenomRaw && adjRaw ? formatPercentDecimal(adjRaw / rocDenomRaw) : '--', 'percent');
+            setMetric(data, 'adj_income', pretaxAdjRaw, formatMoneyFront(pretaxAdjRaw), 'money');
+            setMetric(data, 'adjEbitGrossPpe', grossPpeRaw && pretaxAdjRaw ? pretaxAdjRaw / grossPpeRaw : null, grossPpeRaw && pretaxAdjRaw ? formatPercentDecimal(pretaxAdjRaw / grossPpeRaw) : '--', 'percent');
+            setMetric(data, 'capexAdjIncome', pretaxAdjRaw ? investmentCapexRaw / pretaxAdjRaw : null, pretaxAdjRaw ? formatPercentDecimal(investmentCapexRaw / pretaxAdjRaw) : '--', 'percent');
+            setMetric(data, 'roc', rocDenomRaw && pretaxAdjRaw ? pretaxAdjRaw / rocDenomRaw : null, rocDenomRaw && pretaxAdjRaw ? formatPercentDecimal(pretaxAdjRaw / rocDenomRaw) : '--', 'percent');
         }
 
         if (assumptions.cy_growth !== undefined) setMetric(data, 'cy_growth', cyGrowth, formatPercentDecimal(cyGrowth), 'percent');
         if (assumptions.ny_growth !== undefined) setMetric(data, 'ny_growth', nyGrowth, formatPercentDecimal(nyGrowth), 'percent');
+        if (assumptions.medianTaxRate !== undefined) setMetric(data, 'medianTaxRate', taxRate, formatPercentDecimal(taxRate), 'percent');
 
-        const effectiveAdjRaw = revenueRaw * margin;
         const cyRevenueRaw = assumptions.cy_growth !== undefined && cyRevenueBaseRaw
             ? cyRevenueBaseRaw * (1 + cyGrowth)
             : parseMoney(metricEntry(data, 'cy_revenue'));
@@ -357,10 +360,13 @@ document.addEventListener('DOMContentLoaded', () => {
             : parseMoney(metricEntry(data, 'ny_revenue'));
         const cyAdjRaw = cyRevenueRaw * margin;
         const nyAdjRaw = nyRevenueRaw * margin;
+        const cyAfterTaxAdjRaw = cyAdjRaw && afterTaxFactor > 0 ? cyAdjRaw * afterTaxFactor : 0;
+        const nyAfterTaxAdjRaw = nyAdjRaw && afterTaxFactor > 0 ? nyAdjRaw * afterTaxFactor : 0;
         const cyDiscount = forwardDiscountInfo(data, 'cy');
         const nyDiscount = forwardDiscountInfo(data, 'ny');
-        const cyDiscountedMultiple = discountedForwardMultiple(valuationRaw, cyAdjRaw, cyDiscount.factor);
-        const nyDiscountedMultiple = discountedForwardMultiple(valuationRaw, nyAdjRaw, nyDiscount.factor);
+        const cyDiscountedMultiple = discountedForwardMultiple(valuationRaw, cyAfterTaxAdjRaw, cyDiscount.factor);
+        const nyDiscountedMultiple = discountedForwardMultiple(valuationRaw, nyAfterTaxAdjRaw, nyDiscount.factor);
+        setMetric(data, 'ev_adj_ebit', valuationRaw && afterTaxAdjRaw ? valuationRaw / afterTaxAdjRaw : null, valuationRaw && afterTaxAdjRaw ? formatRatio(valuationRaw / afterTaxAdjRaw) : '--', 'ratio');
         if (cyDiscountedMultiple !== null) {
             setMetric(data, 'ev_cy_ebit', cyDiscountedMultiple, formatRatio(cyDiscountedMultiple), 'ratio');
         }
@@ -377,7 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setMetric(data, 'ny_adj_inc', nyAdjRaw, formatMoneyFront(nyAdjRaw), 'money');
             setMetric(data, 'ev_ny_ebit', nyDiscountedMultiple, nyDiscountedMultiple !== null ? formatRatio(nyDiscountedMultiple) : '--', 'ratio');
         }
-        if (assumptions.margin !== undefined && !effectiveAdjRaw) {
+        if (!afterTaxAdjRaw) {
             setMetric(data, 'ev_adj_ebit', null, '--', 'ratio');
             setMetric(data, 'ev_cy_ebit', null, '--', 'ratio');
             setMetric(data, 'ev_ny_ebit', null, '--', 'ratio');
@@ -591,8 +597,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ${sortableHeader('ticker', 'Ticker', kind)}${sortableHeader('margin', 'Adj Margin', kind)}
             ${sortableHeader('grossMargin', 'Gross Margin', kind)}${sortableHeader('cy_growth', 'CY Growth', kind)}
             ${sortableHeader('ny_growth', 'NY Growth', kind)}${sortableHeader('shortFloat', 'Short Float', kind)}
-            ${sortableHeader('ev_adj_ebit', 'EV/Adj Op Inc', kind)}${sortableHeader('ev_cy_ebit', 'EV/CY', kind)}
-            ${sortableHeader('ev_ny_ebit', 'EV/NY', kind)}<th>Actions</th>
+            ${sortableHeader('ev_adj_ebit', 'EV/AT Adj', kind)}${sortableHeader('ev_cy_ebit', 'EV/AT CY', kind)}
+            ${sortableHeader('ev_ny_ebit', 'EV/AT NY', kind)}<th>Actions</th>
         </tr>`;
     }
 
@@ -1119,6 +1125,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return raw && discountFactor ? formatMoneyFront(raw / discountFactor) : '--';
     }
 
+    function afterTaxIncomeDisplay(value, taxRate) {
+        const raw = parseMoney(value);
+        const factor = 1 - taxRate;
+        return raw && factor > 0 ? formatMoneyFront(raw * factor) : '--';
+    }
+
+    function discountedAfterTaxIncomeDisplay(value, taxRate, discountFactor) {
+        const raw = parseMoney(value);
+        const factor = 1 - taxRate;
+        return raw && factor > 0 && discountFactor ? formatMoneyFront((raw * factor) / discountFactor) : '--';
+    }
+
     function compactFormulaRows(rows) {
         return rows.filter(([label, value]) => label && value !== undefined && value !== null);
     }
@@ -1147,32 +1165,39 @@ document.addEventListener('DOMContentLoaded', () => {
         const cyDiscount = forwardDiscountInfo(data, 'cy');
         const nyDiscount = forwardDiscountInfo(data, 'ny');
         const discountLabel = `${(FORWARD_DISCOUNT_RATE * 100).toFixed(0)}% Discount Rate`;
+        const taxRate = parsePercentValue(raw('medianTaxRate'));
+        const taxDisplay = val('medianTaxRate');
+        const afterTaxAdjIncome = afterTaxIncomeDisplay(raw('adj_income'), taxRate);
+        const cyAfterTaxAdjIncome = afterTaxIncomeDisplay(raw('cy_adj_inc'), taxRate);
+        const nyAfterTaxAdjIncome = afterTaxIncomeDisplay(raw('ny_adj_inc'), taxRate);
         return {
             ev_adj: {
-                title: `${data.valuationPrefix || 'EV'} / Adj Op Inc`,
+                title: `${data.valuationPrefix || 'EV'} / After-Tax Adj Op Inc`,
                 numeratorLabel: valuationLabel,
                 numerator: val('ev'),
-                divisorLabel: 'Adj Op Inc',
-                divisor: val('adj_income'),
-                resultLabel: `${data.valuationPrefix || 'EV'} / Adj Op Inc`,
+                divisorLabel: 'After-Tax Adj Op Inc',
+                divisor: afterTaxAdjIncome,
+                resultLabel: `${data.valuationPrefix || 'EV'} / After-Tax Adj Op Inc`,
                 result: val('ev_adj_ebit'),
-                rows: formulaValue(`${valuationLabel} / Adj Op Inc`, [
+                rows: formulaValue(`${valuationLabel} / (Adj Op Inc x (1 - Tax Rate))`, [
                     [valuationLabel, val('ev')],
                     ['Metric Date', `TTM as of ${formatDateShort(payloadDate(data))}`],
                     ['Revenue', val('revenue')],
                     ['Adj Op Inc Margin', val('margin')],
                     ['Adj Op Inc', val('adj_income')],
+                    ['Median Tax Rate', taxDisplay],
+                    ['After-Tax Adj Op Inc', afterTaxAdjIncome],
                 ]),
             },
             ev_cy: {
-                title: `${data.valuationPrefix || 'EV'} / CY Op Inc`,
+                title: `${data.valuationPrefix || 'EV'} / After-Tax CY Op Inc`,
                 numeratorLabel: valuationLabel,
                 numerator: val('ev'),
-                divisorLabel: 'CY Adj Op Inc',
-                divisor: val('cy_adj_inc'),
-                resultLabel: `${data.valuationPrefix || 'EV'} / CY Op Inc`,
+                divisorLabel: 'After-Tax CY Adj Op Inc',
+                divisor: cyAfterTaxAdjIncome,
+                resultLabel: `${data.valuationPrefix || 'EV'} / After-Tax CY Op Inc`,
                 result: val('ev_cy_ebit'),
-                rows: formulaValue(`${valuationLabel} / ((Last Year Revenue x (1 + CY Growth) x Adj Op Inc Margin) / Discount Factor)`, [
+                rows: formulaValue(`${valuationLabel} / (((Last Year Revenue x (1 + CY Growth) x Adj Op Inc Margin) x (1 - Tax Rate)) / Discount Factor)`, [
                     [valuationLabel, val('ev')],
                     ['Metric Date', formatDateShort(cyDiscount.date)],
                     ['Years Forward', cyDiscount.years.toFixed(2)],
@@ -1182,18 +1207,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     ['CY Revenue', val('cy_revenue')],
                     ['Adj Op Inc Margin', val('margin')],
                     ['CY Adj Op Inc', val('cy_adj_inc')],
-                    ['Discounted CY Adj Op Inc', discountedIncomeDisplay(raw('cy_adj_inc'), cyDiscount.factor)],
+                    ['Median Tax Rate', taxDisplay],
+                    ['After-Tax CY Adj Op Inc', cyAfterTaxAdjIncome],
+                    ['Discounted After-Tax CY Adj Op Inc', discountedAfterTaxIncomeDisplay(raw('cy_adj_inc'), taxRate, cyDiscount.factor)],
                 ]),
             },
             ev_ny: {
-                title: `${data.valuationPrefix || 'EV'} / NY Op Inc`,
+                title: `${data.valuationPrefix || 'EV'} / After-Tax NY Op Inc`,
                 numeratorLabel: valuationLabel,
                 numerator: val('ev'),
-                divisorLabel: 'NY Adj Op Inc',
-                divisor: val('ny_adj_inc'),
-                resultLabel: `${data.valuationPrefix || 'EV'} / NY Op Inc`,
+                divisorLabel: 'After-Tax NY Adj Op Inc',
+                divisor: nyAfterTaxAdjIncome,
+                resultLabel: `${data.valuationPrefix || 'EV'} / After-Tax NY Op Inc`,
                 result: val('ev_ny_ebit'),
-                rows: formulaValue(`${valuationLabel} / ((CY Revenue x (1 + NY Growth) x Adj Op Inc Margin) / Discount Factor)`, [
+                rows: formulaValue(`${valuationLabel} / (((CY Revenue x (1 + NY Growth) x Adj Op Inc Margin) x (1 - Tax Rate)) / Discount Factor)`, [
                     [valuationLabel, val('ev')],
                     ['Metric Date', formatDateShort(nyDiscount.date)],
                     ['Years Forward', nyDiscount.years.toFixed(2)],
@@ -1203,7 +1230,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     ['NY Revenue', val('ny_revenue')],
                     ['Adj Op Inc Margin', val('margin')],
                     ['NY Adj Op Inc', val('ny_adj_inc')],
-                    ['Discounted NY Adj Op Inc', discountedIncomeDisplay(raw('ny_adj_inc'), nyDiscount.factor)],
+                    ['Median Tax Rate', taxDisplay],
+                    ['After-Tax NY Adj Op Inc', nyAfterTaxAdjIncome],
+                    ['Discounted After-Tax NY Adj Op Inc', discountedAfterTaxIncomeDisplay(raw('ny_adj_inc'), taxRate, nyDiscount.factor)],
                 ]),
             },
             adj_margin: {
