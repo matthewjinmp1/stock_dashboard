@@ -870,6 +870,27 @@ button:active {
     box-shadow: none;
 }
 
+.metric-edit-wrap {
+    position: relative;
+    display: inline-flex;
+    justify-content: center;
+}
+
+.metric-edit-wrap::after {
+    content: "";
+    position: absolute;
+    left: 0.12em;
+    right: 0.12em;
+    bottom: -0.02em;
+    border-bottom: 2px dashed rgba(148, 163, 184, 0.35);
+    pointer-events: none;
+}
+
+.metric-edit-wrap:focus-within::after,
+.metric-edit-wrap:hover::after {
+    border-bottom-color: var(--accent-color);
+}
+
 .metric-edit-input {
     flex: 0 0 auto;
     width: var(--metric-input-width, auto);
@@ -880,7 +901,6 @@ button:active {
     appearance: none;
     -webkit-appearance: none;
     border: 0;
-    border-bottom: 2px dashed rgba(148, 163, 184, 0.35);
     border-radius: 0;
     outline: none;
     text-align: center;
@@ -894,7 +914,7 @@ button:active {
 
 .metric-edit-input:hover,
 .metric-edit-input:focus {
-    border-bottom-color: var(--accent-color);
+    border-bottom-color: transparent;
 }
 
 .error-text {

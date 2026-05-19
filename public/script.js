@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const link = calcType ? ' metric-title-link' : '';
         const displayValue = formatSigned(value || '--');
         const editableValue = editType
-            ? `<input class="value-display metric-edit-input" type="text" value="${escapeAttr(displayValue)}" style="--metric-input-width: ${metricInputWidth(displayValue)}" data-edit-assumption="${editType}" data-original-value="${escapeAttr(displayValue)}" aria-label="Edit ${escapeAttr(label)}">`
+            ? `<span class="metric-edit-wrap"><input class="value-display metric-edit-input" type="text" value="${escapeAttr(displayValue)}" style="--metric-input-width: ${metricInputWidth(displayValue)}" data-edit-assumption="${editType}" data-original-value="${escapeAttr(displayValue)}" aria-label="Edit ${escapeAttr(label)}"></span>`
             : `<div class="value-display">${displayValue}</div>`;
         return `<div class="stat-box">
             <span class="stat-label${link}" data-calc="${calcType}">${label}</span>
