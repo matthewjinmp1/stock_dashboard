@@ -874,15 +874,17 @@ button:active {
     position: relative;
     display: inline-flex;
     justify-content: center;
+    width: fit-content;
 }
 
 .metric-edit-wrap::after {
     content: "";
     position: absolute;
-    left: 0.12em;
-    right: 0.12em;
+    left: 50%;
+    width: var(--metric-underline-width, 4ch);
     bottom: -0.02em;
     border-bottom: 2px dashed rgba(148, 163, 184, 0.35);
+    transform: translateX(-50%);
     pointer-events: none;
 }
 

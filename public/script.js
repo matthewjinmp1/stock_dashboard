@@ -218,11 +218,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${Math.max(3.5, Math.min(length + 1.25, 10))}ch`;
     }
 
+    function metricUnderlineWidth(value) {
+        const length = String(value ?? '').length || 2;
+        return `${Math.max(2.25, Math.min(length, 8))}ch`;
+    }
+
     function metric(label, value, calcType = '', editType = '') {
         const link = calcType ? ' metric-title-link' : '';
         const displayValue = formatSigned(value || '--');
         const editableValue = editType
-            ? `<span class="metric-edit-wrap"><input class="value-display metric-edit-input" type="text" value="${escapeAttr(displayValue)}" style="--metric-input-width: ${metricInputWidth(displayValue)}" data-edit-assumption="${editType}" data-original-value="${escapeAttr(displayValue)}" aria-label="Edit ${escapeAttr(label)}"></span>`
+            ? `<span class="metric-edit-wrap" style="--metric-underline-width: ${metricUnderlineWidth(displayValue)}"><input class="value-display metric-edit-input" type="text" value="${escapeAttr(displayValue)}" style="--metric-input-width: ${metricInputWidth(displayValue)}" data-edit-assumption="${editType}" data-original-value="${escapeAttr(displayValue)}" aria-label="Edit ${escapeAttr(label)}"></span>`
             : `<div class="value-display">${displayValue}</div>`;
         return `<div class="stat-box">
             <span class="stat-label${link}" data-calc="${calcType}">${label}</span>
@@ -298,6 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
         stats.querySelectorAll('[data-edit-assumption]').forEach((node) => {
             const syncWidth = () => {
                 node.style.setProperty('--metric-input-width', metricInputWidth(node.value || node.dataset.editingOriginalValue || node.dataset.originalValue || '--'));
+                node.parentElement?.style.setProperty('--metric-underline-width', metricUnderlineWidth(node.value || node.dataset.editingOriginalValue || node.dataset.originalValue || '--'));
             };
             node.addEventListener('focus', () => {
                 node.dataset.editingOriginalValue = node.value;
