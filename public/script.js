@@ -519,6 +519,9 @@ document.addEventListener('DOMContentLoaded', () => {
         $('statement-panel').classList.add('hidden');
         state.latest = null;
         $('result-ticker').textContent = ticker;
+        const title = $('result-ticker').parentElement;
+        const company = title ? title.querySelector('.company-name') : null;
+        if (company) company.textContent = '';
         $('result-data-date').textContent = '--';
         $('result-fetch-info').textContent = 'Fetch time: -- • Fetches: --';
         $('result-currency-info').textContent = 'Native currency: -- • USD rate: --';
