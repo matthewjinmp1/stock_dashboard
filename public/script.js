@@ -215,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function metricInputWidth(value) {
         const length = String(value ?? '').length || 2;
-        return `${Math.max(2, Math.min(length, 8))}ch`;
+        return `${Math.max(3.5, Math.min(length + 1.25, 10))}ch`;
     }
 
     function metric(label, value, calcType = '', editType = '') {
