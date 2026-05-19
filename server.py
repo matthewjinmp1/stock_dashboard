@@ -22,7 +22,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 14
+PAYLOAD_VERSION = 15
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -1164,12 +1164,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return formatter(value) if value is not None else "--"
 
             short_float_raw = info.get("shortPercentOfFloat") if info.get("shortPercentOfFloat") else None
-            dividend_yield_raw = info.get("dividendYield")
-            if dividend_yield_raw is not None:
+            dividend_yield_raw = (
+                info.get("dividendYield")
+                if info.get("dividendYield") is not None
+                else info.get("trailingAnnualDividendYield")
+            )
+            try:
+                dividend_yield_raw = float(dividend_yield_raw) if dividend_yield_raw is not None else None
+                if dividend_yield_raw is not None and dividend_yield_raw > 1:
+                    dividend_yield_raw = dividend_yield_raw / 100
+            except Exception:
+                dividend_yield_raw = None
+            if dividend_yield_raw is None:
+                dividend_rate_raw = info.get("dividendRate") or info.get("trailingAnnualDividendRate")
+                native_price_raw = info.get("currentPrice") or info.get("regularMarketPrice")
                 try:
-                    dividend_yield_raw = float(dividend_yield_raw)
-                    if dividend_yield_raw > 1:
-                        dividend_yield_raw = dividend_yield_raw / 100
+                    dividend_rate_raw = float(dividend_rate_raw or 0)
+                    native_price_raw = float(native_price_raw or 0)
+                    dividend_yield_raw = dividend_rate_raw / native_price_raw if dividend_rate_raw and native_price_raw else None
                 except Exception:
                     dividend_yield_raw = None
             structured_metrics = self._structured_metrics([
