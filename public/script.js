@@ -253,9 +253,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('CY Growth', val('cy_growth'), '', 'cy_growth'),
                 metric('NY Growth', val('ny_growth'), '', 'ny_growth'),
             ]),
-            metricGroup('EPS Growth', [
-                metric('CY EPS Growth', val('currentYearEpsGrowth')),
-                metric('NY EPS Growth', val('nextYearEpsGrowth')),
+            metricGroup('Valuation', [
+                metric(`${data.valuationPrefix || 'EV'}/Adj Inc`, val('ev_adj_ebit'), 'ev_adj'),
+                metric(`${data.valuationPrefix || 'EV'}/CY Adj Inc`, val('ev_cy_ebit'), 'ev_cy'),
+                metric(`${data.valuationPrefix || 'EV'}/NY Adj Inc`, val('ev_ny_ebit'), 'ev_ny'),
             ]),
             metricGroup('Returns', [
                 metric('ROGPPE', val('adjEbitGrossPpe'), 'adj_ebit_gross_ppe'),
@@ -280,10 +281,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('Current Price', val('currentPrice')),
                 metric('Dividend Yield', val('dividendYield')),
             ]),
-            metricGroup('Valuation', [
-                metric(`${data.valuationPrefix || 'EV'}/Adj Inc`, val('ev_adj_ebit'), 'ev_adj'),
-                metric(`${data.valuationPrefix || 'EV'}/CY Adj Inc`, val('ev_cy_ebit'), 'ev_cy'),
-                metric(`${data.valuationPrefix || 'EV'}/NY Adj Inc`, val('ev_ny_ebit'), 'ev_ny'),
+            metricGroup('EPS Growth', [
+                metric('CY EPS Growth', val('currentYearEpsGrowth')),
+                metric('NY EPS Growth', val('nextYearEpsGrowth')),
             ]),
             metricGroup('P/E', [
                 metric('P/LY EPS', val('priceCurrentEps')),
