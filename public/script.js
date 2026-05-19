@@ -439,9 +439,6 @@ document.addEventListener('DOMContentLoaded', () => {
             : data.recommendationMean && data.recommendationMean !== '--'
                 ? Math.max(0, 6 - Number(data.recommendationMean)).toFixed(1)
                 : '--';
-        const recommendationLabel = countWeightedRating !== null
-            ? recommendationLabelFromStars(countWeightedRating)
-            : formatRecommendationKey(data.recommendationKey);
         return `<section class="analyst-grid">
             <div class="metric-group analyst-card">
                 <h3>Analyst Price Target</h3>
@@ -453,26 +450,13 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="metric-group analyst-card">
                 <h3>Analyst Recommendations</h3>
-                <div class="rec-summary">${recommendationLabel} • ${rating}/5 stars</div>
+                <div class="rec-summary">${rating}/5 stars</div>
                 <div class="rec-grid">${counts.map(([label, count, tone]) => {
             const pct = total ? `${Math.round((count / total) * 100)}%` : '0%';
             return `<div class="rec-pill rec-${tone}"><strong>${count}</strong><span>${label}</span><small>${pct}</small></div>`;
         }).join('')}</div>
             </div>
         </section>`;
-    }
-
-    function recommendationLabelFromStars(stars) {
-        if (stars >= 4.5) return 'Strong Buy';
-        if (stars >= 3.5) return 'Buy';
-        if (stars >= 2.5) return 'Hold';
-        if (stars >= 1.5) return 'Sell';
-        return 'Strong Sell';
-    }
-
-    function formatRecommendationKey(key) {
-        if (!key || key === '--') return '--';
-        return String(key).replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
     }
 
     function caseButton(label, target, current) {
