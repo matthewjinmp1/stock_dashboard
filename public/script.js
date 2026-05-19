@@ -276,6 +276,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('Net Cash', val('netCash'), 'net_cash'),
                 metric('Our EV', val('derivedEnterpriseValue')),
             ]),
+            metricGroup('Price & Yield', [
+                metric('Current Price', val('currentPrice')),
+                metric('Dividend Yield', val('dividendYield')),
+            ]),
             metricGroup('Valuation', [
                 metric(`${data.valuationPrefix || 'EV'}/Adj Inc`, val('ev_adj_ebit'), 'ev_adj'),
                 metric(`${data.valuationPrefix || 'EV'}/CY Adj Inc`, val('ev_cy_ebit'), 'ev_cy'),

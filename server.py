@@ -541,6 +541,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ("accountsPayable", accounts_payable_raw, self._format_money(accounts_payable_raw), "money"),
             ("shortFloat", 0.042, "4.2%", "percent"),
             ("currentPrice", 100, "100", "money"),
+            ("dividendYield", 0.012, "1.2%", "percent"),
             ("targetMeanPrice", 125, "125", "money"),
             ("targetLowPrice", 90, "90", "money"),
             ("targetHighPrice", 160, "160", "money"),
@@ -1163,6 +1164,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return formatter(value) if value is not None else "--"
 
             short_float_raw = info.get("shortPercentOfFloat") if info.get("shortPercentOfFloat") else None
+            dividend_yield_raw = info.get("dividendYield")
+            if dividend_yield_raw is not None:
+                try:
+                    dividend_yield_raw = float(dividend_yield_raw)
+                    if dividend_yield_raw > 1:
+                        dividend_yield_raw = dividend_yield_raw / 100
+                except Exception:
+                    dividend_yield_raw = None
             structured_metrics = self._structured_metrics([
                 ("income", operating_income_raw, self._format_money(operating_income_raw), "money"),
                 ("margin", adj_margin_ratio or None, self._format_percent(adj_margin_ratio) if adj_margin_ratio else "--", "percent"),
@@ -1203,6 +1212,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("accountsPayable", accounts_payable_raw, self._format_money(accounts_payable_raw), "money"),
                 ("shortFloat", short_float_raw, self._format_percent(short_float_raw) if short_float_raw else "--", "percent"),
                 ("currentPrice", current_price_raw, self._format_3sig(current_price_raw), "money"),
+                ("dividendYield", dividend_yield_raw, self._format_percent(dividend_yield_raw) if dividend_yield_raw is not None else "--", "percent"),
                 ("targetMeanPrice", target_mean_raw, self._format_3sig(target_mean_raw), "money"),
                 ("targetLowPrice", target_low_raw, self._format_3sig(target_low_raw), "money"),
                 ("targetHighPrice", target_high_raw, self._format_3sig(target_high_raw), "money"),
