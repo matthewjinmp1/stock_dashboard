@@ -878,14 +878,20 @@ button:active {
 }
 
 .metric-edit-wrap::after {
-    content: "";
+    content: attr(data-metric-value);
     position: absolute;
     left: 50%;
-    width: var(--metric-underline-width, 4ch);
     bottom: -0.02em;
     border-bottom: 2px dashed rgba(148, 163, 184, 0.35);
     transform: translateX(-50%);
     pointer-events: none;
+    color: transparent;
+    font-family: inherit;
+    font-size: 2.4rem;
+    font-weight: 700;
+    line-height: 1.1;
+    white-space: pre;
+    -webkit-text-fill-color: transparent;
 }
 
 .metric-edit-wrap:focus-within::after,
