@@ -1031,9 +1031,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             adj_income_raw = operating_income_raw + da_minus_capex_raw
             adj_margin_ratio = (adj_income_raw / revenue_raw) if revenue_raw else 0
             operating_margin_ratio = (operating_income_raw / revenue_raw) if revenue_raw else info.get("operatingMargins", 0) or 0
-            gross_margin_ratio = info.get("grossMargins", None)
-            if gross_margin_ratio is None and revenue_raw and gross_profit_raw:
-                gross_margin_ratio = gross_profit_raw / revenue_raw
+            gross_margin_ratio = (gross_profit_raw / revenue_raw) if revenue_raw and gross_profit_raw else info.get("grossMargins", None)
 
             # R&D
             rnd_raw = self._df_ttm_value(quarterly_income, annual_income, ["Research And Development", "ResearchAndDevelopment", "Research Development"]) or 0
