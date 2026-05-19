@@ -220,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function metricUnderlineWidth(value) {
         const length = String(value ?? '').length || 2;
-        return `${Math.max(2.25, Math.min(length, 8))}ch`;
+        return `${Math.max(2.8, Math.min(length * 1.18, 9.5))}ch`;
     }
 
     function metric(label, value, calcType = '', editType = '') {
