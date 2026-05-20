@@ -324,6 +324,30 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
 
         self.assertEqual(round(self.handler._market_cap_from_info(info)), 4238062980000)
 
+    def test_bid_ask_metrics_accepts_plausible_large_cap_spread(self):
+        bid, ask, spread, cost = self.handler._bid_ask_metrics(
+            {"bid": 416.99, "ask": 417.01},
+            current_price_raw=417.0,
+            market_cap_raw=3_000_000_000_000,
+        )
+
+        self.assertAlmostEqual(bid, 416.99)
+        self.assertAlmostEqual(ask, 417.01)
+        self.assertAlmostEqual(spread, 0.02)
+        self.assertAlmostEqual(cost, 0.000023980815347721824)
+
+    def test_bid_ask_metrics_rejects_stale_large_cap_spread(self):
+        bid, ask, spread, cost = self.handler._bid_ask_metrics(
+            {"bid": 416.02, "ask": 420.00},
+            current_price_raw=417.24,
+            market_cap_raw=3_000_000_000_000,
+        )
+
+        self.assertIsNone(bid)
+        self.assertIsNone(ask)
+        self.assertIsNone(spread)
+        self.assertIsNone(cost)
+
     def test_delegates_to_yfinance_without_manual_fetches(self):
         expected = tuple(f"value-{idx}" for idx, _field in enumerate(FETCH_RESULT_FIELDS))
 

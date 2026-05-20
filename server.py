@@ -22,7 +22,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 18
+PAYLOAD_VERSION = 19
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -842,6 +842,39 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 rates.append(rate)
         return statistics.median(rates) if rates else None
 
+    def _bid_ask_metrics(self, info, quote_fx_rate=1.0, current_price_raw=None, market_cap_raw=None):
+        try:
+            bid_native_raw = float(info.get("bid") or 0)
+            ask_native_raw = float(info.get("ask") or 0)
+            midpoint_native_raw = (bid_native_raw + ask_native_raw) / 2
+            if bid_native_raw <= 0 or ask_native_raw <= bid_native_raw or midpoint_native_raw <= 0:
+                return None, None, None, None
+
+            transaction_cost_raw = ((ask_native_raw - bid_native_raw) / 2) / midpoint_native_raw
+            reference_price_raw = current_price_raw / quote_fx_rate if current_price_raw and quote_fx_rate else 0
+            if not self._is_plausible_bid_ask(transaction_cost_raw, midpoint_native_raw, reference_price_raw, market_cap_raw):
+                return None, None, None, None
+
+            bid_price_raw = bid_native_raw * quote_fx_rate
+            ask_price_raw = ask_native_raw * quote_fx_rate
+            bid_ask_spread_raw = ask_price_raw - bid_price_raw
+            return bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw
+        except Exception:
+            return None, None, None, None
+
+    def _is_plausible_bid_ask(self, transaction_cost_raw, midpoint_raw, reference_price_raw=None, market_cap_raw=None):
+        if transaction_cost_raw is None or transaction_cost_raw < 0:
+            return False
+        if reference_price_raw:
+            distance_from_price = abs(midpoint_raw - reference_price_raw) / reference_price_raw
+            if distance_from_price > 0.02:
+                return False
+        if market_cap_raw and market_cap_raw >= 100_000_000_000:
+            return transaction_cost_raw <= 0.001
+        if market_cap_raw and market_cap_raw >= 10_000_000_000:
+            return transaction_cost_raw <= 0.0025
+        return transaction_cost_raw <= 0.01
+
     def fetch_yfinance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics=None):
         """Fetch all data using yfinance package. Returns the same tuple as fetch_yahoo_finance_data."""
         import pandas as pd
@@ -1195,17 +1228,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ask_price_raw = None
             bid_ask_spread_raw = None
             transaction_cost_raw = None
-            try:
-                bid_native_raw = float(info.get("bid") or 0)
-                ask_native_raw = float(info.get("ask") or 0)
-                midpoint_native_raw = (bid_native_raw + ask_native_raw) / 2
-                if bid_native_raw > 0 and ask_native_raw > bid_native_raw and midpoint_native_raw > 0:
-                    bid_price_raw = bid_native_raw * quote_fx_rate
-                    ask_price_raw = ask_native_raw * quote_fx_rate
-                    bid_ask_spread_raw = ask_price_raw - bid_price_raw
-                    transaction_cost_raw = ((ask_native_raw - bid_native_raw) / 2) / midpoint_native_raw
-            except Exception:
-                transaction_cost_raw = None
+            bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw = self._bid_ask_metrics(
+                info,
+                quote_fx_rate=quote_fx_rate,
+                current_price_raw=current_price_raw,
+                market_cap_raw=market_cap_raw,
+            )
             structured_metrics = self._structured_metrics([
                 ("income", operating_income_raw, self._format_money(operating_income_raw), "money"),
                 ("margin", adj_margin_ratio or None, self._format_percent(adj_margin_ratio) if adj_margin_ratio else "--", "percent"),
