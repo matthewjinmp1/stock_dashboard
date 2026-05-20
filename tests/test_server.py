@@ -443,6 +443,66 @@ class HandleApiRequestContractTests(unittest.TestCase):
         "fetchCount",
         "fetchTiming",
     }
+    REQUIRED_STRUCTURED_METRIC_KEYS = {
+        "income",
+        "margin",
+        "grossMargin",
+        "ev_cy_ebit",
+        "ev_ny_ebit",
+        "adj_income",
+        "capex",
+        "da",
+        "ev",
+        "ev_adj_ebit",
+        "cy_growth",
+        "ny_growth",
+        "medianTaxRate",
+        "cy_adj_inc",
+        "ny_adj_inc",
+        "marketCap",
+        "netCash",
+        "derivedEnterpriseValue",
+        "revenue",
+        "cy_revenue",
+        "ny_revenue",
+        "grossPpe",
+        "adjEbitGrossPpe",
+        "capexAdjIncome",
+        "investmentCapex",
+        "roc",
+        "netWorkingCapital",
+        "netFixedAssets",
+        "shortFloat",
+        "currentPrice",
+        "dividendYield",
+        "transactionCost",
+        "targetMeanPrice",
+        "targetLowPrice",
+        "targetHighPrice",
+        "targetMove",
+        "currentYearEps",
+        "nextYearEps",
+        "yearAgoEps",
+        "currentYearEpsGrowth",
+        "nextYearEpsGrowth",
+        "priceCurrentEps",
+        "priceCyEps",
+        "priceNyEps",
+    }
+
+    def assert_metric_contract(self, payload):
+        metrics = payload.get("metrics")
+        self.assertIsInstance(metrics, dict)
+        self.assertTrue(self.REQUIRED_STRUCTURED_METRIC_KEYS.issubset(metrics.keys()))
+        for key in self.REQUIRED_STRUCTURED_METRIC_KEYS:
+            with self.subTest(metric=key):
+                metric = metrics[key]
+                self.assertIsInstance(metric, dict)
+                self.assertIn("raw", metric)
+                self.assertIn("display", metric)
+                self.assertIn("kind", metric)
+                self.assertIsInstance(metric["display"], str)
+                self.assertIn(metric["kind"], {"money", "percent", "ratio", "number"})
 
     def test_test_ticker_returns_complete_fixture_without_external_fetches(self):
         handler = make_handler()
@@ -496,6 +556,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
 
         self.assertEqual(captured["status"], 200)
         self.assertTrue(self.REQUIRED_PUBLIC_PAYLOAD_KEYS.issubset(captured["payload"].keys()))
+        self.assert_metric_contract(captured["payload"])
 
     def test_fetch_result_maps_to_public_payload_and_saved_cache(self):
         handler = make_handler()
@@ -533,6 +594,12 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["metrics"]["revenue"]["raw"], 305000000000)
         self.assertEqual(payload["metrics"]["revenue"]["display"], "305B")
         self.assertEqual(payload["metrics"]["margin"]["raw"], 0.467)
+        for key, metric in payload["metrics"].items():
+            with self.subTest(metric=key):
+                self.assertIn("raw", metric)
+                self.assertIn("display", metric)
+                self.assertIn("kind", metric)
+                self.assertIsInstance(metric["display"], str)
         self.assertEqual(payload["evSource"], "derived")
         self.assertEqual(payload["marketCapSource"], "yahoo")
         self.assertEqual(payload["payloadVersion"], server.PAYLOAD_VERSION)
@@ -1039,6 +1106,46 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(adjusted_annual["values"], ["35B", "20B"])
         self.assertEqual(adjusted_quarterly, {"label": "Adjusted Operating Income", "values": ["6B"]})
 
+    def test_add_adjusted_operating_income_does_not_duplicate_existing_row(self):
+        income = {
+            "annual": {
+                "periods": ["TTM"],
+                "rows": [
+                    {"label": "Operating Income", "values": ["10B"]},
+                    {"label": "Adjusted Operating Income", "values": ["11B"]},
+                ],
+            }
+        }
+        cash_flow = {
+            "annual": {
+                "periods": ["TTM"],
+                "rows": [
+                    {"label": "Depreciation & Amortization", "values": ["2B"]},
+                    {"label": "Capital Expenditures", "values": ["-1B"]},
+                ],
+            }
+        }
+
+        enriched = self.handler._add_adjusted_operating_income(income, cash_flow)
+        adjusted_rows = [row for row in enriched["annual"]["rows"] if row["label"] == "Adjusted Operating Income"]
+
+        self.assertEqual(len(adjusted_rows), 1)
+        self.assertEqual(adjusted_rows[0]["values"], ["11B"])
+
+    def test_add_adjusted_operating_income_handles_missing_cash_flow_items(self):
+        income = {
+            "annual": {
+                "periods": ["TTM", "2025-12-31"],
+                "rows": [{"label": "Operating Income", "values": ["10B", "8B"]}],
+            }
+        }
+        cash_flow = {"annual": {"periods": ["TTM", "2025-12-31"], "rows": []}}
+
+        enriched = self.handler._add_adjusted_operating_income(income, cash_flow)
+        adjusted = next(row for row in enriched["annual"]["rows"] if row["label"] == "Adjusted Operating Income")
+
+        self.assertEqual(adjusted["values"], ["10B", "8B"])
+
     def test_add_tax_rate_uses_tax_provision_over_pretax_income(self):
         income = {
             "annual": {
@@ -1068,6 +1175,25 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(annual_labels[annual_labels.index("Tax Provision") + 1], "Tax Rate")
         self.assertEqual(tax_rate_annual["values"], ["21%", "20%"])
         self.assertEqual(tax_rate_quarterly, {"label": "Tax Rate", "values": ["20%"]})
+
+    def test_add_tax_rate_renames_and_recomputes_existing_calc_row(self):
+        income = {
+            "annual": {
+                "periods": ["TTM", "2025-12-31", "2024-12-31"],
+                "rows": [
+                    {"label": "Pretax Income", "values": ["100B", "80B", "0"]},
+                    {"label": "Tax Provision", "values": ["21B", "16B", "5B"]},
+                    {"label": "Tax Rate For Calcs", "values": ["0", "0", "0"]},
+                ],
+            },
+        }
+
+        enriched = self.handler._add_tax_rate(income)
+        rows = enriched["annual"]["rows"]
+        tax_rate_rows = [row for row in rows if row["label"] == "Tax Rate"]
+
+        self.assertEqual(len(tax_rate_rows), 1)
+        self.assertEqual(tax_rate_rows[0]["values"], ["21%", "20%", "--"])
 
     def test_median_annual_tax_rate_uses_historical_years_and_ignores_ttm(self):
         import pandas as pd

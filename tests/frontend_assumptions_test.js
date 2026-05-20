@@ -66,6 +66,10 @@ vm.runInNewContext(script, context, { filename: 'public/script.js' });
 const api = context.window.__stockAnalysisTestApi;
 assert(api, 'test API should be exposed');
 
+function assertAlmostEqual(actual, expected, epsilon, message) {
+  assert(Math.abs(actual - expected) <= epsilon, `${message}: expected ${expected}, got ${actual}`);
+}
+
 const data = {
   ticker: 'NEG',
   ev: '--',
@@ -79,6 +83,7 @@ const data = {
   cy_revenue: '--',
   ny_revenue: '--',
   medianTaxRate: '20%',
+  dataDate: '2025-12-31',
   incomeStatement: {
     annual: {
       periods: ['TTM', '2025-12-31'],
@@ -111,10 +116,16 @@ assert.notStrictEqual(api.metricDisplay(adjusted, 'adj_income'), '--', 'edited m
 assert.notStrictEqual(api.metricDisplay(adjusted, 'ev_adj_ebit'), '--', 'edited positive margin should create EV/Adj Inc');
 assert.notStrictEqual(api.metricDisplay(adjusted, 'ev_cy_ebit'), '--', 'edited positive margin should create EV/CY Adj Inc');
 assert.notStrictEqual(api.metricDisplay(adjusted, 'ev_ny_ebit'), '--', 'edited positive margin should create EV/NY Adj Inc');
+assertAlmostEqual(api.metricEntry(adjusted, 'adj_income').raw, 280_000_000, 1, 'edited margin should recalculate adjusted income from revenue');
+assertAlmostEqual(api.metricEntry(adjusted, 'ev_adj_ebit').raw, 87.9464285714, 0.0001, 'EV/Adj Inc should use after-tax adjusted income');
 
 const calc = api.calcDefinitions(adjusted).ev_adj;
 assert.notStrictEqual(calc.divisor, '--', 'calc page denominator should register');
 assert.notStrictEqual(calc.result, '--', 'calc page result should register');
+
+const cyCalc = api.calcDefinitions(adjusted).ev_cy;
+assert(cyCalc.rows.some(([label]) => label === '10% Discount Rate'), 'forward valuation calc should show discount rate');
+assert(cyCalc.rows.some(([label, value]) => label === 'Discounted After-Tax CY Adj Op Inc' && value !== '--'), 'forward valuation calc should show discounted denominator');
 
 const blankStructuredData = {
   ...data,
@@ -150,5 +161,23 @@ const adjustedWithoutTaxRate = api.applyAssumptions(noValidTaxRateData);
 
 assert.notStrictEqual(api.metricDisplay(adjustedWithoutTaxRate, 'ev_adj_ebit'), '--', 'positive margin should work when no valid tax rate exists');
 assert.notStrictEqual(api.calcDefinitions(adjustedWithoutTaxRate).ev_adj.divisor, '--', 'calc denominator should work when no valid tax rate exists');
+
+const editedTaxData = { ...data, ticker: 'TAX' };
+api.state.assumptions.TAX = { margin: 0.28, medianTaxRate: 0.30 };
+const adjustedTax = api.applyAssumptions(editedTaxData);
+
+assert.strictEqual(api.metricDisplay(adjustedTax, 'medianTaxRate'), '30%', 'edited tax rate should display');
+assertAlmostEqual(api.metricEntry(adjustedTax, 'ev_adj_ebit').raw, 100.5102040816, 0.0001, 'edited tax rate should flow into valuation multiple');
+
+const editedGrowthData = { ...data, ticker: 'GROWTH' };
+api.state.assumptions.GROWTH = { margin: 0.28, cy_growth: 0.20, ny_growth: 0.10 };
+const adjustedGrowth = api.applyAssumptions(editedGrowthData);
+
+assert.strictEqual(api.metricDisplay(adjustedGrowth, 'cy_growth'), '20%', 'edited CY growth should display');
+assert.strictEqual(api.metricDisplay(adjustedGrowth, 'ny_growth'), '10%', 'edited NY growth should display');
+assertAlmostEqual(api.metricEntry(adjustedGrowth, 'cy_revenue').raw, 1_140_000_000, 1, 'edited CY growth should use last annual revenue');
+assertAlmostEqual(api.metricEntry(adjustedGrowth, 'ny_revenue').raw, 1_254_000_000, 1, 'edited NY growth should compound from CY revenue');
+assert.notStrictEqual(api.metricDisplay(adjustedGrowth, 'ev_cy_ebit'), '--', 'edited growth should keep CY valuation active');
+assert.notStrictEqual(api.metricDisplay(adjustedGrowth, 'ev_ny_ebit'), '--', 'edited growth should keep NY valuation active');
 
 console.log('frontend assumption tests passed');
