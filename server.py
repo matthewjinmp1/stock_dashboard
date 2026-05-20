@@ -22,7 +22,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 17
+PAYLOAD_VERSION = 18
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -833,10 +833,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             pretax_value = annual_income.loc[pretax_label, col]
             if pd.isna(tax_value) or pd.isna(pretax_value):
                 continue
+            tax_raw = float(tax_value)
             pretax_raw = float(pretax_value)
-            if not pretax_raw:
+            if pretax_raw <= 0 or tax_raw < 0:
                 continue
-            rates.append(float(tax_value) / abs(pretax_raw))
+            rate = tax_raw / pretax_raw
+            if 0 <= rate <= 1:
+                rates.append(rate)
         return statistics.median(rates) if rates else None
 
     def fetch_yfinance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics=None):

@@ -1084,6 +1084,36 @@ class StatementPageBuilderTests(unittest.TestCase):
 
         self.assertEqual(self.handler._median_annual_tax_rate(annual_income), 0.20)
 
+    def test_median_annual_tax_rate_ignores_loss_years_and_outliers(self):
+        import pandas as pd
+
+        annual_income = pd.DataFrame(
+            {
+                "TTM": [999, 999],
+                pd.Timestamp("2025-12-31"): [158, -99],
+                pd.Timestamp("2024-12-31"): [215, -85],
+                pd.Timestamp("2023-12-31"): [5, 20],
+                pd.Timestamp("2022-12-31"): [90, 60],
+            },
+            index=["Tax Provision", "Pretax Income"],
+        )
+
+        self.assertEqual(self.handler._median_annual_tax_rate(annual_income), 0.25)
+
+    def test_median_annual_tax_rate_returns_none_without_profitable_years(self):
+        import pandas as pd
+
+        annual_income = pd.DataFrame(
+            {
+                pd.Timestamp("2025-12-31"): [158, -99],
+                pd.Timestamp("2024-12-31"): [215, -85],
+                pd.Timestamp("2023-12-31"): [176, -311],
+            },
+            index=["Tax Provision", "Pretax Income"],
+        )
+
+        self.assertIsNone(self.handler._median_annual_tax_rate(annual_income))
+
     def test_df_statement_prefers_official_annual_ttm_over_quarter_sum(self):
         import pandas as pd
 

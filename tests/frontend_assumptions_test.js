@@ -135,4 +135,20 @@ assert.notStrictEqual(api.metricDisplay(adjustedFromLegacy, 'ev_adj_ebit'), '--'
 assert.notStrictEqual(api.metricDisplay(adjustedFromLegacy, 'ev_cy_ebit'), '--', 'legacy fallback should create EV/CY Adj Inc');
 assert.notStrictEqual(api.metricDisplay(adjustedFromLegacy, 'ev_ny_ebit'), '--', 'legacy fallback should create EV/NY Adj Inc');
 
+const noValidTaxRateData = {
+  ...data,
+  ticker: 'TEAM',
+  medianTaxRate: '--',
+  metrics: {
+    ...data.metrics,
+    medianTaxRate: { raw: null, display: '--', kind: 'percent' },
+  },
+};
+
+api.state.assumptions.TEAM = { margin: 0.28 };
+const adjustedWithoutTaxRate = api.applyAssumptions(noValidTaxRateData);
+
+assert.notStrictEqual(api.metricDisplay(adjustedWithoutTaxRate, 'ev_adj_ebit'), '--', 'positive margin should work when no valid tax rate exists');
+assert.notStrictEqual(api.calcDefinitions(adjustedWithoutTaxRate).ev_adj.divisor, '--', 'calc denominator should work when no valid tax rate exists');
+
 console.log('frontend assumption tests passed');
