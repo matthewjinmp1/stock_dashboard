@@ -280,6 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
             metricGroup('Price & Yield', [
                 metric('Current Price', val('currentPrice')),
                 metric('Dividend Yield', val('dividendYield')),
+                metric('Est Txn Cost', val('transactionCost')),
             ]),
             metricGroup('EPS Growth', [
                 metric('CY EPS Growth', val('currentYearEpsGrowth')),

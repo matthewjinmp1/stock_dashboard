@@ -22,7 +22,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 15
+PAYLOAD_VERSION = 16
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -542,6 +542,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ("shortFloat", 0.042, "4.2%", "percent"),
             ("currentPrice", 100, "100", "money"),
             ("dividendYield", 0.012, "1.2%", "percent"),
+            ("transactionCost", 0.0005, "0.05%", "percent"),
             ("targetMeanPrice", 125, "125", "money"),
             ("targetLowPrice", 90, "90", "money"),
             ("targetHighPrice", 160, "160", "money"),
@@ -1184,6 +1185,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     dividend_yield_raw = dividend_rate_raw / native_price_raw if dividend_rate_raw and native_price_raw else None
                 except Exception:
                     dividend_yield_raw = None
+            transaction_cost_raw = None
+            try:
+                bid_raw = float(info.get("bid") or 0)
+                ask_raw = float(info.get("ask") or 0)
+                midpoint_raw = (bid_raw + ask_raw) / 2
+                if bid_raw > 0 and ask_raw > bid_raw and midpoint_raw > 0:
+                    transaction_cost_raw = ((ask_raw - bid_raw) / 2) / midpoint_raw
+            except Exception:
+                transaction_cost_raw = None
             structured_metrics = self._structured_metrics([
                 ("income", operating_income_raw, self._format_money(operating_income_raw), "money"),
                 ("margin", adj_margin_ratio or None, self._format_percent(adj_margin_ratio) if adj_margin_ratio else "--", "percent"),
@@ -1225,6 +1235,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("shortFloat", short_float_raw, self._format_percent(short_float_raw) if short_float_raw else "--", "percent"),
                 ("currentPrice", current_price_raw, self._format_3sig(current_price_raw), "money"),
                 ("dividendYield", dividend_yield_raw, self._format_percent(dividend_yield_raw) if dividend_yield_raw is not None else "--", "percent"),
+                ("transactionCost", transaction_cost_raw, self._format_percent(transaction_cost_raw) if transaction_cost_raw is not None else "--", "percent"),
                 ("targetMeanPrice", target_mean_raw, self._format_3sig(target_mean_raw), "money"),
                 ("targetLowPrice", target_low_raw, self._format_3sig(target_low_raw), "money"),
                 ("targetHighPrice", target_high_raw, self._format_3sig(target_high_raw), "money"),
