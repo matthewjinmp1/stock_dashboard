@@ -5,6 +5,7 @@ import os
 import datetime
 import time
 import statistics
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, parse_qs
 
@@ -22,12 +23,13 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 19
+PAYLOAD_VERSION = 21
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/120.0.0.0 Safari/537.36"
 )
+NASDAQ_USER_AGENT = YAHOO_USER_AGENT
 
 FETCH_RESULT_FIELDS = [
     "income", "margin", "gross_margin", "ev_cy_ebit", "ev_ny_ebit", "adj_income",
@@ -687,6 +689,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _format_percent(self, val):
         return format_percent(val)
 
+    def _format_transaction_cost_percent(self, val):
+        if val in (None, ""):
+            return "--"
+        try:
+            pct = float(val) * 100
+        except Exception:
+            return "--"
+        if pct == 0:
+            return "0%"
+        abs_pct = abs(pct)
+        if abs_pct < 0.01:
+            return f"{pct:.4f}".rstrip("0").rstrip(".") + "%"
+        if abs_pct < 0.1:
+            return f"{pct:.3f}".rstrip("0").rstrip(".") + "%"
+        return self._format_percent(val)
+
     def _format_money(self, val):
         return format_money(val)
 
@@ -874,6 +892,46 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if market_cap_raw and market_cap_raw >= 10_000_000_000:
             return transaction_cost_raw <= 0.0025
         return transaction_cost_raw <= 0.01
+
+    def _parse_quote_price(self, value):
+        if value in (None, "", "--"):
+            return 0.0
+        try:
+            return float(str(value).replace("$", "").replace(",", "").strip())
+        except Exception:
+            return 0.0
+
+    def _nasdaq_bid_ask_metrics(self, ticker, quote_fx_rate=1.0, current_price_raw=None, market_cap_raw=None):
+        symbol = (ticker or "").upper().strip()
+        if not symbol or any(not (char.isalnum() or char in ".-") for char in symbol):
+            return None, None, None, None
+
+        url = f"https://api.nasdaq.com/api/quote/{symbol}/info?assetclass=stocks"
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": NASDAQ_USER_AGENT,
+                "Accept": "application/json, text/plain, */*",
+                "Origin": "https://www.nasdaq.com",
+                "Referer": f"https://www.nasdaq.com/market-activity/stocks/{symbol.lower()}",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=3) as response:
+                payload = json.loads(response.read().decode("utf-8", "replace"))
+            primary = ((payload.get("data") or {}).get("primaryData") or {})
+            bid_raw = self._parse_quote_price(primary.get("bidPrice"))
+            ask_raw = self._parse_quote_price(primary.get("askPrice"))
+            last_raw = self._parse_quote_price(primary.get("lastSalePrice"))
+            reference_price_raw = current_price_raw or (last_raw * quote_fx_rate if last_raw else None)
+            return self._bid_ask_metrics(
+                {"bid": bid_raw, "ask": ask_raw},
+                quote_fx_rate=quote_fx_rate,
+                current_price_raw=reference_price_raw,
+                market_cap_raw=market_cap_raw,
+            )
+        except Exception:
+            return None, None, None, None
 
     def fetch_yfinance_data(self, ticker, finviz_ev_raw=0, finviz_market_cap_raw=0, finviz_metrics=None):
         """Fetch all data using yfinance package. Returns the same tuple as fetch_yahoo_finance_data."""
@@ -1228,12 +1286,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ask_price_raw = None
             bid_ask_spread_raw = None
             transaction_cost_raw = None
-            bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw = self._bid_ask_metrics(
-                info,
+            bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw = self._nasdaq_bid_ask_metrics(
+                ticker,
                 quote_fx_rate=quote_fx_rate,
                 current_price_raw=current_price_raw,
                 market_cap_raw=market_cap_raw,
             )
+            if transaction_cost_raw is None:
+                bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw = self._bid_ask_metrics(
+                    info,
+                    quote_fx_rate=quote_fx_rate,
+                    current_price_raw=current_price_raw,
+                    market_cap_raw=market_cap_raw,
+                )
             structured_metrics = self._structured_metrics([
                 ("income", operating_income_raw, self._format_money(operating_income_raw), "money"),
                 ("margin", adj_margin_ratio or None, self._format_percent(adj_margin_ratio) if adj_margin_ratio else "--", "percent"),
@@ -1275,7 +1340,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("shortFloat", short_float_raw, self._format_percent(short_float_raw) if short_float_raw else "--", "percent"),
                 ("currentPrice", current_price_raw, self._format_3sig(current_price_raw), "money"),
                 ("dividendYield", dividend_yield_raw, self._format_percent(dividend_yield_raw) if dividend_yield_raw is not None else "--", "percent"),
-                ("transactionCost", transaction_cost_raw, self._format_percent(transaction_cost_raw) if transaction_cost_raw is not None else "--", "percent"),
+                ("transactionCost", transaction_cost_raw, self._format_transaction_cost_percent(transaction_cost_raw) if transaction_cost_raw is not None else "--", "percent"),
                 ("bidPrice", bid_price_raw, self._format_3sig(bid_price_raw) if bid_price_raw is not None else "--", "money"),
                 ("askPrice", ask_price_raw, self._format_3sig(ask_price_raw) if ask_price_raw is not None else "--", "money"),
                 ("bidAskSpread", bid_ask_spread_raw, self._format_3sig(bid_ask_spread_raw) if bid_ask_spread_raw is not None else "--", "money"),

@@ -23,6 +23,12 @@ class FakeResponse:
     def __init__(self, payload):
         self.payload = payload
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
     def read(self):
         if isinstance(self.payload, bytes):
             return self.payload
@@ -347,6 +353,42 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertIsNone(ask)
         self.assertIsNone(spread)
         self.assertIsNone(cost)
+
+    def test_nasdaq_bid_ask_metrics_parses_public_quote_payload(self):
+        payload = {
+            "data": {
+                "primaryData": {
+                    "lastSalePrice": "$417.26",
+                    "bidPrice": "$417.23",
+                    "askPrice": "$417.28",
+                }
+            }
+        }
+
+        with mock.patch("server.urllib.request.urlopen", return_value=FakeResponse(json.dumps(payload))):
+            bid, ask, spread, cost = self.handler._nasdaq_bid_ask_metrics(
+                "MSFT",
+                current_price_raw=417.26,
+                market_cap_raw=3_000_000_000_000,
+            )
+
+        self.assertAlmostEqual(bid, 417.23)
+        self.assertAlmostEqual(ask, 417.28)
+        self.assertAlmostEqual(spread, 0.05)
+        self.assertAlmostEqual(cost, 0.00005991420220628985)
+
+    def test_nasdaq_bid_ask_metrics_fails_closed_on_bad_payload(self):
+        with mock.patch("server.urllib.request.urlopen", return_value=FakeResponse("{}")):
+            bid, ask, spread, cost = self.handler._nasdaq_bid_ask_metrics("MSFT")
+
+        self.assertIsNone(bid)
+        self.assertIsNone(ask)
+        self.assertIsNone(spread)
+        self.assertIsNone(cost)
+
+    def test_transaction_cost_percent_keeps_small_spread_precision(self):
+        self.assertEqual(self.handler._format_transaction_cost_percent(0.000048009986077128595), "0.0048%")
+        self.assertEqual(self.handler._format_transaction_cost_percent(0.0005), "0.05%")
 
     def test_delegates_to_yfinance_without_manual_fetches(self):
         expected = tuple(f"value-{idx}" for idx, _field in enumerate(FETCH_RESULT_FIELDS))
