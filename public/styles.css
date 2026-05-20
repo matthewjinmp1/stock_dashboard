@@ -858,11 +858,26 @@ button:active {
     font-size: 2.4rem;
     font-weight: 700;
     font-family: inherit;
+    line-height: 1.05;
+    max-width: 100%;
+    white-space: nowrap;
     text-shadow: 0 0 30px rgba(14, 165, 233, 0.4);
     background: linear-gradient(to right, #f8fafc, #94a3b8);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     box-shadow: none;
+}
+
+.value-display-with-unit {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.18em;
+}
+
+.value-display .value-unit {
+    font-size: 0.48em;
+    letter-spacing: 0;
 }
 
 .value-display:hover {

@@ -180,4 +180,8 @@ assertAlmostEqual(api.metricEntry(adjustedGrowth, 'ny_revenue').raw, 1_254_000_0
 assert.notStrictEqual(api.metricDisplay(adjustedGrowth, 'ev_cy_ebit'), '--', 'edited growth should keep CY valuation active');
 assert.notStrictEqual(api.metricDisplay(adjustedGrowth, 'ev_ny_ebit'), '--', 'edited growth should keep NY valuation active');
 
+const bpsMetricHtml = api.metricValueHtml('0.72 bps');
+assert(bpsMetricHtml.includes('value-display-with-unit'), 'basis point metric should render as attached unit markup');
+assert(bpsMetricHtml.includes('<span>0.72</span><span class="value-unit">bps</span>'), 'basis point unit should stay attached to the number');
+
 console.log('frontend assumption tests passed');

@@ -213,6 +213,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
+    function metricValueHtml(value) {
+        const displayValue = formatSigned(value || '--');
+        const bpsMatch = String(displayValue).match(/^(.+?)\s+bps$/);
+        if (bpsMatch) {
+            return `<div class="value-display value-display-with-unit"><span>${escapeAttr(bpsMatch[1])}</span><span class="value-unit">bps</span></div>`;
+        }
+        return `<div class="value-display">${escapeAttr(displayValue)}</div>`;
+    }
+
     function metricInputWidth(value) {
         const length = String(value ?? '').length || 2;
         return `${Math.max(3.5, Math.min(length + 1.25, 10))}ch`;
@@ -223,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const displayValue = formatSigned(value || '--');
         const editableValue = editType
             ? `<span class="metric-edit-wrap" data-metric-value="${escapeAttr(displayValue)}"><input class="value-display metric-edit-input" type="text" value="${escapeAttr(displayValue)}" style="--metric-input-width: ${metricInputWidth(displayValue)}" data-edit-assumption="${editType}" data-original-value="${escapeAttr(displayValue)}" aria-label="Edit ${escapeAttr(label)}"></span>`
-            : `<div class="value-display">${displayValue}</div>`;
+            : metricValueHtml(displayValue);
         return `<div class="stat-box">
             <span class="stat-label${link}" data-calc="${calcType}">${label}</span>
             ${editableValue}
@@ -1496,6 +1505,7 @@ document.addEventListener('DOMContentLoaded', () => {
         calcDefinitions,
         metricEntry,
         metricDisplay,
+        metricValueHtml,
         parseMoney,
         parsePercentValue,
     };
