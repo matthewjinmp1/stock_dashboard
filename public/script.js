@@ -332,20 +332,30 @@ document.addEventListener('DOMContentLoaded', () => {
         data.metrics = { ...(input.metrics || {}) };
         const ticker = (data.ticker || '').toUpperCase();
         const assumptions = state.assumptions[ticker] || {};
-        const margin = assumptions.margin ?? parsePercentValue(metricEntry(data, 'margin'));
+        const originalMargin = parsePercentValue(metricEntry(data, 'margin'));
+        const margin = assumptions.margin ?? originalMargin;
         const cyGrowth = assumptions.cy_growth ?? parsePercentValue(metricEntry(data, 'cy_growth'));
         const nyGrowth = assumptions.ny_growth ?? parsePercentValue(metricEntry(data, 'ny_growth'));
         const taxRate = assumptions.medianTaxRate ?? parsePercentValue(metricEntry(data, 'medianTaxRate'));
         const afterTaxFactor = 1 - taxRate;
-        const revenueRaw = parseMoney(metricEntry(data, 'revenue')) || statementRevenueRaw(data);
+        const originalAdjRaw = parseMoney(metricEntry(data, 'adj_income'));
+        const impliedRevenueRaw = originalAdjRaw && originalMargin
+            ? Math.abs(originalAdjRaw / originalMargin)
+            : 0;
+        const revenueRaw = parseMoney(metricEntry(data, 'revenue'))
+            || statementRevenueRaw(data)
+            || impliedRevenueRaw;
         const cyRevenueBaseRaw = lastYearRevenueRaw(data) || revenueRaw;
         const valuationRaw = parseMoney(metricEntry(data, 'ev'))
+            || parseMoney(data.ev)
             || parseMoney(metricEntry(data, 'derivedEnterpriseValue'))
-            || parseMoney(metricEntry(data, 'marketCap'));
+            || parseMoney(data.derivedEnterpriseValue)
+            || parseMoney(metricEntry(data, 'marketCap'))
+            || parseMoney(data.marketCap);
         const grossPpeRaw = parseMoney(metricEntry(data, 'grossPpe'));
         const investmentCapexRaw = parseMoney(metricEntry(data, 'investmentCapex'));
         const rocDenomRaw = parseMoney(metricEntry(data, 'netWorkingCapital')) + parseMoney(metricEntry(data, 'netFixedAssets'));
-        const baseAdjRaw = parseMoney(metricEntry(data, 'adj_income')) || (revenueRaw * margin);
+        const baseAdjRaw = originalAdjRaw || (revenueRaw * margin);
         const pretaxAdjRaw = assumptions.margin !== undefined ? revenueRaw * margin : baseAdjRaw;
         const afterTaxAdjRaw = pretaxAdjRaw && afterTaxFactor > 0 ? pretaxAdjRaw * afterTaxFactor : 0;
 
