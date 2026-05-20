@@ -332,17 +332,18 @@ document.addEventListener('DOMContentLoaded', () => {
         data.metrics = { ...(input.metrics || {}) };
         const ticker = (data.ticker || '').toUpperCase();
         const assumptions = state.assumptions[ticker] || {};
-        const originalMargin = parsePercentValue(metricEntry(data, 'margin'));
+        const originalMargin = parsePercentValue(metricEntry(data, 'margin')) || parsePercentValue(data.margin);
         const margin = assumptions.margin ?? originalMargin;
-        const cyGrowth = assumptions.cy_growth ?? parsePercentValue(metricEntry(data, 'cy_growth'));
-        const nyGrowth = assumptions.ny_growth ?? parsePercentValue(metricEntry(data, 'ny_growth'));
-        const taxRate = assumptions.medianTaxRate ?? parsePercentValue(metricEntry(data, 'medianTaxRate'));
+        const cyGrowth = assumptions.cy_growth ?? (parsePercentValue(metricEntry(data, 'cy_growth')) || parsePercentValue(data.cy_growth));
+        const nyGrowth = assumptions.ny_growth ?? (parsePercentValue(metricEntry(data, 'ny_growth')) || parsePercentValue(data.ny_growth));
+        const taxRate = assumptions.medianTaxRate ?? (parsePercentValue(metricEntry(data, 'medianTaxRate')) || parsePercentValue(data.medianTaxRate));
         const afterTaxFactor = 1 - taxRate;
-        const originalAdjRaw = parseMoney(metricEntry(data, 'adj_income'));
+        const originalAdjRaw = parseMoney(metricEntry(data, 'adj_income')) || parseMoney(data.adj_income);
         const impliedRevenueRaw = originalAdjRaw && originalMargin
             ? Math.abs(originalAdjRaw / originalMargin)
             : 0;
         const revenueRaw = parseMoney(metricEntry(data, 'revenue'))
+            || parseMoney(data.revenue)
             || statementRevenueRaw(data)
             || impliedRevenueRaw;
         const cyRevenueBaseRaw = lastYearRevenueRaw(data) || revenueRaw;
@@ -1488,6 +1489,16 @@ document.addEventListener('DOMContentLoaded', () => {
         showView('scanner');
         window.scrollTo(0, state.previousScroll || 0);
     });
+
+    window.__stockAnalysisTestApi = {
+        state,
+        applyAssumptions,
+        calcDefinitions,
+        metricEntry,
+        metricDisplay,
+        parseMoney,
+        parsePercentValue,
+    };
 
     window.removeTicker = (ticker) => {
         state.watchlist = state.watchlist.filter((item) => item !== ticker);
