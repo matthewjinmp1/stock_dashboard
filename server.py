@@ -23,7 +23,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 23
+PAYLOAD_VERSION = 24
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -917,7 +917,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=1.2) as response:
+            with urllib.request.urlopen(request, timeout=4) as response:
                 payload = json.loads(response.read().decode("utf-8", "replace"))
             primary = ((payload.get("data") or {}).get("primaryData") or {})
             bid_raw = self._parse_quote_price(primary.get("bidPrice"))
