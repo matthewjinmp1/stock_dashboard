@@ -23,7 +23,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 22
+PAYLOAD_VERSION = 23
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -917,7 +917,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=3) as response:
+            with urllib.request.urlopen(request, timeout=1.2) as response:
                 payload = json.loads(response.read().decode("utf-8", "replace"))
             primary = ((payload.get("data") or {}).get("primaryData") or {})
             bid_raw = self._parse_quote_price(primary.get("bidPrice"))
@@ -960,19 +960,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     record_stage(key, label, stage_started)
 
         try:
-            stock = yf.Ticker(ticker)
-            info = timed("info", "Quote summary / info", lambda: stock.info or {})
-            self._request_fetch_count = getattr(self, "_request_fetch_count", 0) + 1
+            self._request_fetch_count = getattr(self, "_request_fetch_count", 0)
 
-            # Fetch currency rate early so all values can be USD-normalized
-            raw_currency = (info.get("financialCurrency") or info.get("currency"))
-            financial_currency = self._infer_currency_from_ticker(ticker, raw_currency)
-            if financial_currency:
-                financial_currency = financial_currency.upper()
-            else:
-                financial_currency = "USD"
-            
-            print(f"[FETCH] Ticker: {ticker}, Raw Currency: {raw_currency}, Inferred: {financial_currency}")
+            def fetch_info():
+                stock = yf.Ticker(ticker)
+                return timed("info", "Quote summary / info", lambda: stock.info or {})
+
+            def fetch_yf_frame(key, label, attr_name):
+                frame_stock = yf.Ticker(ticker)
+                return timed(key, label, lambda: getattr(frame_stock, attr_name))
 
             def fetch_fx_rate(currency):
                 if currency == "USD":
@@ -984,29 +980,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 except Exception as e:
                     print(f"yfinance FX warning for {currency}: {e}")
                     return 1.0
-
-            def fetch_income_frames():
-                income_stock = yf.Ticker(ticker)
-                return {
-                    "annual_income": timed("annual_income", "Annual income statement", lambda: income_stock.financials),
-                    "ttm_income": timed("ttm_income", "Official TTM income statement", lambda: income_stock.ttm_income_stmt),
-                    "quarterly_income": timed("quarterly_income", "Quarterly income statement", lambda: income_stock.quarterly_financials),
-                }
-
-            def fetch_balance_frames():
-                balance_stock = yf.Ticker(ticker)
-                return {
-                    "annual_balance": timed("annual_balance", "Annual balance sheet", lambda: balance_stock.balance_sheet),
-                    "quarterly_balance": timed("quarterly_balance", "Quarterly balance sheet", lambda: balance_stock.quarterly_balance_sheet),
-                }
-
-            def fetch_cashflow_frames():
-                cashflow_stock = yf.Ticker(ticker)
-                return {
-                    "annual_cashflow": timed("annual_cashflow", "Annual cash flow", lambda: cashflow_stock.cashflow),
-                    "ttm_cashflow": timed("ttm_cashflow", "Official TTM cash flow", lambda: cashflow_stock.ttm_cash_flow),
-                    "quarterly_cashflow": timed("quarterly_cashflow", "Quarterly cash flow", lambda: cashflow_stock.quarterly_cashflow),
-                }
 
             def fetch_estimate_frames():
                 try:
@@ -1036,18 +1009,35 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     pass
                 return {}
 
-            quote_currency = self._infer_currency_from_ticker(ticker, info.get("currency")).upper()
-
-            with ThreadPoolExecutor(max_workers=7) as executor:
+            with ThreadPoolExecutor(max_workers=12) as executor:
                 statements_started = time.perf_counter()
                 futures = {
-                    "income_frames": executor.submit(lambda: timed("income_statements_total", "Income statements group", fetch_income_frames)),
-                    "balance_frames": executor.submit(lambda: timed("balance_sheets_total", "Balance sheets group", fetch_balance_frames)),
-                    "cashflow_frames": executor.submit(lambda: timed("cash_flows_total", "Cash flow statements group", fetch_cashflow_frames)),
+                    "info": executor.submit(fetch_info),
+                    "annual_income": executor.submit(lambda: fetch_yf_frame("annual_income", "Annual income statement", "financials")),
+                    "ttm_income": executor.submit(lambda: fetch_yf_frame("ttm_income", "Official TTM income statement", "ttm_income_stmt")),
+                    "quarterly_income": executor.submit(lambda: fetch_yf_frame("quarterly_income", "Quarterly income statement", "quarterly_financials")),
+                    "annual_balance": executor.submit(lambda: fetch_yf_frame("annual_balance", "Annual balance sheet", "balance_sheet")),
+                    "quarterly_balance": executor.submit(lambda: fetch_yf_frame("quarterly_balance", "Quarterly balance sheet", "quarterly_balance_sheet")),
+                    "annual_cashflow": executor.submit(lambda: fetch_yf_frame("annual_cashflow", "Annual cash flow", "cashflow")),
+                    "ttm_cashflow": executor.submit(lambda: fetch_yf_frame("ttm_cashflow", "Official TTM cash flow", "ttm_cash_flow")),
+                    "quarterly_cashflow": executor.submit(lambda: fetch_yf_frame("quarterly_cashflow", "Quarterly cash flow", "quarterly_cashflow")),
                     "estimates": executor.submit(lambda: timed("estimates_total", "Estimates group", fetch_estimate_frames)),
                     "recommendations": executor.submit(fetch_analyst_recommendations),
+                    "nasdaq_bid_ask": executor.submit(lambda: timed("nasdaq_bid_ask", "Nasdaq bid/ask quote", lambda: self._nasdaq_bid_ask_metrics(ticker))),
                 }
-                self._request_fetch_count += 5  # income, balance, cash flow, estimates, recommendations
+                self._request_fetch_count += 11
+
+                info = futures["info"].result() or {}
+                raw_currency = (info.get("financialCurrency") or info.get("currency"))
+                financial_currency = self._infer_currency_from_ticker(ticker, raw_currency)
+                if financial_currency:
+                    financial_currency = financial_currency.upper()
+                else:
+                    financial_currency = "USD"
+                
+                print(f"[FETCH] Ticker: {ticker}, Raw Currency: {raw_currency}, Inferred: {financial_currency}")
+
+                quote_currency = self._infer_currency_from_ticker(ticker, info.get("currency")).upper()
                 if financial_currency != "USD":
                     futures["financial_fx"] = executor.submit(lambda: timed("financial_fx", f"{financial_currency}/USD FX", lambda: fetch_fx_rate(financial_currency)))
                     self._request_fetch_count += 1
@@ -1055,13 +1045,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     futures["quote_fx"] = executor.submit(lambda: timed("quote_fx", f"{quote_currency}/USD FX", lambda: fetch_fx_rate(quote_currency)))
                     self._request_fetch_count += 1
 
-                statement_frames = {}
-                statement_frames.update(futures["income_frames"].result())
-                statement_frames.update(futures["balance_frames"].result())
-                statement_frames.update(futures["cashflow_frames"].result())
+                statement_frames = {
+                    "annual_income": futures["annual_income"].result(),
+                    "ttm_income": futures["ttm_income"].result(),
+                    "quarterly_income": futures["quarterly_income"].result(),
+                    "annual_balance": futures["annual_balance"].result(),
+                    "quarterly_balance": futures["quarterly_balance"].result(),
+                    "annual_cashflow": futures["annual_cashflow"].result(),
+                    "ttm_cashflow": futures["ttm_cashflow"].result(),
+                    "quarterly_cashflow": futures["quarterly_cashflow"].result(),
+                }
                 record_stage("statements_total", "Statements group", statements_started)
                 estimate_frames = futures["estimates"].result()
                 analyst_recommendations = futures["recommendations"].result()
+                early_bid_ask_metrics = futures["nasdaq_bid_ask"].result()
                 financial_fx_rate = futures["financial_fx"].result() if "financial_fx" in futures else 1.0
                 if quote_currency == financial_currency:
                     quote_fx_rate = financial_fx_rate
@@ -1286,12 +1283,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ask_price_raw = None
             bid_ask_spread_raw = None
             transaction_cost_raw = None
-            bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw = self._nasdaq_bid_ask_metrics(
-                ticker,
-                quote_fx_rate=quote_fx_rate,
-                current_price_raw=current_price_raw,
-                market_cap_raw=market_cap_raw,
-            )
+            if quote_fx_rate == 1.0:
+                bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw = early_bid_ask_metrics
+            else:
+                bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw = self._nasdaq_bid_ask_metrics(
+                    ticker,
+                    quote_fx_rate=quote_fx_rate,
+                    current_price_raw=current_price_raw,
+                    market_cap_raw=market_cap_raw,
+                )
             if transaction_cost_raw is None:
                 bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw = self._bid_ask_metrics(
                     info,
@@ -1665,6 +1665,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "fetchCount": getattr(self, "_request_fetch_count", 0),
             "fetchTiming": getattr(self, "_fetch_timing", {"source": "fresh", "totalSeconds": None, "stages": []}),
         }
+
+        metrics = payload.get("metrics") or {}
+        previous_metrics = previous_payload.get("metrics", {}) if isinstance(previous_payload, dict) else {}
+        if (
+            isinstance(metrics, dict)
+            and isinstance(previous_metrics, dict)
+            and (metrics.get("transactionCost") or {}).get("display") == "--"
+            and (previous_metrics.get("transactionCost") or {}).get("display") not in (None, "", "--")
+        ):
+            for metric_key in ("transactionCost", "bidPrice", "askPrice", "bidAskSpread"):
+                if previous_metrics.get(metric_key):
+                    metrics[metric_key] = previous_metrics[metric_key]
+            timing = payload.get("fetchTiming") or {}
+            stages = timing.get("stages")
+            if isinstance(stages, list):
+                stages.append({
+                    "key": "bid_ask_cache_fallback",
+                    "label": "Cached bid/ask fallback",
+                    "seconds": 0,
+                    "status": "ok",
+                })
 
         cache[ticker] = {'date': today, 'pulledAt': pulled_at, 'data': payload}
         save_cache(cache)
