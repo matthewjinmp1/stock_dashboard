@@ -22,7 +22,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 16
+PAYLOAD_VERSION = 17
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -543,6 +543,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ("currentPrice", 100, "100", "money"),
             ("dividendYield", 0.012, "1.2%", "percent"),
             ("transactionCost", 0.0005, "0.05%", "percent"),
+            ("bidPrice", 99.95, "99.95", "money"),
+            ("askPrice", 100.05, "100.05", "money"),
+            ("bidAskSpread", 0.10, "0.10", "money"),
             ("targetMeanPrice", 125, "125", "money"),
             ("targetLowPrice", 90, "90", "money"),
             ("targetHighPrice", 160, "160", "money"),
@@ -1185,13 +1188,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     dividend_yield_raw = dividend_rate_raw / native_price_raw if dividend_rate_raw and native_price_raw else None
                 except Exception:
                     dividend_yield_raw = None
+            bid_price_raw = None
+            ask_price_raw = None
+            bid_ask_spread_raw = None
             transaction_cost_raw = None
             try:
-                bid_raw = float(info.get("bid") or 0)
-                ask_raw = float(info.get("ask") or 0)
-                midpoint_raw = (bid_raw + ask_raw) / 2
-                if bid_raw > 0 and ask_raw > bid_raw and midpoint_raw > 0:
-                    transaction_cost_raw = ((ask_raw - bid_raw) / 2) / midpoint_raw
+                bid_native_raw = float(info.get("bid") or 0)
+                ask_native_raw = float(info.get("ask") or 0)
+                midpoint_native_raw = (bid_native_raw + ask_native_raw) / 2
+                if bid_native_raw > 0 and ask_native_raw > bid_native_raw and midpoint_native_raw > 0:
+                    bid_price_raw = bid_native_raw * quote_fx_rate
+                    ask_price_raw = ask_native_raw * quote_fx_rate
+                    bid_ask_spread_raw = ask_price_raw - bid_price_raw
+                    transaction_cost_raw = ((ask_native_raw - bid_native_raw) / 2) / midpoint_native_raw
             except Exception:
                 transaction_cost_raw = None
             structured_metrics = self._structured_metrics([
@@ -1236,6 +1245,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("currentPrice", current_price_raw, self._format_3sig(current_price_raw), "money"),
                 ("dividendYield", dividend_yield_raw, self._format_percent(dividend_yield_raw) if dividend_yield_raw is not None else "--", "percent"),
                 ("transactionCost", transaction_cost_raw, self._format_percent(transaction_cost_raw) if transaction_cost_raw is not None else "--", "percent"),
+                ("bidPrice", bid_price_raw, self._format_3sig(bid_price_raw) if bid_price_raw is not None else "--", "money"),
+                ("askPrice", ask_price_raw, self._format_3sig(ask_price_raw) if ask_price_raw is not None else "--", "money"),
+                ("bidAskSpread", bid_ask_spread_raw, self._format_3sig(bid_ask_spread_raw) if bid_ask_spread_raw is not None else "--", "money"),
                 ("targetMeanPrice", target_mean_raw, self._format_3sig(target_mean_raw), "money"),
                 ("targetLowPrice", target_low_raw, self._format_3sig(target_low_raw), "money"),
                 ("targetHighPrice", target_high_raw, self._format_3sig(target_high_raw), "money"),

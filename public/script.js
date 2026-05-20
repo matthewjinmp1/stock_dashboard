@@ -280,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
             metricGroup('Price & Yield', [
                 metric('Current Price', val('currentPrice')),
                 metric('Dividend Yield', val('dividendYield')),
-                metric('Est Txn Cost', val('transactionCost')),
+                metric('Est Txn Cost', val('transactionCost'), 'transaction_cost'),
             ]),
             metricGroup('EPS Growth', [
                 metric('CY EPS Growth', val('currentYearEpsGrowth')),
@@ -1162,6 +1162,17 @@ document.addEventListener('DOMContentLoaded', () => {
         return targetRaw && currentRaw ? formatPercentDecimal(targetRaw / currentRaw - 1) : '--';
     }
 
+    function midpointDisplay(bid, ask) {
+        const bidRaw = parseMoney(bid);
+        const askRaw = parseMoney(ask);
+        return bidRaw && askRaw ? formatMoneyFront((bidRaw + askRaw) / 2) : '--';
+    }
+
+    function halfSpreadDisplay(spread) {
+        const spreadRaw = parseMoney(spread);
+        return spreadRaw ? formatMoneyFront(spreadRaw / 2) : '--';
+    }
+
     function calcDefinitions(data) {
         const val = (key) => metricDisplay(data, key);
         const raw = (key) => metricEntry(data, key);
@@ -1342,6 +1353,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     ['Investment Capex', val('investmentCapex')],
                     ['Adj Op Inc', val('adj_income')],
                     ['Investment Rate', val('capexAdjIncome')],
+                ]),
+            },
+            transaction_cost: {
+                title: 'Estimated Transaction Cost',
+                numeratorLabel: 'Half Bid/Ask Spread',
+                numerator: halfSpreadDisplay(raw('bidAskSpread')),
+                divisorLabel: 'Bid/Ask Midpoint',
+                divisor: midpointDisplay(raw('bidPrice'), raw('askPrice')),
+                resultLabel: 'Single Buy/Sell Cost',
+                result: val('transactionCost'),
+                rows: formulaValue('((Ask - Bid) / 2) / ((Bid + Ask) / 2)', [
+                    ['Bid', val('bidPrice')],
+                    ['Ask', val('askPrice')],
+                    ['Spread', val('bidAskSpread')],
+                    ['Half Spread', halfSpreadDisplay(raw('bidAskSpread'))],
+                    ['Midpoint', midpointDisplay(raw('bidPrice'), raw('askPrice'))],
+                    ['Estimated Cost', val('transactionCost')],
                 ]),
             },
             target_bear: {
