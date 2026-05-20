@@ -337,9 +337,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const nyGrowth = assumptions.ny_growth ?? parsePercentValue(metricEntry(data, 'ny_growth'));
         const taxRate = assumptions.medianTaxRate ?? parsePercentValue(metricEntry(data, 'medianTaxRate'));
         const afterTaxFactor = 1 - taxRate;
-        const revenueRaw = parseMoney(metricEntry(data, 'revenue'));
+        const revenueRaw = parseMoney(metricEntry(data, 'revenue')) || statementRevenueRaw(data);
         const cyRevenueBaseRaw = lastYearRevenueRaw(data) || revenueRaw;
-        const valuationRaw = parseMoney(metricEntry(data, 'ev'));
+        const valuationRaw = parseMoney(metricEntry(data, 'ev'))
+            || parseMoney(metricEntry(data, 'derivedEnterpriseValue'))
+            || parseMoney(metricEntry(data, 'marketCap'));
         const grossPpeRaw = parseMoney(metricEntry(data, 'grossPpe'));
         const investmentCapexRaw = parseMoney(metricEntry(data, 'investmentCapex'));
         const rocDenomRaw = parseMoney(metricEntry(data, 'netWorkingCapital')) + parseMoney(metricEntry(data, 'netFixedAssets'));
@@ -1059,6 +1061,29 @@ document.addEventListener('DOMContentLoaded', () => {
         return '--';
     }
 
+    function latestStatementValueMatching(statement, matcher) {
+        const rows = statement?.rows || [];
+        const periods = statement?.periods || [];
+        const latestIndex = periods.findIndex((period) => String(period).toUpperCase() === 'TTM' || String(period).toUpperCase() === 'LATEST');
+        for (const row of rows) {
+            if (!matcher(String(row.label || ''))) continue;
+            const values = row.values || [];
+            if (latestIndex >= 0 && latestIndex < values.length && values[latestIndex] && values[latestIndex] !== '--') {
+                return values[latestIndex];
+            }
+            for (let idx = values.length - 1; idx >= 0; idx -= 1) {
+                if (values[idx] && values[idx] !== '--') return values[idx];
+            }
+        }
+        return '--';
+    }
+
+    function statementRevenueRaw(data) {
+        const annual = (data.incomeStatement || {}).annual;
+        return parseMoney(latestStatementValue(annual, ['Total Revenue']))
+            || parseMoney(latestStatementValueMatching(annual, (label) => /revenue/i.test(label)));
+    }
+
     function latestAnnualStatementValue(statement, labels) {
         const labelSet = new Set(labels.map((label) => label.toLowerCase()));
         const rows = statement?.rows || [];
@@ -1077,7 +1102,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function lastYearRevenueRaw(data) {
         const annualRevenue = latestAnnualStatementValue((data.incomeStatement || {}).annual, ['Total Revenue']);
-        const annualRaw = parseMoney(annualRevenue);
+        const annualRaw = parseMoney(annualRevenue)
+            || parseMoney(latestStatementValueMatching((data.incomeStatement || {}).annual, (label) => /revenue/i.test(label)));
         if (annualRaw) return annualRaw;
 
         const cyRevenueRaw = parseMoney(metricEntry(data, 'cy_revenue'));
