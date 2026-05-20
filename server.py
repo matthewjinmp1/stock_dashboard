@@ -23,7 +23,7 @@ PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 21
+PAYLOAD_VERSION = 22
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -544,7 +544,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ("shortFloat", 0.042, "4.2%", "percent"),
             ("currentPrice", 100, "100", "money"),
             ("dividendYield", 0.012, "1.2%", "percent"),
-            ("transactionCost", 0.0005, "0.05%", "percent"),
+            ("transactionCost", 0.0005, "5 bps", "basisPoints"),
             ("bidPrice", 99.95, "99.95", "money"),
             ("askPrice", 100.05, "100.05", "money"),
             ("bidAskSpread", 0.10, "0.10", "money"),
@@ -689,21 +689,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _format_percent(self, val):
         return format_percent(val)
 
-    def _format_transaction_cost_percent(self, val):
+    def _format_basis_points(self, val):
         if val in (None, ""):
             return "--"
         try:
-            pct = float(val) * 100
+            bps = float(val) * 10000
         except Exception:
             return "--"
-        if pct == 0:
-            return "0%"
-        abs_pct = abs(pct)
-        if abs_pct < 0.01:
-            return f"{pct:.4f}".rstrip("0").rstrip(".") + "%"
-        if abs_pct < 0.1:
-            return f"{pct:.3f}".rstrip("0").rstrip(".") + "%"
-        return self._format_percent(val)
+        if bps == 0:
+            return "0 bps"
+        abs_bps = abs(bps)
+        if abs_bps < 1:
+            return f"{bps:.2f}".rstrip("0").rstrip(".") + " bps"
+        if abs_bps < 10:
+            return f"{bps:.1f}".rstrip("0").rstrip(".") + " bps"
+        return f"{bps:.0f} bps"
 
     def _format_money(self, val):
         return format_money(val)
@@ -1340,7 +1340,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("shortFloat", short_float_raw, self._format_percent(short_float_raw) if short_float_raw else "--", "percent"),
                 ("currentPrice", current_price_raw, self._format_3sig(current_price_raw), "money"),
                 ("dividendYield", dividend_yield_raw, self._format_percent(dividend_yield_raw) if dividend_yield_raw is not None else "--", "percent"),
-                ("transactionCost", transaction_cost_raw, self._format_transaction_cost_percent(transaction_cost_raw) if transaction_cost_raw is not None else "--", "percent"),
+                ("transactionCost", transaction_cost_raw, self._format_basis_points(transaction_cost_raw) if transaction_cost_raw is not None else "--", "basisPoints"),
                 ("bidPrice", bid_price_raw, self._format_3sig(bid_price_raw) if bid_price_raw is not None else "--", "money"),
                 ("askPrice", ask_price_raw, self._format_3sig(ask_price_raw) if ask_price_raw is not None else "--", "money"),
                 ("bidAskSpread", bid_ask_spread_raw, self._format_3sig(bid_ask_spread_raw) if bid_ask_spread_raw is not None else "--", "money"),

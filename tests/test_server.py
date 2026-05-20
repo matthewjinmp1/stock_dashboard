@@ -386,9 +386,9 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertIsNone(spread)
         self.assertIsNone(cost)
 
-    def test_transaction_cost_percent_keeps_small_spread_precision(self):
-        self.assertEqual(self.handler._format_transaction_cost_percent(0.000048009986077128595), "0.0048%")
-        self.assertEqual(self.handler._format_transaction_cost_percent(0.0005), "0.05%")
+    def test_transaction_cost_formats_as_basis_points(self):
+        self.assertEqual(self.handler._format_basis_points(0.000048009986077128595), "0.48 bps")
+        self.assertEqual(self.handler._format_basis_points(0.0005), "5 bps")
 
     def test_delegates_to_yfinance_without_manual_fetches(self):
         expected = tuple(f"value-{idx}" for idx, _field in enumerate(FETCH_RESULT_FIELDS))
@@ -568,7 +568,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
                 self.assertIn("display", metric)
                 self.assertIn("kind", metric)
                 self.assertIsInstance(metric["display"], str)
-                self.assertIn(metric["kind"], {"money", "percent", "ratio", "number"})
+                self.assertIn(metric["kind"], {"money", "percent", "ratio", "number", "basisPoints"})
 
     def test_test_ticker_returns_complete_fixture_without_external_fetches(self):
         handler = make_handler()
