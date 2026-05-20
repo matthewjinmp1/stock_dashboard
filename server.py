@@ -102,8 +102,8 @@ INCOME_STATEMENT_TYPES = {
     "Pretax Income": "Pretax Income",
     "TaxProvision": "Tax Provision",
     "Tax Provision": "Tax Provision",
-    "TaxRateForCalcs": "Tax Rate For Calcs",
-    "Tax Rate For Calcs": "Tax Rate For Calcs",
+    "TaxRateForCalcs": "Tax Rate",
+    "Tax Rate For Calcs": "Tax Rate",
     # Net income
     "NetIncome": "Net Income",
     "Net Income": "Net Income",

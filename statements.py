@@ -307,12 +307,13 @@ def add_tax_rate(income_statement, formatter=None):
         if not isinstance(income, dict):
             continue
         rows = income.get("rows") or []
-        if any(row.get("label") == "Tax Rate" for row in rows):
-            continue
 
         tax_row = _row_by_label(income, ["Tax Provision"])
         pretax_row = _row_by_label(income, ["Pretax Income", "Income Before Tax"])
+        existing_tax_rate_row = _row_by_label(income, ["Tax Rate", "Tax Rate For Calcs"])
         if not tax_row or not pretax_row:
+            if existing_tax_rate_row:
+                existing_tax_rate_row["label"] = "Tax Rate"
             continue
 
         values = []
@@ -324,8 +325,12 @@ def add_tax_rate(income_statement, formatter=None):
                 continue
             values.append(formatter(tax_raw / abs(pretax_raw)))
 
-        insert_idx = rows.index(tax_row) + 1
-        rows.insert(insert_idx, {"label": "Tax Rate", "values": values})
+        if existing_tax_rate_row:
+            existing_tax_rate_row["label"] = "Tax Rate"
+            existing_tax_rate_row["values"] = values
+        else:
+            insert_idx = rows.index(tax_row) + 1
+            rows.insert(insert_idx, {"label": "Tax Rate", "values": values})
         income["rows"] = rows
 
     return income_statement
