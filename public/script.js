@@ -359,12 +359,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (assumptions.ny_growth !== undefined) setMetric(data, 'ny_growth', nyGrowth, formatPercentDecimal(nyGrowth), 'percent');
         if (assumptions.medianTaxRate !== undefined) setMetric(data, 'medianTaxRate', taxRate, formatPercentDecimal(taxRate), 'percent');
 
+        const existingCyRevenueRaw = parseMoney(metricEntry(data, 'cy_revenue'));
+        const existingNyRevenueRaw = parseMoney(metricEntry(data, 'ny_revenue'));
         const cyRevenueRaw = assumptions.cy_growth !== undefined && cyRevenueBaseRaw
             ? cyRevenueBaseRaw * (1 + cyGrowth)
-            : parseMoney(metricEntry(data, 'cy_revenue'));
+            : existingCyRevenueRaw || (cyRevenueBaseRaw ? cyRevenueBaseRaw * (1 + cyGrowth) : 0);
         const nyRevenueRaw = assumptions.ny_growth !== undefined && cyRevenueRaw
             ? cyRevenueRaw * (1 + nyGrowth)
-            : parseMoney(metricEntry(data, 'ny_revenue'));
+            : existingNyRevenueRaw || (cyRevenueRaw ? cyRevenueRaw * (1 + nyGrowth) : 0);
         const cyAdjRaw = cyRevenueRaw * margin;
         const nyAdjRaw = nyRevenueRaw * margin;
         const cyAfterTaxAdjRaw = cyAdjRaw && afterTaxFactor > 0 ? cyAdjRaw * afterTaxFactor : 0;
