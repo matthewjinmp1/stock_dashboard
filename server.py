@@ -21,6 +21,7 @@ except ImportError:
 
 PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
+PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 PAYLOAD_VERSION = 24
@@ -340,6 +341,33 @@ def load_cache():
 def save_cache(cache_data):
     return cache_store.save_cache(CACHE_DB_FILE, cache_data)
 
+def load_preferences():
+    if not os.path.exists(PREFERENCES_FILE):
+        return {}
+    try:
+        with open(PREFERENCES_FILE, "r") as f:
+            payload = json.load(f)
+        return payload if isinstance(payload, dict) else {}
+    except Exception as exc:
+        print(f"Preferences read failed: {exc}")
+        return {}
+
+def save_preferences(preferences):
+    try:
+        with open(PREFERENCES_FILE, "w") as f:
+            json.dump(preferences if isinstance(preferences, dict) else {}, f)
+    except Exception as exc:
+        print(f"Preferences write failed: {exc}")
+
+def clean_starred_accounts(value):
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(key): bool(enabled)
+        for key, enabled in value.items()
+        if isinstance(key, str) and ":" in key
+    }
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     _yahoo_crumb_cache = None
     _yahoo_crumb_cache_at = 0
@@ -653,6 +681,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory="public", **kwargs)
 
     def do_GET(self):
+        if self.path == '/api/preferences/starred-accounts':
+            preferences = load_preferences()
+            self._send_response(200, {
+                "starredAccounts": clean_starred_accounts(preferences.get("starredAccounts")),
+            })
+            return
         if self.path.startswith('/api/short-interest/'):
             parsed = urlparse(self.path)
             ticker = parsed.path.split('/')[-1].upper()
@@ -661,6 +695,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.handle_api_request(ticker, refresh=refresh)
         else:
             super().do_GET()
+
+    def do_POST(self):
+        if self.path != '/api/preferences/starred-accounts':
+            self._send_response(404, {"error": "Not found"})
+            return
+
+        try:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+            body = self.rfile.read(length).decode("utf-8") if length else "{}"
+            payload = json.loads(body)
+        except Exception:
+            self._send_response(400, {"error": "Invalid JSON"})
+            return
+
+        preferences = load_preferences()
+        preferences["starredAccounts"] = clean_starred_accounts(payload.get("starredAccounts"))
+        save_preferences(preferences)
+        self._send_response(200, {"starredAccounts": preferences["starredAccounts"]})
 
     def _infer_currency_from_ticker(self, ticker, current_currency):
         """Fallback to infer currency from ticker suffix if API returns USD or missing."""

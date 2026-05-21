@@ -6,5 +6,6 @@ __pycache__/
 .claude/
 cache.json
 cache.db
+preferences.json
 test.log
 server.log

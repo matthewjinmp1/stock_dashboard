@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const $ = (id) => document.getElementById(id);
     const FORWARD_DISCOUNT_RATE = 0.10;
+    const localStarredAccounts = JSON.parse(localStorage.getItem('stock_starred_accounts') || '{}');
     const state = {
         activeView: 'scanner',
         previousScroll: 0,
@@ -13,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
         statementTab: localStorage.getItem('stock_statement_tab') || 'income',
         periodicity: localStorage.getItem('stock_periodicity') || 'annual',
         statementSearch: '',
-        starredAccounts: JSON.parse(localStorage.getItem('stock_starred_accounts') || '{}'),
+        starredAccounts: localStarredAccounts,
         statementToggles: JSON.parse(localStorage.getItem('stock_statement_toggles') || '{}'),
         groups: [],
         sort: {},
@@ -49,6 +50,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function saveTickerData() {
         save('stock_data_by_ticker', state.dataByTicker);
+    }
+
+    function hasEnabledStarredAccount(accounts) {
+        return Object.values(accounts || {}).some(Boolean);
+    }
+
+    async function loadStarredAccounts() {
+        try {
+            const response = await fetch('/api/preferences/starred-accounts');
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error || 'Failed to load starred accounts');
+            const serverAccounts = payload.starredAccounts || {};
+            if (hasEnabledStarredAccount(serverAccounts)) {
+                state.starredAccounts = serverAccounts;
+                localStorage.setItem('stock_starred_accounts', JSON.stringify(serverAccounts));
+            } else if (hasEnabledStarredAccount(localStarredAccounts)) {
+                await saveStarredAccounts();
+            }
+            renderStatements(state.latest);
+        } catch (err) {
+            console.warn('Starred account preferences unavailable; using browser backup.', err);
+        }
+    }
+
+    async function saveStarredAccounts() {
+        localStorage.setItem('stock_starred_accounts', JSON.stringify(state.starredAccounts));
+        try {
+            const response = await fetch('/api/preferences/starred-accounts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ starredAccounts: state.starredAccounts }),
+            });
+            if (!response.ok) throw new Error('Failed to save starred accounts');
+        } catch (err) {
+            console.warn('Starred account preferences were saved only in this browser.', err);
+        }
     }
 
     function showView(name) {
@@ -861,7 +898,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function toggleStarredAccount(statement, label) {
         const key = starredKey(statement, label);
         state.starredAccounts[key] = !state.starredAccounts[key];
-        save('stock_starred_accounts', state.starredAccounts);
+        saveStarredAccounts();
         renderStatements(state.latest);
     }
 
@@ -1499,10 +1536,14 @@ document.addEventListener('DOMContentLoaded', () => {
         window.scrollTo(0, state.previousScroll || 0);
     });
 
+    loadStarredAccounts();
+
     window.__stockAnalysisTestApi = {
         state,
         applyAssumptions,
         calcDefinitions,
+        loadStarredAccounts,
+        saveStarredAccounts,
         metricEntry,
         metricDisplay,
         metricValueHtml,

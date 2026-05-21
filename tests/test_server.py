@@ -297,6 +297,32 @@ class CacheDatabaseTests(unittest.TestCase):
             self.assertEqual(count, 1)
 
 
+class PreferencesTests(unittest.TestCase):
+    def test_starred_accounts_preferences_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            prefs_path = os.path.join(tmpdir, "preferences.json")
+            preferences = {
+                "starredAccounts": {
+                    "income:Total Revenue": True,
+                    "cash:Free Cash Flow": False,
+                }
+            }
+
+            with mock.patch.object(server, "PREFERENCES_FILE", prefs_path):
+                server.save_preferences(preferences)
+
+                self.assertEqual(server.load_preferences(), preferences)
+
+    def test_clean_starred_accounts_rejects_non_account_keys(self):
+        cleaned = server.clean_starred_accounts({
+            "income:Total Revenue": 1,
+            "bad-key": True,
+            123: True,
+        })
+
+        self.assertEqual(cleaned, {"income:Total Revenue": True})
+
+
 def fake_income_statement_with_eps(ttm_value, annual_value):
     s = {
         "periods": ["TTM", "2025-12-31"],
