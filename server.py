@@ -1014,13 +1014,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             self._request_fetch_count = getattr(self, "_request_fetch_count", 0)
 
-            def fetch_info():
-                stock = yf.Ticker(ticker)
-                return timed("info", "Quote summary / info", lambda: stock.info or {})
+            # Build ONE shared Ticker so every subsequent yfinance call reuses the
+            # same requests session, cookies, and crumb. This avoids 11 simultaneous
+            # cold handshakes against Yahoo (which triggers anti-bot throttling and
+            # causes silent empty responses for a subset of fields).
+            shared_stock = yf.Ticker(ticker)
 
             def fetch_yf_frame(key, label, attr_name):
-                frame_stock = yf.Ticker(ticker)
-                return timed(key, label, lambda: getattr(frame_stock, attr_name))
+                return timed(key, label, lambda: getattr(shared_stock, attr_name))
 
             def fetch_fx_rate(currency):
                 if currency == "USD":
@@ -1035,10 +1036,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             def fetch_estimate_frames():
                 try:
-                    estimate_stock = yf.Ticker(ticker)
                     return {
-                        "earnings": timed("earnings_estimate", "Earnings estimates", lambda: estimate_stock.earnings_estimate),
-                        "revenue": timed("revenue_estimate", "Revenue estimates", lambda: estimate_stock.revenue_estimate),
+                        "earnings": timed("earnings_estimate", "Earnings estimates", lambda: shared_stock.earnings_estimate),
+                        "revenue": timed("revenue_estimate", "Revenue estimates", lambda: shared_stock.revenue_estimate),
                     }
                 except Exception as e:
                     print(f"yfinance estimates warning: {e}")
@@ -1046,8 +1046,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             def fetch_analyst_recommendations():
                 try:
-                    rec_stock = yf.Ticker(ticker)
-                    recs = timed("recommendations", "Analyst recommendations", lambda: rec_stock.recommendations)
+                    recs = timed("recommendations", "Analyst recommendations", lambda: shared_stock.recommendations)
                     if recs is not None and not recs.empty:
                         latest = recs.iloc[-1] if len(recs) > 0 else {}
                         return {
@@ -1061,10 +1060,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     pass
                 return {}
 
-            with ThreadPoolExecutor(max_workers=12) as executor:
+            # Warm the session first: fetching `info` synchronously establishes
+            # Yahoo's auth cookie/crumb on `shared_stock`. After this returns, the
+            # parallel fan-out below all rides the same already-trusted session.
+            info = timed("info", "Quote summary / info", lambda: shared_stock.info or {})
+            self._request_fetch_count += 1
+
+            with ThreadPoolExecutor(max_workers=6) as executor:
                 statements_started = time.perf_counter()
                 futures = {
-                    "info": executor.submit(fetch_info),
                     "annual_income": executor.submit(lambda: fetch_yf_frame("annual_income", "Annual income statement", "financials")),
                     "ttm_income": executor.submit(lambda: fetch_yf_frame("ttm_income", "Official TTM income statement", "ttm_income_stmt")),
                     "quarterly_income": executor.submit(lambda: fetch_yf_frame("quarterly_income", "Quarterly income statement", "quarterly_financials")),
@@ -1077,9 +1081,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "recommendations": executor.submit(fetch_analyst_recommendations),
                     "nasdaq_bid_ask": executor.submit(lambda: timed("nasdaq_bid_ask", "Nasdaq bid/ask quote", lambda: self._nasdaq_bid_ask_metrics(ticker))),
                 }
-                self._request_fetch_count += 11
+                self._request_fetch_count += 10
 
-                info = futures["info"].result() or {}
                 raw_currency = (info.get("financialCurrency") or info.get("currency"))
                 financial_currency = self._infer_currency_from_ticker(ticker, raw_currency)
                 if financial_currency:
