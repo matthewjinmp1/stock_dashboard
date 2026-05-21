@@ -9,48 +9,20 @@ is_port_in_use() {
   lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
 }
 
-port_pids() {
-  local port="$1"
-  lsof -nP -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true
-}
-
-owns_repo_server() {
-  local pid="$1"
-  local command
-  local cwd
-  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
-  cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1)"
-  [[ "$command" == *"server.py"* && "$cwd" == "$ROOT_DIR" ]]
-}
-
-reclaim_port() {
-  local port="$1"
-  local reclaimed=0
-  local pid
-  while IFS= read -r pid; do
-    [[ -z "$pid" ]] && continue
-    if owns_repo_server "$pid"; then
-      echo "[watcher] Reclaiming port ${port} from existing repo server PID ${pid}"
-      kill "$pid" 2>/dev/null || true
-      reclaimed=1
-    else
-      echo "Port ${port} is already in use by another process (PID ${pid})."
-      echo "Not killing it. Stop that process or run with a different PORT."
-      exit 1
+if [[ -n "${PORT:-}" ]]; then
+  export PORT
+else
+  for candidate in 3000 3001 3002 3003 3004 3005 3006 3007 3008 3009 3010; do
+    if ! is_port_in_use "${candidate}"; then
+      export PORT="${candidate}"
+      break
     fi
-  done < <(port_pids "$port")
-
-  if [[ "$reclaimed" == "1" ]]; then
-    sleep 1
-  fi
-}
-
-export PORT="${PORT:-3000}"
-reclaim_port "$PORT"
+  done
+fi
 
 if is_port_in_use "${PORT}"; then
   echo "Port ${PORT} is already in use."
-  echo "Try: lsof -nP -iTCP:${PORT} -sTCP:LISTEN"
+  echo "Try: PORT=3001 ./start_server.sh"
   exit 1
 fi
 
