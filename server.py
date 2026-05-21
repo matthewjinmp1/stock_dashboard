@@ -1020,6 +1020,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # causes silent empty responses for a subset of fields).
             shared_stock = yf.Ticker(ticker)
 
+            def fetch_info():
+                info_stock = yf.Ticker(ticker)
+                return timed("info", "Quote summary / info", lambda: info_stock.info or {})
+
             def fetch_yf_frame(key, label, attr_name):
                 return timed(key, label, lambda: getattr(shared_stock, attr_name))
 
@@ -1060,15 +1064,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     pass
                 return {}
 
-            # Warm the session first: fetching `info` synchronously establishes
-            # Yahoo's auth cookie/crumb on `shared_stock`. After this returns, the
-            # parallel fan-out below all rides the same already-trusted session.
-            info = timed("info", "Quote summary / info", lambda: shared_stock.info or {})
-            self._request_fetch_count += 1
-
             with ThreadPoolExecutor(max_workers=6) as executor:
                 statements_started = time.perf_counter()
                 futures = {
+                    "info": executor.submit(fetch_info),
                     "annual_income": executor.submit(lambda: fetch_yf_frame("annual_income", "Annual income statement", "financials")),
                     "ttm_income": executor.submit(lambda: fetch_yf_frame("ttm_income", "Official TTM income statement", "ttm_income_stmt")),
                     "quarterly_income": executor.submit(lambda: fetch_yf_frame("quarterly_income", "Quarterly income statement", "quarterly_financials")),
@@ -1079,9 +1078,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "quarterly_cashflow": executor.submit(lambda: fetch_yf_frame("quarterly_cashflow", "Quarterly cash flow", "quarterly_cashflow")),
                     "estimates": executor.submit(lambda: timed("estimates_total", "Estimates group", fetch_estimate_frames)),
                     "recommendations": executor.submit(fetch_analyst_recommendations),
-                    "nasdaq_bid_ask": executor.submit(lambda: timed("nasdaq_bid_ask", "Nasdaq bid/ask quote", lambda: self._nasdaq_bid_ask_metrics(ticker))),
                 }
                 self._request_fetch_count += 10
+
+                info = futures["info"].result() or {}
 
                 raw_currency = (info.get("financialCurrency") or info.get("currency"))
                 financial_currency = self._infer_currency_from_ticker(ticker, raw_currency)
@@ -1113,12 +1113,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 record_stage("statements_total", "Statements group", statements_started)
                 estimate_frames = futures["estimates"].result()
                 analyst_recommendations = futures["recommendations"].result()
-                early_bid_ask_metrics = futures["nasdaq_bid_ask"].result()
                 financial_fx_rate = futures["financial_fx"].result() if "financial_fx" in futures else 1.0
                 if quote_currency == financial_currency:
                     quote_fx_rate = financial_fx_rate
                 else:
                     quote_fx_rate = futures["quote_fx"].result() if "quote_fx" in futures else 1.0
+
+            early_bid_ask_metrics = timed(
+                "nasdaq_bid_ask",
+                "Nasdaq bid/ask quote",
+                lambda: self._nasdaq_bid_ask_metrics(ticker),
+            )
+            self._request_fetch_count += 1
             
             print(f"[FX] Financial Rate: {financial_fx_rate}, Quote Rate: {quote_fx_rate}")
 
