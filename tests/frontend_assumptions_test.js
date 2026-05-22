@@ -180,6 +180,20 @@ assertAlmostEqual(api.metricEntry(adjustedGrowth, 'ny_revenue').raw, 1_254_000_0
 assert.notStrictEqual(api.metricDisplay(adjustedGrowth, 'ev_cy_ebit'), '--', 'edited growth should keep CY valuation active');
 assert.notStrictEqual(api.metricDisplay(adjustedGrowth, 'ev_ny_ebit'), '--', 'edited growth should keep NY valuation active');
 
+const zeroInvestmentData = {
+  ...data,
+  ticker: 'ZERO_CAPEX',
+  investmentCapex: '0',
+  metrics: {
+    ...data.metrics,
+    investmentCapex: { raw: 0, display: '0', kind: 'money' },
+  },
+};
+
+api.state.assumptions.ZERO_CAPEX = { margin: 0.28 };
+const adjustedZeroInvestment = api.applyAssumptions(zeroInvestmentData);
+assert.strictEqual(api.metricDisplay(adjustedZeroInvestment, 'capexAdjIncome'), '0%', 'zero investment capex should display as 0% investment rate');
+
 const bpsMetricHtml = api.metricValueHtml('0.72 bps');
 assert(bpsMetricHtml.includes('value-display-with-unit'), 'basis point metric should render as attached unit markup');
 assert(bpsMetricHtml.includes('<span>0.72</span><span class="value-unit">bps</span>'), 'basis point unit should stay attached to the number');

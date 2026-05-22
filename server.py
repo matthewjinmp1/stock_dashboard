@@ -1314,7 +1314,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             company_name = info.get("longName") or info.get("shortName") or ticker
 
             def safe_ratio(num, denom):
-                return (num / denom) if num and denom else None
+                if num is None or denom in (None, 0):
+                    return None
+                return num / denom
 
             def safe_display(value, formatter):
                 return formatter(value) if value is not None else "--"
