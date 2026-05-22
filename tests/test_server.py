@@ -206,6 +206,7 @@ def make_fetch_result(**overrides):
         "balance_statement": fake_statement("Balance"),
         "cash_flow_statement": fake_statement("Cash"),
         "current_price": "425",
+        "beta": "1.05",
         "target_mean_price": "573",
         "target_low_price": "392",
         "target_high_price": "730",
@@ -230,6 +231,7 @@ def make_fetch_result(**overrides):
             "margin": {"raw": 0.467, "display": "46.7%", "kind": "percent"},
             "marketCap": {"raw": 3160000000000, "display": "3.16T", "kind": "money", "currency": "USD"},
             "medianTaxRate": {"raw": 0.193, "display": "19.3%", "kind": "percent"},
+            "beta": {"raw": 1.05, "display": "1.05", "kind": "number"},
         },
     }
     values.update(overrides)
@@ -510,6 +512,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         "balanceStatement",
         "cashFlowStatement",
         "currentPrice",
+        "beta",
         "targetMeanPrice",
         "targetLowPrice",
         "targetHighPrice",
@@ -569,6 +572,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         "shortFloat",
         "currentPrice",
         "dividendYield",
+        "beta",
         "transactionCost",
         "targetMeanPrice",
         "targetLowPrice",
@@ -632,6 +636,8 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["ev_cy_ebit"], "14.5")
         self.assertEqual(payload["ev_ny_ebit"], "13")
         self.assertEqual(payload["priceCyEps"], "10")
+        self.assertEqual(payload["beta"], "1.05")
+        self.assertEqual(payload["metrics"]["beta"], {"raw": 1.05, "display": "1.05", "kind": "number"})
         self.assertEqual(payload["incomeStatement"]["annual"]["rows"][0]["label"], "Total Revenue")
         self.assertEqual(payload["balanceStatement"]["annual"]["rows"][2]["label"], "Cash, Equivalents & Short Term Investments")
         self.assertEqual(payload["cashFlowStatement"]["annual"]["rows"][1]["label"], "Capital Expenditures")
@@ -690,6 +696,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["metrics"]["revenue"]["display"], "305B")
         self.assertEqual(payload["metrics"]["margin"]["raw"], 0.467)
         self.assertEqual(payload["metrics"]["medianTaxRate"]["display"], "19.3%")
+        self.assertEqual(payload["metrics"]["beta"]["raw"], 1.05)
         for key, metric in payload["metrics"].items():
             with self.subTest(metric=key):
                 self.assertIn("raw", metric)

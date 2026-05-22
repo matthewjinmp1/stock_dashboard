@@ -572,6 +572,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ("shortFloat", 0.042, "4.2%", "percent"),
             ("currentPrice", 100, "100", "money"),
             ("dividendYield", 0.012, "1.2%", "percent"),
+            ("beta", 1.05, "1.05", "number"),
             ("transactionCost", 0.0005, "5 bps", "basisPoints"),
             ("bidPrice", 99.95, "99.95", "money"),
             ("askPrice", 100.05, "100.05", "money"),
@@ -638,6 +639,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "balanceStatement": balance_statement,
             "cashFlowStatement": cash_flow_statement,
             "currentPrice": "100",
+            "beta": "1.05",
             "targetMeanPrice": "125",
             "targetLowPrice": "90",
             "targetHighPrice": "160",
@@ -1330,6 +1332,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             recommendation_mean = info.get("recommendationMean", 0) or 0
             recommendation_key = info.get("recommendationKey", "--") or "--"
+            beta_raw = info.get("beta")
+            try:
+                beta_raw = float(beta_raw) if beta_raw is not None else None
+            except Exception:
+                beta_raw = None
 
             company_name = info.get("longName") or info.get("shortName") or ticker
 
@@ -1423,6 +1430,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("shortFloat", short_float_raw, self._format_percent(short_float_raw) if short_float_raw else "--", "percent"),
                 ("currentPrice", current_price_raw, self._format_3sig(current_price_raw), "money"),
                 ("dividendYield", dividend_yield_raw, self._format_percent(dividend_yield_raw) if dividend_yield_raw is not None else "--", "percent"),
+                ("beta", beta_raw, self._format_3sig(beta_raw) if beta_raw is not None else "--", "number"),
                 ("transactionCost", transaction_cost_raw, self._format_basis_points(transaction_cost_raw) if transaction_cost_raw is not None else "--", "basisPoints"),
                 ("bidPrice", bid_price_raw, self._format_3sig(bid_price_raw) if bid_price_raw is not None else "--", "money"),
                 ("askPrice", ask_price_raw, self._format_3sig(ask_price_raw) if ask_price_raw is not None else "--", "money"),
@@ -1493,6 +1501,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "target_move": self._format_percent(target_move_raw) if target_move_raw is not None else "--",
                 "recommendation_mean": self._format_3sig(recommendation_mean),
                 "recommendation_key": recommendation_key,
+                "beta": self._format_3sig(beta_raw) if beta_raw is not None else "--",
                 "analyst_recommendations": analyst_recommendations,
                 "valuation_basis": valuation_basis,
                 "valuation_prefix": valuation_prefix,
@@ -1723,6 +1732,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "balanceStatement": result["balance_statement"],
             "cashFlowStatement": result["cash_flow_statement"],
             "currentPrice": result["current_price"],
+            "beta": result.get("beta") or "--",
             "targetMeanPrice": result["target_mean_price"],
             "targetLowPrice": result["target_low_price"],
             "targetHighPrice": result["target_high_price"],
