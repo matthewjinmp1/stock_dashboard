@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sort: {},
         scanRequestId: 0,
     };
+    let activeFetchTimer = null;
     localStorage.removeItem('stock_assumptions');
     localStorage.removeItem('stock_statement_search');
 
@@ -161,6 +162,24 @@ document.addEventListener('DOMContentLoaded', () => {
     function displayFetchInfo(data) {
         const fetches = data.fetchCount === undefined ? '--' : data.fetchCount;
         return `Fetch time: ${data.fetchTime || '--'} • Fetches: ${fetches}`;
+    }
+
+    function startFetchTimer(startedAt, requestId) {
+        stopFetchTimer();
+        const node = $('result-fetch-info');
+        const update = () => {
+            if (requestId !== state.scanRequestId) return;
+            const elapsed = (performance.now() - startedAt) / 1000;
+            node.textContent = `Fetching: ${elapsed.toFixed(2)}s • Fetches: --`;
+        };
+        update();
+        activeFetchTimer = setInterval(update, 100);
+    }
+
+    function stopFetchTimer() {
+        if (!activeFetchTimer) return;
+        clearInterval(activeFetchTimer);
+        activeFetchTimer = null;
     }
 
     function formatSeconds(value) {
@@ -575,6 +594,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ticker = ticker.toUpperCase();
         const requestId = state.scanRequestId + 1;
         state.scanRequestId = requestId;
+        const fetchStartedAt = performance.now();
         showView('scanner');
         $('result-container').classList.remove('hidden');
         $('result-stats').classList.add('hidden');
@@ -585,7 +605,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const company = title ? title.querySelector('.company-name') : null;
         if (company) company.textContent = '';
         $('result-data-date').textContent = '--';
-        $('result-fetch-info').textContent = 'Fetch time: -- • Fetches: --';
+        startFetchTimer(fetchStartedAt, requestId);
         $('result-currency-info').textContent = 'Native currency: -- • USD rate: --';
         $('glass-card').classList.remove('refreshing');
         $('loading-spinner').classList.remove('hidden');
@@ -596,12 +616,16 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const data = await fetchTicker(ticker, refresh);
             if (requestId !== state.scanRequestId) return;
+            stopFetchTimer();
             state.latest = data;
             $('loading-spinner').classList.add('hidden');
             $('glass-card').classList.remove('refreshing');
             renderTickerResult(data, ticker);
         } catch (err) {
             if (requestId !== state.scanRequestId) return;
+            stopFetchTimer();
+            const elapsed = (performance.now() - fetchStartedAt) / 1000;
+            $('result-fetch-info').textContent = `Fetch failed after ${elapsed.toFixed(2)}s • Fetches: --`;
             $('loading-spinner').classList.add('hidden');
             $('glass-card').classList.remove('refreshing');
             $('error-message').textContent = err.message;
