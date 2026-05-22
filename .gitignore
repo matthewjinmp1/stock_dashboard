@@ -9,3 +9,4 @@ cache.db
 preferences.json
 test.log
 server.log
+.env
