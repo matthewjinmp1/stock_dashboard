@@ -86,6 +86,11 @@ vm.runInNewContext(script, context, { filename: 'public/script.js' });
 const api = context.window.__stockAnalysisTestApi;
 assert(api, 'test API should be exposed');
 
+assert(api.accountLabelMatchesSearch('Operating Income', 'op'), 'search should match the prefix of the first word');
+assert(api.accountLabelMatchesSearch('Operating Income', 'inc'), 'search should match the prefix of any word');
+assert(api.accountLabelMatchesSearch('Net Non Operating Interest Income Expense', 'int inc'), 'multi-word search should match word prefixes across the label');
+assert(!api.accountLabelMatchesSearch('Operating Income', 'come'), 'search should not match arbitrary substrings inside a word');
+
 api.state.scanRequestId = 17;
 api.startFetchTimer(0, 17);
 const fetchInfoNode = elements.get('result-fetch-info');

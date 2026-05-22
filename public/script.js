@@ -970,7 +970,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ['cash', 'Cash Flow Statement', (data.cashFlowStatement || {})[p] || {}],
         ].map(([key, label, statement]) => {
             const rows = term
-                ? (statement.rows || []).filter((row) => String(row.label || '').toLowerCase().includes(term))
+                ? (statement.rows || []).filter((row) => accountLabelMatchesSearch(row.label, term))
                 : (statement.rows || []);
             if (!rows.length) return '';
             return `<h3 class="statement-section-title">${label}</h3>${renderStatementTable({ periods: statement.periods, rows }, key, false)}`;
@@ -1003,7 +1003,18 @@ document.addEventListener('DOMContentLoaded', () => {
     function filterStatementRows(rows) {
         const term = statementSearchTerm();
         if (!term) return rows;
-        return rows.filter((row) => String(row.label || '').toLowerCase().includes(term));
+        return rows.filter((row) => accountLabelMatchesSearch(row.label, term));
+    }
+
+    function accountLabelMatchesSearch(label, term) {
+        const normalizedLabel = String(label || '').toLowerCase().trim();
+        const normalizedTerm = String(term || '').toLowerCase().trim();
+        if (!normalizedTerm) return true;
+        if (normalizedLabel.startsWith(normalizedTerm)) return true;
+        const words = normalizedLabel.match(/[a-z0-9]+/g) || [];
+        const tokens = normalizedTerm.match(/[a-z0-9]+/g) || [];
+        if (!tokens.length) return true;
+        return tokens.every((token) => words.some((word) => word.startsWith(token)));
     }
 
     function statementForDisplay(statement) {
@@ -1587,6 +1598,7 @@ document.addEventListener('DOMContentLoaded', () => {
         metricValueHtml,
         parseMoney,
         parsePercentValue,
+        accountLabelMatchesSearch,
         startFetchTimer,
         stopFetchTimer,
     };
