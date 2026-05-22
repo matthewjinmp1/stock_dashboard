@@ -1405,6 +1405,26 @@ class StatementPageBuilderTests(unittest.TestCase):
         tax_row = next(row for row in statement["rows"] if row["label"] == "Tax Rate")
         self.assertEqual(tax_row["values"], ["19.6%", "19.6%", "13.5%"])
 
+    def test_quarterly_statement_keeps_rows_missing_only_latest_period(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                pd.Timestamp("2026-03-31"): [None, 0.21],
+                pd.Timestamp("2025-12-31"): [1186, 0.06],
+                pd.Timestamp("2025-09-30"): [1140, 0.03],
+            },
+            index=["Total Revenue", "Diluted EPS"],
+        )
+
+        statement = self.handler._df_to_quarterly_statement(df, formatter=lambda value: str(value), order_map=server.INCOME_STATEMENT_TYPES)
+        revenue_row = next(row for row in statement["rows"] if row["label"] == "Total Revenue")
+        eps_row = next(row for row in statement["rows"] if row["label"] == "Diluted EPS")
+
+        self.assertEqual(statement["periods"], ["2026-03-31", "2025-12-31", "2025-09-30"])
+        self.assertEqual(revenue_row["values"], ["--", "1186.0", "1140.0"])
+        self.assertEqual(eps_row["values"], ["0.21", "0.06", "0.03"])
+
     def test_df_ttm_value_prefers_official_annual_ttm_over_quarter_sum(self):
         import pandas as pd
 

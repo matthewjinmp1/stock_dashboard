@@ -626,6 +626,26 @@ button:active {
     min-width: 0;
 }
 
+.statement-period-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    min-width: max-content;
+}
+
+.quarterly-growth-controls {
+    display: inline-flex;
+    gap: 0.5rem;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.quarterly-growth-controls.is-hidden {
+    visibility: hidden;
+    pointer-events: none;
+}
+
 .statement-header p,
 .empty-note {
     color: var(--text-secondary);

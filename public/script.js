@@ -909,10 +909,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="statement-period-actions">
                         <button class="mini-btn ${state.periodicity === 'annual' ? 'on blue' : ''}" data-periodicity="annual">Annual</button>
                         <button class="mini-btn ${state.periodicity === 'quarterly' ? 'on blue' : ''}" data-periodicity="quarterly">Quarterly</button>
-                        ${state.periodicity === 'quarterly' ? `
+                        <span class="quarterly-growth-controls ${state.periodicity === 'quarterly' ? '' : 'is-hidden'}" aria-hidden="${state.periodicity === 'quarterly' ? 'false' : 'true'}">
                             <button class="mini-btn ${state.quarterlyGrowthMode === 'yoy' ? 'on blue' : ''}" data-quarterly-growth-mode="yoy">YoY</button>
                             <button class="mini-btn ${state.quarterlyGrowthMode === 'qoq' ? 'on blue' : ''}" data-quarterly-growth-mode="qoq">QoQ</button>
-                        ` : ''}
+                        </span>
                 </div>
             </div>
             <div class="statement-toolbar">

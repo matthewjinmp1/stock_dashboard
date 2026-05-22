@@ -492,7 +492,7 @@ def df_to_quarterly_statement(df, formatter=None, order_map=None):
         return {"periods": [], "rows": []}
 
     ordered_index = ordered_df_index(df, order_map)
-    active_labels = [lbl for lbl in ordered_index if pd.notna(df.loc[lbl, cols[0]])]
+    active_labels = [lbl for lbl in ordered_index if any(pd.notna(df.loc[lbl, c]) for c in cols)]
     if not active_labels:
         return {"periods": [], "rows": []}
 
