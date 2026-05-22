@@ -229,6 +229,7 @@ def make_fetch_result(**overrides):
             "revenue": {"raw": 305000000000, "display": "305B", "kind": "money", "currency": "USD"},
             "margin": {"raw": 0.467, "display": "46.7%", "kind": "percent"},
             "marketCap": {"raw": 3160000000000, "display": "3.16T", "kind": "money", "currency": "USD"},
+            "medianTaxRate": {"raw": 0.193, "display": "19.3%", "kind": "percent"},
         },
     }
     values.update(overrides)
@@ -480,6 +481,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         "gp_3y_start",
         "gp_3y_end",
         "gp_3y_label",
+        "medianTaxRate",
         "rndAdjIncome",
         "cy_adj_inc",
         "ny_adj_inc",
@@ -679,6 +681,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["derivedEnterpriseValue"], "3.12T")
         self.assertEqual(payload["grossPpe"], "323B")
         self.assertEqual(payload["netWorkingCapital"], "43.1B")
+        self.assertEqual(payload["medianTaxRate"], "19.3%")
         self.assertEqual(payload["companyName"], "Microsoft Corporation")
         self.assertEqual(payload["valuationBasis"], "derivedEV")
         self.assertEqual(payload["valuationPrefix"], "EV")
@@ -686,6 +689,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["metrics"]["revenue"]["raw"], 305000000000)
         self.assertEqual(payload["metrics"]["revenue"]["display"], "305B")
         self.assertEqual(payload["metrics"]["margin"]["raw"], 0.467)
+        self.assertEqual(payload["metrics"]["medianTaxRate"]["display"], "19.3%")
         for key, metric in payload["metrics"].items():
             with self.subTest(metric=key):
                 self.assertIn("raw", metric)

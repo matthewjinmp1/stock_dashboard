@@ -208,6 +208,8 @@ assert.strictEqual(api.metricDisplay(adjustedGrowth, 'cy_growth'), '20%', 'edite
 assert.strictEqual(api.metricDisplay(adjustedGrowth, 'ny_growth'), '10%', 'edited NY growth should display');
 assertAlmostEqual(api.metricEntry(adjustedGrowth, 'cy_revenue').raw, 1_140_000_000, 1, 'edited CY growth should use last annual revenue');
 assertAlmostEqual(api.metricEntry(adjustedGrowth, 'ny_revenue').raw, 1_254_000_000, 1, 'edited NY growth should compound from CY revenue');
+assertAlmostEqual(api.metricEntry(adjustedGrowth, 'ev_cy_ebit').raw, 84.8550531653, 0.0001, 'CY valuation should use after-tax discounted forward income');
+assertAlmostEqual(api.metricEntry(adjustedGrowth, 'ev_ny_ebit').raw, 84.8495177193, 0.0001, 'NY valuation should use after-tax discounted forward income');
 assert.notStrictEqual(api.metricDisplay(adjustedGrowth, 'ev_cy_ebit'), '--', 'edited growth should keep CY valuation active');
 assert.notStrictEqual(api.metricDisplay(adjustedGrowth, 'ev_ny_ebit'), '--', 'edited growth should keep NY valuation active');
 
@@ -224,6 +226,22 @@ const zeroInvestmentData = {
 api.state.assumptions.ZERO_CAPEX = { margin: 0.28 };
 const adjustedZeroInvestment = api.applyAssumptions(zeroInvestmentData);
 assert.strictEqual(api.metricDisplay(adjustedZeroInvestment, 'capexAdjIncome'), '0%', 'zero investment capex should display as 0% investment rate');
+
+const transactionCostData = {
+  ...data,
+  ticker: 'TXN_COST',
+  metrics: {
+    ...data.metrics,
+    bidPrice: { raw: 100, display: '100', kind: 'money' },
+    askPrice: { raw: 100.02, display: '100.02', kind: 'money' },
+    bidAskSpread: { raw: 0.02, display: '0.02', kind: 'money' },
+    transactionCost: { raw: 0.0001, display: '1 bps', kind: 'basisPoints' },
+  },
+};
+const transactionCostCalc = api.calcDefinitions(transactionCostData).transaction_cost;
+assert.strictEqual(transactionCostCalc.result, '1 bps', 'transaction cost calc should display basis points');
+assert(transactionCostCalc.rows.some(([label, value]) => label === 'Half Spread' && value !== '--'), 'transaction cost calc should show half spread');
+assert(transactionCostCalc.rows.some(([label, value]) => label === 'Midpoint' && value !== '--'), 'transaction cost calc should show midpoint');
 
 const bpsMetricHtml = api.metricValueHtml('0.72 bps');
 assert(bpsMetricHtml.includes('value-display-with-unit'), 'basis point metric should render as attached unit markup');
