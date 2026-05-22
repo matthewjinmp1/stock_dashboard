@@ -4,14 +4,26 @@ const path = require('path');
 const vm = require('vm');
 
 function makeElement() {
+  const classes = new Set();
+  const attributes = {};
   return {
     textContent: '',
     innerHTML: '',
     value: '',
     dataset: {},
     style: { setProperty() {} },
-    classList: { toggle() {}, add() {}, remove() {} },
+    classList: {
+      toggle(name, enabled) {
+        if (enabled === undefined ? !classes.has(name) : enabled) classes.add(name);
+        else classes.delete(name);
+      },
+      add(name) { classes.add(name); },
+      remove(name) { classes.delete(name); },
+      contains(name) { return classes.has(name); },
+    },
     addEventListener() {},
+    setAttribute(name, value) { attributes[name] = String(value); },
+    getAttribute(name) { return attributes[name]; },
     querySelector() { return makeElement(); },
     querySelectorAll() { return []; },
     closest() { return null; },
@@ -49,13 +61,21 @@ const localStorageStub = {
   },
 };
 
+let now = 0;
+const intervalCallbacks = [];
 const context = {
   console,
   document: documentStub,
   localStorage: localStorageStub,
   window: { scrollY: 0, scrollTo() {} },
-  performance: { now: () => 0 },
+  performance: { now: () => now },
   fetch: async () => ({ ok: true, json: async () => ({}) }),
+  requestAnimationFrame(callback) { callback(); },
+  setInterval(callback) {
+    intervalCallbacks.push(callback);
+    return intervalCallbacks.length;
+  },
+  clearInterval() {},
 };
 context.global = context;
 context.window.window = context.window;
@@ -65,6 +85,17 @@ vm.runInNewContext(script, context, { filename: 'public/script.js' });
 
 const api = context.window.__stockAnalysisTestApi;
 assert(api, 'test API should be exposed');
+
+api.state.scanRequestId = 17;
+api.startFetchTimer(0, 17);
+const fetchInfoNode = elements.get('result-fetch-info');
+assert.strictEqual(fetchInfoNode.textContent, 'Fetching: 0.00s • Fetches: --', 'fetch timer should render immediately while loading');
+assert.strictEqual(fetchInfoNode.getAttribute('aria-busy'), 'true', 'fetch timer should be marked busy while loading');
+now = 1234;
+intervalCallbacks.at(-1)();
+assert.strictEqual(fetchInfoNode.textContent, 'Fetching: 1.23s • Fetches: --', 'fetch timer should update while the request is still pending');
+api.stopFetchTimer();
+assert.strictEqual(fetchInfoNode.getAttribute('aria-busy'), 'false', 'fetch timer should clear busy state after loading');
 
 function assertAlmostEqual(actual, expected, epsilon, message) {
   assert(Math.abs(actual - expected) <= epsilon, `${message}: expected ${expected}, got ${actual}`);

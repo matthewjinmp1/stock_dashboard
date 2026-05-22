@@ -164,15 +164,23 @@ document.addEventListener('DOMContentLoaded', () => {
         return `Fetch time: ${data.fetchTime || '--'} • Fetches: ${fetches}`;
     }
 
+    function setFetchInfoText(text, loading = false) {
+        const node = $('result-fetch-info');
+        if (!node) return;
+        node.textContent = text;
+        node.classList.toggle('loading', loading);
+        node.setAttribute('aria-busy', loading ? 'true' : 'false');
+    }
+
     function startFetchTimer(startedAt, requestId) {
         stopFetchTimer();
-        const node = $('result-fetch-info');
         const update = () => {
             if (requestId !== state.scanRequestId) return;
             const elapsed = (performance.now() - startedAt) / 1000;
-            node.textContent = `Fetching: ${elapsed.toFixed(2)}s • Fetches: --`;
+            setFetchInfoText(`Fetching: ${elapsed.toFixed(2)}s • Fetches: --`, true);
         };
         update();
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(update);
         activeFetchTimer = setInterval(update, 100);
     }
 
@@ -180,6 +188,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!activeFetchTimer) return;
         clearInterval(activeFetchTimer);
         activeFetchTimer = null;
+        const node = $('result-fetch-info');
+        if (node) {
+            node.classList.remove('loading');
+            node.setAttribute('aria-busy', 'false');
+        }
     }
 
     function formatSeconds(value) {
@@ -581,7 +594,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const company = title ? title.querySelector('.company-name') : null;
         if (company) company.textContent = data.companyName || '--';
         $('result-data-date').textContent = displayDate(data);
-        $('result-fetch-info').textContent = displayFetchInfo(data);
+        setFetchInfoText(displayFetchInfo(data), false);
         $('result-fetch-info').title = 'Click to see fetch timing details';
         $('result-currency-info').textContent = displayCurrency(data);
         updateResultStarButton(ticker);
@@ -605,6 +618,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const company = title ? title.querySelector('.company-name') : null;
         if (company) company.textContent = '';
         $('result-data-date').textContent = '--';
+        setFetchInfoText('Fetching: 0.00s • Fetches: --', true);
         startFetchTimer(fetchStartedAt, requestId);
         $('result-currency-info').textContent = 'Native currency: -- • USD rate: --';
         $('glass-card').classList.remove('refreshing');
@@ -625,7 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (requestId !== state.scanRequestId) return;
             stopFetchTimer();
             const elapsed = (performance.now() - fetchStartedAt) / 1000;
-            $('result-fetch-info').textContent = `Fetch failed after ${elapsed.toFixed(2)}s • Fetches: --`;
+            setFetchInfoText(`Fetch failed after ${elapsed.toFixed(2)}s • Fetches: --`, false);
             $('loading-spinner').classList.add('hidden');
             $('glass-card').classList.remove('refreshing');
             $('error-message').textContent = err.message;
@@ -1573,6 +1587,8 @@ document.addEventListener('DOMContentLoaded', () => {
         metricValueHtml,
         parseMoney,
         parsePercentValue,
+        startFetchTimer,
+        stopFetchTimer,
     };
 
     window.removeTicker = (ticker) => {
