@@ -1302,6 +1302,22 @@ class StatementPageBuilderTests(unittest.TestCase):
 
         self.assertEqual(self.handler._median_annual_tax_rate(annual_income), 0.20)
 
+    def test_median_annual_tax_rate_uses_existing_tax_rate_row(self):
+        import pandas as pd
+
+        annual_income = pd.DataFrame(
+            {
+                "TTM": [0.99, 999],
+                pd.Timestamp("2025-12-31"): [0.196144, 97_311],
+                pd.Timestamp("2024-12-31"): [0.135031, 68_614],
+                pd.Timestamp("2023-12-31"): [0.189579, 37_557],
+                pd.Timestamp("2022-12-31"): [0.21, -5_936],
+            },
+            index=["Tax Rate For Calcs", "Pretax Income"],
+        )
+
+        self.assertAlmostEqual(self.handler._median_annual_tax_rate(annual_income), 0.1928615)
+
     def test_median_annual_tax_rate_ignores_loss_years_and_outliers(self):
         import pandas as pd
 
@@ -1362,6 +1378,21 @@ class StatementPageBuilderTests(unittest.TestCase):
         revenue_row = statement["rows"][0]
         self.assertEqual(statement["periods"], ["TTM", "2025-12-31", "2024-12-31"])
         self.assertEqual(revenue_row["values"], ["1100", "900", "800"])
+
+    def test_df_statement_formats_existing_tax_rate_rows_as_percent(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                pd.Timestamp("2025-12-31"): [0.196144, 100],
+                pd.Timestamp("2024-12-31"): [0.135031, 90],
+            },
+            index=["Tax Rate For Calcs", "Total Revenue"],
+        )
+
+        statement = self.handler._df_to_statement(df, order_map=server.INCOME_STATEMENT_TYPES)
+        tax_row = next(row for row in statement["rows"] if row["label"] == "Tax Rate")
+        self.assertEqual(tax_row["values"], ["19.6%", "19.6%", "13.5%"])
 
     def test_df_ttm_value_prefers_official_annual_ttm_over_quarter_sum(self):
         import pandas as pd

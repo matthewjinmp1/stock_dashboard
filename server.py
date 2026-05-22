@@ -890,6 +890,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return None
         import pandas as pd
 
+        def collect_rates(row_labels):
+            row_label = next((label for label in row_labels if label in annual_income.index), None)
+            if not row_label:
+                return []
+            rates = []
+            for col in self._df_history_columns(annual_income):
+                rate_value = annual_income.loc[row_label, col]
+                if pd.isna(rate_value):
+                    continue
+                rate = float(rate_value)
+                if rate > 1:
+                    rate = rate / 100
+                if 0 <= rate <= 1:
+                    rates.append(rate)
+            return rates
+
+        rates = collect_rates(["Tax Rate For Calcs", "TaxRateForCalcs", "Tax Rate"])
+        if rates:
+            return statistics.median(rates)
+
         tax_labels = ["Tax Provision", "TaxProvision"]
         pretax_labels = ["Pretax Income", "PretaxIncome", "Income Before Tax", "IncomeBeforeTax"]
         tax_label = next((label for label in tax_labels if label in annual_income.index), None)
@@ -1652,7 +1672,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     )),
                 )
                 return
-
+        structured_metrics = result.get("structured_metrics") or {}
+        median_tax_metric = structured_metrics.get("medianTaxRate") if isinstance(structured_metrics, dict) else None
 
         payload = {
             "ticker": ticker,
@@ -1673,6 +1694,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "gp_3y_start": result["gp_3y_start"],
             "gp_3y_end": result["gp_3y_end"],
             "gp_3y_label": result["gp_3y_label"],
+            "medianTaxRate": median_tax_metric.get("display") if isinstance(median_tax_metric, dict) else "--",
             "rndAdjIncome": result["rnd_adj_income"],
             "cy_adj_inc": result["cy_adj_inc"],
             "ny_adj_inc": result["ny_adj_inc"],
@@ -1720,7 +1742,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "priceCyEps": result["price_cy_eps"],
             "priceNyEps": result["price_ny_eps"],
             "payloadVersion": PAYLOAD_VERSION,
-            "metrics": result.get("structured_metrics") or {},
+            "metrics": structured_metrics,
             "evSource": "derived" if result["valuation_basis"] == "derivedEV" else "finviz" if finviz_enterprise_value_raw and result["valuation_basis"] == "enterpriseValue" else "unavailable",
             "marketCapSource": "yahoo",
             "dataDate": today,

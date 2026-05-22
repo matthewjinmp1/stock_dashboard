@@ -432,6 +432,16 @@ def can_sum_ttm_label(label):
     return not any(token in normalized for token in non_additive_tokens)
 
 
+def format_statement_value(label, value, formatter=None):
+    if value is None:
+        return "--"
+    formatter = formatter or format_money
+    normalized = str(label).replace(" ", "").lower()
+    if "rate" in normalized or "margin" in normalized:
+        return format_percent(value)
+    return formatter(value)
+
+
 def df_to_statement(df, formatter=None, ttm_label="TTM", order_map=None, quarterly_df=None):
     formatter = formatter or format_money
     if df is None or df.empty:
@@ -465,9 +475,9 @@ def df_to_statement(df, formatter=None, ttm_label="TTM", order_map=None, quarter
         if ttm_val is None and raw_values:
             ttm_val = raw_values[0]
 
-        formatted = [formatter(ttm_val) if pd.notna(ttm_val) else "--"]
+        formatted = [format_statement_value(label, ttm_val, formatter) if pd.notna(ttm_val) else "--"]
         for v in raw_values:
-            formatted.append(formatter(v) if pd.notna(v) else "--")
+            formatted.append(format_statement_value(label, v, formatter) if pd.notna(v) else "--")
         rows.append({"label": resolve_display_label(label, order_map), "values": formatted})
     return {"periods": periods, "rows": rows}
 
@@ -495,7 +505,7 @@ def df_to_quarterly_statement(df, formatter=None, order_map=None):
     rows = []
     for label in active_labels:
         raw_values = df.loc[label, cols].tolist()
-        formatted = [formatter(v) if pd.notna(v) else "--" for v in raw_values]
+        formatted = [format_statement_value(label, v, formatter) if pd.notna(v) else "--" for v in raw_values]
         rows.append({"label": resolve_display_label(label, order_map), "values": formatted})
     return {"periods": periods, "rows": rows}
 
