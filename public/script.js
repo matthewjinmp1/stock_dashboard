@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
         assumptions: {},
         statementTab: localStorage.getItem('stock_statement_tab') || 'income',
         periodicity: localStorage.getItem('stock_periodicity') || 'annual',
+        quarterlyGrowthMode: localStorage.getItem('stock_quarterly_growth_mode') || 'yoy',
         statementSearch: '',
         starredAccounts: localStarredAccounts,
         statementToggles: JSON.parse(localStorage.getItem('stock_statement_toggles') || '{}'),
@@ -810,6 +811,12 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('stock_periodicity', state.periodicity);
             renderStatements(state.latest);
         }
+        const growthModeBtn = event.target.closest('[data-quarterly-growth-mode]');
+        if (growthModeBtn) {
+            state.quarterlyGrowthMode = growthModeBtn.dataset.quarterlyGrowthMode;
+            localStorage.setItem('stock_quarterly_growth_mode', state.quarterlyGrowthMode);
+            renderStatements(state.latest);
+        }
         const statement = event.target.closest('[data-statement-tab]');
         if (statement) {
             state.statementTab = statement.dataset.statementTab;
@@ -902,6 +909,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="statement-period-actions">
                         <button class="mini-btn ${state.periodicity === 'annual' ? 'on blue' : ''}" data-periodicity="annual">Annual</button>
                         <button class="mini-btn ${state.periodicity === 'quarterly' ? 'on blue' : ''}" data-periodicity="quarterly">Quarterly</button>
+                        ${state.periodicity === 'quarterly' ? `
+                            <button class="mini-btn ${state.quarterlyGrowthMode === 'yoy' ? 'on blue' : ''}" data-quarterly-growth-mode="yoy">YoY</button>
+                            <button class="mini-btn ${state.quarterlyGrowthMode === 'qoq' ? 'on blue' : ''}" data-quarterly-growth-mode="qoq">QoQ</button>
+                        ` : ''}
                 </div>
             </div>
             <div class="statement-toolbar">
@@ -1054,7 +1065,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <button class="mini-btn ${growthOn ? 'on blue' : ''}" data-statement="${statementKey}" data-toggle-ratio="growth" data-label="${row.label}">Growth</button>
             ${canMargin ? `<button class="mini-btn ${marginOn ? 'on green' : ''}" data-statement="${statementKey}" data-toggle-ratio="margin" data-label="${row.label}">Margin</button>` : ''}
         </div></td><td class="statement-label-cell">${row.label}</td>${(row.values || []).map(value => `<td>${formatStatementValue(value)}</td>`).join('')}</tr>`;
-        if (growthOn) html += ratioRow('Growth', growthValues(row.values || [], periods));
+        if (growthOn) html += ratioRow(growthRowLabel(), growthValues(row.values || [], periods));
         if (marginOn) html += ratioRow('Margin', marginValues(row, periods, displayStatement));
         return html;
     }
@@ -1110,13 +1121,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function growthValues(values, periods) {
-        const lookback = state.periodicity === 'quarterly' ? 4 : 1;
+        const lookback = state.periodicity === 'quarterly' && state.quarterlyGrowthMode === 'qoq' ? 1 : state.periodicity === 'quarterly' ? 4 : 1;
         return values.map((value, idx) => {
             if (idx < lookback) return '--';
             
             // Try to find the actual YoY index by period label if quarterly
             let prevIdx = idx - lookback;
-            if (state.periodicity === 'quarterly') {
+            if (state.periodicity === 'quarterly' && state.quarterlyGrowthMode !== 'qoq') {
                 const currentPeriod = periods[idx];
                 const currentDate = Date.parse(currentPeriod);
                 if (!isNaN(currentDate)) {
@@ -1139,6 +1150,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const curr = parsePercentBase(value);
             return (prev && prev !== 0) ? `${((curr / Math.abs(prev) - 1) * 100).toFixed(1)}%` : '--';
         });
+    }
+
+    function growthRowLabel() {
+        if (state.periodicity !== 'quarterly') return 'Growth';
+        return state.quarterlyGrowthMode === 'qoq' ? 'QoQ Growth' : 'YoY Growth';
     }
 
     function marginValues(row, periods, statement) {
@@ -1600,6 +1616,8 @@ document.addEventListener('DOMContentLoaded', () => {
         parseMoney,
         parsePercentValue,
         accountLabelMatchesSearch,
+        growthValues,
+        growthRowLabel,
         startFetchTimer,
         stopFetchTimer,
     };

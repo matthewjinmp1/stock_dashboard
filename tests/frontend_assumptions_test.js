@@ -91,6 +91,17 @@ assert(api.accountLabelMatchesSearch('Operating Income', 'inc'), 'search should 
 assert(api.accountLabelMatchesSearch('Net Non Operating Interest Income Expense', 'int inc'), 'multi-word search should match word prefixes across the label');
 assert(!api.accountLabelMatchesSearch('Operating Income', 'come'), 'search should not match arbitrary substrings inside a word');
 
+const quarterlyPeriods = ['2024-03-31', '2024-06-30', '2024-09-30', '2024-12-31', '2025-03-31'];
+const quarterlyValues = ['100', '110', '120', '130', '150'];
+api.state.periodicity = 'quarterly';
+api.state.quarterlyGrowthMode = 'yoy';
+assert.strictEqual(api.growthRowLabel(), 'YoY Growth', 'quarterly YoY mode should label growth rows');
+assert.deepStrictEqual(api.growthValues(quarterlyValues, quarterlyPeriods), ['--', '--', '--', '--', '50.0%'], 'quarterly YoY growth should compare with the same quarter last year');
+api.state.quarterlyGrowthMode = 'qoq';
+assert.strictEqual(api.growthRowLabel(), 'QoQ Growth', 'quarterly QoQ mode should label growth rows');
+assert.deepStrictEqual(api.growthValues(quarterlyValues, quarterlyPeriods), ['--', '10.0%', '9.1%', '8.3%', '15.4%'], 'quarterly QoQ growth should compare with the prior quarter');
+api.state.periodicity = 'annual';
+
 api.state.scanRequestId = 17;
 api.startFetchTimer(0, 17);
 const fetchInfoNode = elements.get('result-fetch-info');
