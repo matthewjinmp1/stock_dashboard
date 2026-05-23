@@ -427,6 +427,21 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertIsNone(self.handler._estimated_net_margin_from_eps(0, 10, 3_000_000_000))
         self.assertIsNone(self.handler._estimated_net_margin_from_eps(120_000_000_000, 0, 3_000_000_000))
 
+    def test_dividend_yield_prefers_rate_over_price(self):
+        self.assertAlmostEqual(
+            self.handler._dividend_yield_from_info({
+                "dividendYield": 0.87,
+                "dividendRate": 3.48,
+                "currentPrice": 400,
+            }),
+            0.0087,
+        )
+
+    def test_dividend_yield_normalizes_percent_style_yfinance_values(self):
+        self.assertAlmostEqual(self.handler._dividend_yield_from_info({"dividendYield": 0.87}), 0.0087)
+        self.assertAlmostEqual(self.handler._dividend_yield_from_info({"dividendYield": 0.0087}), 0.0087)
+        self.assertAlmostEqual(self.handler._dividend_yield_from_info({"dividendYield": 1.2}), 0.012)
+
     def test_bid_ask_metrics_accepts_plausible_large_cap_spread(self):
         bid, ask, spread, cost = self.handler._bid_ask_metrics(
             {"bid": 416.99, "ask": 417.01},
