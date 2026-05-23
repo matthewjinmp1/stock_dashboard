@@ -24,7 +24,7 @@ CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 25
+PAYLOAD_VERSION = 26
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -811,6 +811,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         raw_shares = info.get("impliedSharesOutstanding") or info.get("sharesOutstanding") or 0
         return (raw_shares * raw_price * quote_fx_rate) if raw_shares and raw_price else 0
 
+    def _enterprise_value_from_info(self, info, quote_fx_rate=1.0):
+        api_enterprise_value = info.get("enterpriseValue", 0) or 0
+        return api_enterprise_value * quote_fx_rate if api_enterprise_value > 0 else 0
+
     def _parse_finviz_abbrev_to_raw(self, value):
         return parse_abbrev_to_raw(value)
 
@@ -1296,11 +1300,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 total_debt_raw = (self._df_raw_value(annual_balance, ["Current Debt", "CurrentDebt"]) + self._df_raw_value(annual_balance, ["Long Term Debt", "LongTermDebt"])) * financial_fx_rate
             net_cash_raw = cash_bucket_raw - total_debt_raw if cash_bucket_raw or total_debt_raw else 0
             derived_enterprise_value_raw = market_cap_raw - net_cash_raw if market_cap_raw else 0
+            enterprise_value_raw = self._enterprise_value_from_info(info, quote_fx_rate)
 
-            valuation_raw = derived_enterprise_value_raw or market_cap_raw
-            valuation_basis = "derivedEV"
-            valuation_prefix = "EV"
-            valuation_numerator_label = "Derived Enterprise Value"
+            valuation_raw = enterprise_value_raw or derived_enterprise_value_raw or market_cap_raw
+            if enterprise_value_raw:
+                valuation_basis = "enterpriseValue"
+                valuation_prefix = "EV"
+                valuation_numerator_label = "Current Enterprise Value"
+            elif derived_enterprise_value_raw:
+                valuation_basis = "derivedEV"
+                valuation_prefix = "EV"
+                valuation_numerator_label = "Derived Enterprise Value"
+            else:
+                valuation_basis = "marketCap"
+                valuation_prefix = "Mkt Cap"
+                valuation_numerator_label = "Current Market Cap"
 
             cy_adj_inc_raw = cy_revenue_raw * adj_margin_ratio if cy_revenue_raw and adj_margin_ratio else 0
             ny_adj_inc_raw = ny_revenue_raw * adj_margin_ratio if ny_revenue_raw and adj_margin_ratio else 0
@@ -1736,7 +1750,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "priceNyEps": result["price_ny_eps"],
             "payloadVersion": PAYLOAD_VERSION,
             "metrics": structured_metrics,
-            "evSource": "derived" if result["valuation_basis"] == "derivedEV" else "finviz" if finviz_enterprise_value_raw and result["valuation_basis"] == "enterpriseValue" else "unavailable",
+            "evSource": "yahoo" if result["valuation_basis"] == "enterpriseValue" else "derived" if result["valuation_basis"] == "derivedEV" else "unavailable",
             "marketCapSource": "yahoo",
             "dataDate": today,
             "pulledAt": pulled_at,

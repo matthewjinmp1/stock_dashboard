@@ -359,6 +359,17 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
 
         self.assertEqual(round(self.handler._market_cap_from_info(info)), 4238062980000)
 
+    def test_enterprise_value_prefers_yfinance_info_value(self):
+        self.assertEqual(
+            self.handler._enterprise_value_from_info({"enterpriseValue": 182_569_418_752}),
+            182_569_418_752,
+        )
+        self.assertEqual(
+            self.handler._enterprise_value_from_info({"enterpriseValue": 100}, quote_fx_rate=1.25),
+            125,
+        )
+        self.assertEqual(self.handler._enterprise_value_from_info({"enterpriseValue": None}), 0)
+
     def test_bid_ask_metrics_accepts_plausible_large_cap_spread(self):
         bid, ask, spread, cost = self.handler._bid_ask_metrics(
             {"bid": 416.99, "ask": 417.01},
