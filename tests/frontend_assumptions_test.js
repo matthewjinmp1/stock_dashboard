@@ -144,6 +144,19 @@ assert.strictEqual(quarterlyRatios.rows[0].label, 'ROA', 'quarterly ratios shoul
 assert.deepStrictEqual(Array.from(quarterlyRatios.rows[0].values), ['2%', '2.5%'], 'quarterly ratios should calculate ROA from same-period quarterly net income and assets');
 api.state.periodicity = 'annual';
 
+const balanceForMargin = {
+  periods: ['2025-12-31', '2024-12-31'],
+  rows: [
+    { label: 'Total Assets', values: ['100B', '80B'] },
+    { label: 'Cash And Cash Equivalents', values: ['25B', '16B'] },
+  ],
+};
+assert.deepStrictEqual(
+  api.marginValues(balanceForMargin.rows[1], balanceForMargin.periods, balanceForMargin, 'balance'),
+  ['25.0%', '20.0%'],
+  'balance sheet margin rows should use total assets as the denominator',
+);
+
 api.state.scanRequestId = 17;
 api.startFetchTimer(0, 17);
 const fetchInfoNode = elements.get('result-fetch-info');

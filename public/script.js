@@ -1160,7 +1160,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderStatementRow(row, periods, statementKey, displayStatement) {
-        const canMargin = statementKey === 'income' || statementKey === 'cash';
+        const canMargin = statementKey === 'income' || statementKey === 'cash' || statementKey === 'balance';
         const starred = state.starredAccounts[starredKey(statementKey, row.label)];
         const growthOn = state.statementToggles[`${statementKey}:growth:${row.label}`];
         const marginOn = state.statementToggles[`${statementKey}:margin:${row.label}`];
@@ -1171,7 +1171,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ${canMargin ? `<button class="mini-btn ${marginOn ? 'on green' : ''}" data-statement="${statementKey}" data-toggle-ratio="margin" data-label="${row.label}">Margin</button>` : ''}
         </div></td><td class="statement-label-cell">${row.label}</td>${(row.values || []).map(value => `<td>${formatStatementValue(value)}</td>`).join('')}</tr>`;
         if (growthOn) html += ratioRow(growthRowLabel(), growthValues(row.values || [], periods));
-        if (marginOn) html += ratioRow('Margin', marginValues(row, periods, displayStatement));
+        if (marginOn) html += ratioRow('Margin', marginValues(row, periods, displayStatement, statementKey));
         return html;
     }
 
@@ -1262,10 +1262,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return state.quarterlyGrowthMode === 'qoq' ? 'QoQ Growth' : 'YoY Growth';
     }
 
-    function marginValues(row, periods, statement) {
-        const revenue = (statement.rows || []).find(r => r.label === 'Total Revenue' || r.label === 'Operating Cash Flow');
+    function marginValues(row, periods, statement, statementKey = '') {
+        const denominator = (statement.rows || []).find((r) => {
+            if (statementKey === 'balance') return r.label === 'Total Assets';
+            return r.label === 'Total Revenue' || r.label === 'Operating Cash Flow';
+        });
         return (row.values || []).map((value, idx) => {
-            const denom = revenue ? parsePercentBase(revenue.values[idx]) : 0;
+            const denom = denominator ? parsePercentBase(denominator.values[idx]) : 0;
             const num = parsePercentBase(value);
             return denom ? `${((num / denom) * 100).toFixed(1)}%` : '--';
         });
@@ -1783,6 +1786,7 @@ document.addEventListener('DOMContentLoaded', () => {
         buildRatiosStatement,
         growthValues,
         growthRowLabel,
+        marginValues,
         startFetchTimer,
         stopFetchTimer,
         resetAssumption,
