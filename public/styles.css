@@ -935,6 +935,14 @@ button:active {
     width: fit-content;
 }
 
+.metric-edit-row {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    max-width: 100%;
+}
+
 .metric-edit-wrap::after {
     content: attr(data-metric-value);
     position: absolute;
@@ -981,6 +989,30 @@ button:active {
 .metric-edit-input:hover,
 .metric-edit-input:focus {
     border-bottom-color: transparent;
+}
+
+.metric-reset-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.65);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    padding: 0.35rem 0.45rem;
+    text-transform: uppercase;
+}
+
+.metric-reset-btn:hover,
+.metric-reset-btn:focus-visible {
+    border-color: var(--accent-color);
+    color: var(--text-primary);
+    outline: none;
 }
 
 .error-text {

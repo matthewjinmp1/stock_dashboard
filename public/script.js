@@ -300,8 +300,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function metric(label, value, calcType = '', editType = '') {
         const link = calcType ? ' metric-title-link' : '';
         const displayValue = formatSigned(value || '--');
+        const ticker = (state.latest?.ticker || '').toUpperCase();
+        const isEdited = Boolean(editType && ticker && state.assumptions[ticker]?.[editType] !== undefined);
         const editableValue = editType
-            ? `<span class="metric-edit-wrap" data-metric-value="${escapeAttr(displayValue)}"><input class="value-display metric-edit-input" type="text" value="${escapeAttr(displayValue)}" style="--metric-input-width: ${metricInputWidth(displayValue)}" data-edit-assumption="${editType}" data-original-value="${escapeAttr(displayValue)}" aria-label="Edit ${escapeAttr(label)}"></span>`
+            ? `<span class="metric-edit-row"><span class="metric-edit-wrap" data-metric-value="${escapeAttr(displayValue)}"><input class="value-display metric-edit-input" type="text" value="${escapeAttr(displayValue)}" style="--metric-input-width: ${metricInputWidth(displayValue)}" data-edit-assumption="${editType}" data-original-value="${escapeAttr(displayValue)}" aria-label="Edit ${escapeAttr(label)}"></span>${isEdited ? `<button class="metric-reset-btn" type="button" data-reset-assumption="${editType}" aria-label="Reset ${escapeAttr(label)} to original value">Reset</button>` : ''}</span>`
             : metricValueHtml(displayValue);
         return `<div class="stat-box">
             <span class="stat-label${link}" data-calc="${calcType}">${label}</span>
@@ -409,6 +411,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             node.title = 'Edit directly. Press Enter or click away to apply.';
+        });
+        stats.querySelectorAll('[data-reset-assumption]').forEach((node) => {
+            node.addEventListener('click', () => resetAssumption(node.dataset.resetAssumption));
         });
     }
 
@@ -521,6 +526,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             state.assumptions[ticker][key] = parsed / 100;
         }
+        if (!Object.keys(state.assumptions[ticker]).length) delete state.assumptions[ticker];
+        renderStats(state.latest);
+    }
+
+    function resetAssumption(key) {
+        const ticker = (state.latest?.ticker || '').toUpperCase();
+        if (!ticker || !key || !state.assumptions[ticker]) return;
+        delete state.assumptions[ticker][key];
         if (!Object.keys(state.assumptions[ticker]).length) delete state.assumptions[ticker];
         renderStats(state.latest);
     }
@@ -1679,6 +1692,7 @@ document.addEventListener('DOMContentLoaded', () => {
         growthRowLabel,
         startFetchTimer,
         stopFetchTimer,
+        resetAssumption,
     };
 
     window.removeTicker = (ticker) => {

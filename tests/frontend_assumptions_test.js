@@ -241,6 +241,10 @@ const adjustedTax = api.applyAssumptions(editedTaxData);
 
 assert.strictEqual(api.metricDisplay(adjustedTax, 'medianTaxRate'), '30%', 'edited tax rate should display');
 assertAlmostEqual(api.metricEntry(adjustedTax, 'ev_adj_ebit').raw, 100.5102040816, 0.0001, 'edited tax rate should flow into valuation multiple');
+api.state.latest = editedTaxData;
+api.resetAssumption('medianTaxRate');
+assert.strictEqual(api.state.assumptions.TAX.margin, 0.28, 'reset should keep other edited assumptions');
+assert.strictEqual(api.state.assumptions.TAX.medianTaxRate, undefined, 'reset should clear the selected edited assumption');
 
 const editedGrowthData = { ...data, ticker: 'GROWTH' };
 api.state.assumptions.GROWTH = { margin: 0.28, cy_growth: 0.20, ny_growth: 0.10 };
