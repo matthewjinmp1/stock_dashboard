@@ -414,6 +414,14 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
 
         self.assertEqual(net_margin, 0.25)
 
+        last_year_net_margin = self.handler._estimated_net_margin_from_eps(
+            revenue_raw=100_000_000_000,
+            eps_raw=8,
+            diluted_shares_raw=3_000_000_000,
+        )
+
+        self.assertEqual(last_year_net_margin, 0.24)
+
     def test_estimated_net_margin_requires_complete_positive_inputs(self):
         self.assertIsNone(self.handler._estimated_net_margin_from_eps(120_000_000_000, 10, 0))
         self.assertIsNone(self.handler._estimated_net_margin_from_eps(0, 10, 3_000_000_000))

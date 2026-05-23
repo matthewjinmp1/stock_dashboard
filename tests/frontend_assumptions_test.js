@@ -288,19 +288,35 @@ assert(transactionCostCalc.rows.some(([label, value]) => label === 'Midpoint' &&
 const estimatedMarginData = {
   ...data,
   ticker: 'EST_MARGIN',
+  incomeStatement: {
+    annual: {
+      periods: ['TTM', '2025-12-31'],
+      rows: [
+        { label: 'Total Revenue', values: ['105B', '100B'] },
+      ],
+    },
+  },
   metrics: {
     ...data.metrics,
     cy_revenue: { raw: 120_000_000_000, display: '120B', kind: 'money' },
     ny_revenue: { raw: 144_000_000_000, display: '144B', kind: 'money' },
+    revenue: { raw: 100_000_000_000, display: '100B', kind: 'money' },
+    yearAgoEps: { raw: 8, display: '8', kind: 'number' },
     currentYearEps: { raw: 10, display: '10', kind: 'number' },
     nextYearEps: { raw: 14, display: '14', kind: 'number' },
     dilutedShares: { raw: 3_000_000_000, display: '3B', kind: 'number' },
+    lastYearEstimatedNetMargin: { raw: 0.24, display: '24%', kind: 'percent' },
     currentYearEstimatedNetMargin: { raw: 0.25, display: '25%', kind: 'percent' },
     nextYearEstimatedNetMargin: { raw: 0.2916666667, display: '29.2%', kind: 'percent' },
   },
 };
+assert.strictEqual(api.metricDisplay(estimatedMarginData, 'lastYearEstimatedNetMargin'), '24%', 'LY estimated net margin should display from structured metrics');
 assert.strictEqual(api.metricDisplay(estimatedMarginData, 'currentYearEstimatedNetMargin'), '25%', 'CY estimated net margin should display from structured metrics');
 assert.strictEqual(api.metricDisplay(estimatedMarginData, 'nextYearEstimatedNetMargin'), '29.2%', 'NY estimated net margin should display from structured metrics');
+const lyNetMarginCalc = api.calcDefinitions(estimatedMarginData).ly_est_net_margin;
+assert.strictEqual(lyNetMarginCalc.numerator, '24B', 'LY estimated net margin calc should show implied net income');
+assert.strictEqual(lyNetMarginCalc.divisor, '100B', 'LY estimated net margin calc should show last year revenue from statement base');
+assert.strictEqual(lyNetMarginCalc.result, '24%', 'LY estimated net margin calc should show margin result');
 const cyNetMarginCalc = api.calcDefinitions(estimatedMarginData).cy_est_net_margin;
 assert.strictEqual(cyNetMarginCalc.numerator, '30B', 'CY estimated net margin calc should show implied net income');
 assert.strictEqual(cyNetMarginCalc.divisor, '120B', 'CY estimated net margin calc should show CY revenue');

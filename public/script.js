@@ -367,6 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('NY EPS Growth', val('nextYearEpsGrowth')),
             ]),
             metricGroup('Est Net Margin', [
+                metric('LY Net Margin', val('lastYearEstimatedNetMargin'), 'ly_est_net_margin'),
                 metric('CY Net Margin', val('currentYearEstimatedNetMargin'), 'cy_est_net_margin'),
                 metric('NY Net Margin', val('nextYearEstimatedNetMargin'), 'ny_est_net_margin'),
             ]),
@@ -1420,6 +1421,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     ['Median Tax Rate', taxDisplay],
                     ['After-Tax NY Adj Op Inc', nyAfterTaxAdjIncome],
                     ['Discounted After-Tax NY Adj Op Inc', discountedAfterTaxIncomeDisplay(raw('ny_adj_inc'), taxRate, nyDiscount.factor)],
+                ]),
+            },
+            ly_est_net_margin: {
+                title: 'LY Estimated Net Margin',
+                numeratorLabel: 'LY EPS x Diluted Shares',
+                numerator: impliedNetIncomeDisplay(raw('yearAgoEps'), raw('dilutedShares')),
+                divisorLabel: 'Last Year Revenue',
+                divisor: cyRevenueBaseDisplay,
+                resultLabel: 'LY Estimated Net Margin',
+                result: val('lastYearEstimatedNetMargin'),
+                rows: formulaValue('(LY EPS x Diluted Shares) / Last Year Revenue', [
+                    ['LY EPS', val('yearAgoEps')],
+                    ['Diluted Shares', val('dilutedShares')],
+                    ['Implied LY Net Income', impliedNetIncomeDisplay(raw('yearAgoEps'), raw('dilutedShares'))],
+                    ['Last Year Revenue', cyRevenueBaseDisplay],
+                    ['LY Estimated Net Margin', val('lastYearEstimatedNetMargin')],
                 ]),
             },
             cy_est_net_margin: {

@@ -24,7 +24,7 @@ CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 29
+PAYLOAD_VERSION = 30
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -1308,6 +1308,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 cy_eps_raw,
                 diluted_shares_raw,
             )
+            last_year_est_net_margin_raw = self._estimated_net_margin_from_eps(
+                last_year_revenue_raw,
+                year_ago_eps_raw,
+                diluted_shares_raw,
+            )
             ny_est_net_margin_raw = self._estimated_net_margin_from_eps(
                 ny_revenue_raw,
                 ny_eps_raw,
@@ -1461,6 +1466,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("dilutedShares", diluted_shares_raw, self._format_money(diluted_shares_raw) if diluted_shares_raw else "--", "number"),
                 ("currentYearEpsGrowth", cy_eps_growth_raw, self._format_percent(cy_eps_growth_raw) if cy_eps_growth_raw is not None else "--", "percent"),
                 ("nextYearEpsGrowth", ny_eps_growth_raw, self._format_percent(ny_eps_growth_raw) if ny_eps_growth_raw is not None else "--", "percent"),
+                ("lastYearEstimatedNetMargin", last_year_est_net_margin_raw, self._format_percent(last_year_est_net_margin_raw) if last_year_est_net_margin_raw is not None else "--", "percent"),
                 ("currentYearEstimatedNetMargin", cy_est_net_margin_raw, self._format_percent(cy_est_net_margin_raw) if cy_est_net_margin_raw is not None else "--", "percent"),
                 ("nextYearEstimatedNetMargin", ny_est_net_margin_raw, self._format_percent(ny_est_net_margin_raw) if ny_est_net_margin_raw is not None else "--", "percent"),
                 ("priceCurrentEps", safe_ratio(current_price_raw, year_ago_eps_raw), safe_display(safe_ratio(current_price_raw, year_ago_eps_raw), self._format_3sig), "ratio"),
