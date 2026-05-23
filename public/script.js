@@ -378,6 +378,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('P/CY EPS', val('priceCyEps')),
                 metric('P/NY EPS', val('priceNyEps')),
             ]),
+            renderDataromaCards(data),
             renderAnalystCards(data),
         ].join('');
 
@@ -536,6 +537,43 @@ document.addEventListener('DOMContentLoaded', () => {
         delete state.assumptions[ticker][key];
         if (!Object.keys(state.assumptions[ticker]).length) delete state.assumptions[ticker];
         renderStats(state.latest);
+    }
+
+    function dataromaValue(value) {
+        return value === undefined || value === null || value === '' ? '--' : escapeAttr(value);
+    }
+
+    function renderDataromaCards(data) {
+        const dataroma = data.dataroma || {};
+        if (!dataroma || !Object.keys(dataroma).length) return '';
+        const buys = dataroma.insiderBuys || {};
+        const sells = dataroma.insiderSells || {};
+        const sourceUrl = dataroma.sourceUrl || `https://www.dataroma.com/m/stock.php?sym=${encodeURIComponent(data.ticker || '')}`;
+        return `<section class="analyst-grid dataroma-grid">
+            <div class="metric-group dataroma-card">
+                <div class="section-title-row">
+                    <h3>Super Investor Stats</h3>
+                    <a href="${escapeAttr(sourceUrl)}" target="_blank" rel="noopener">Dataroma</a>
+                </div>
+                <div class="dataroma-list">
+                    <div><span>Ownership Count</span><strong>${dataromaValue(dataroma.ownershipCount)}</strong></div>
+                    <div><span>Ownership Rank</span><strong>${dataromaValue(dataroma.ownershipRank)}</strong></div>
+                    <div><span>% of Portfolios</span><strong>${dataromaValue(dataroma.portfolioPercent)}</strong></div>
+                    <div><span>Hold Price</span><strong>${dataromaValue(dataroma.holdPrice)}</strong></div>
+                </div>
+            </div>
+            <div class="metric-group dataroma-card">
+                <div class="section-title-row">
+                    <h3>Insider Activity</h3>
+                    <a href="${escapeAttr(sourceUrl)}" target="_blank" rel="noopener">Source</a>
+                </div>
+                <div class="dataroma-insiders">
+                    <div class="dataroma-insider-head"><span></span><span>Transactions</span><span>Total</span></div>
+                    <div class="dataroma-insider-row buys"><span>Buys</span><strong>${dataromaValue(buys.transactions)}</strong><strong>${dataromaValue(buys.total)}</strong></div>
+                    <div class="dataroma-insider-row sells"><span>Sells</span><strong>${dataromaValue(sells.transactions)}</strong><strong>${dataromaValue(sells.total)}</strong></div>
+                </div>
+            </div>
+        </section>`;
     }
 
     function renderAnalystCards(data) {
@@ -1680,6 +1718,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state,
         applyAssumptions,
         calcDefinitions,
+        renderDataromaCards,
         loadStarredAccounts,
         saveStarredAccounts,
         metricEntry,

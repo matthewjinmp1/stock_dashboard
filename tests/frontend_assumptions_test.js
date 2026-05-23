@@ -289,6 +289,24 @@ assert.strictEqual(transactionCostCalc.result, '1 bps', 'transaction cost calc s
 assert(transactionCostCalc.rows.some(([label, value]) => label === 'Half Spread' && value !== '--'), 'transaction cost calc should show half spread');
 assert(transactionCostCalc.rows.some(([label, value]) => label === 'Midpoint' && value !== '--'), 'transaction cost calc should show midpoint');
 
+const dataromaHtml = api.renderDataromaCards({
+  ticker: 'META',
+  dataroma: {
+    sourceUrl: 'https://www.dataroma.com/m/stock.php?sym=META',
+    ownershipCount: '29',
+    ownershipRank: '5',
+    portfolioPercent: '1.693%',
+    holdPrice: '$572.18',
+    insiderBuys: { transactions: '0', total: '$0' },
+    insiderSells: { transactions: '142', total: '$128,110,152' },
+  },
+});
+assert(dataromaHtml.includes('Super Investor Stats'), 'Dataroma card should render super investor stats');
+assert(dataromaHtml.includes('Ownership Count'), 'Dataroma card should render ownership count label');
+assert(dataromaHtml.includes('1.693%'), 'Dataroma card should render portfolio percentage');
+assert(dataromaHtml.includes('$128,110,152'), 'Dataroma card should render insider sell value');
+assert.strictEqual(api.renderDataromaCards({ ticker: 'META' }), '', 'Dataroma card should be omitted when data is absent');
+
 const estimatedMarginData = {
   ...data,
   ticker: 'EST_MARGIN',

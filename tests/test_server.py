@@ -12,6 +12,7 @@ import datetime
 
 FETCH_RESULT_FIELDS = server.FETCH_RESULT_FIELDS
 server.HAS_YFINANCE = False
+server.ENABLE_DATAROMA_FETCHES = False
 
 
 class DummyOpener:
@@ -502,6 +503,38 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertIsNone(ask)
         self.assertIsNone(spread)
         self.assertIsNone(cost)
+
+    def test_parse_dataroma_stock_page_extracts_summary_stats(self):
+        html = """
+        <html><body>
+        <h1>Meta Platforms Inc. (META)</h1>
+        <b>Super Investor Stats:</b>
+        Ownership count:29
+        Ownership rank:5
+        % of all portfolios:1.693%
+        Hold Price * :$572.18
+        <h2>Total insider Buys/Sells last 6 months:</h2>
+        Transactions Total
+        Buys 0 $0
+        Sells 142 $128,110,152
+        </body></html>
+        """
+
+        parsed = self.handler._parse_dataroma_stock_page("META", html)
+
+        self.assertEqual(parsed["source"], "Dataroma")
+        self.assertEqual(parsed["sourceUrl"], "https://www.dataroma.com/m/stock.php?sym=META")
+        self.assertEqual(parsed["ownershipCount"], "29")
+        self.assertEqual(parsed["ownershipRank"], "5")
+        self.assertEqual(parsed["portfolioPercent"], "1.693%")
+        self.assertEqual(parsed["holdPrice"], "$572.18")
+        self.assertEqual(parsed["insiderBuys"], {"transactions": "0", "total": "$0"})
+        self.assertEqual(parsed["insiderSells"], {"transactions": "142", "total": "$128,110,152"})
+
+    def test_fetch_dataroma_data_fails_closed(self):
+        with mock.patch.object(server, "ENABLE_DATAROMA_FETCHES", True), \
+             mock.patch("server.urllib.request.urlopen", side_effect=RuntimeError("blocked")):
+            self.assertIsNone(self.handler.fetch_dataroma_data("META"))
 
     def test_transaction_cost_formats_as_basis_points(self):
         self.assertEqual(self.handler._format_basis_points(0.000048009986077128595), "0.48 bps")

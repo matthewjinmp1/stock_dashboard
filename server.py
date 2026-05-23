@@ -6,6 +6,8 @@ import datetime
 import time
 import statistics
 import urllib.request
+import html
+import re
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, parse_qs
 
@@ -24,7 +26,8 @@ CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 31
+ENABLE_DATAROMA_FETCHES = os.environ.get("ENABLE_DATAROMA_FETCHES", "1") != "0"
+PAYLOAD_VERSION = 32
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -999,6 +1002,63 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except Exception:
             return 0.0
 
+    def _plain_text_from_html(self, html_text):
+        text = re.sub(r"(?is)<script.*?</script>|<style.*?</style>", " ", html_text or "")
+        text = re.sub(r"(?i)<br\s*/?>|</tr>|</p>|</div>|</li>|</h[1-6]>", "\n", text)
+        text = re.sub(r"(?s)<[^>]+>", " ", text)
+        text = html.unescape(text)
+        text = re.sub(r"[ \t\r\f\v]+", " ", text)
+        return re.sub(r"\n\s*", "\n", text).strip()
+
+    def _regex_text(self, pattern, text):
+        match = re.search(pattern, text, flags=re.I)
+        return match.group(1).strip() if match else None
+
+    def _parse_dataroma_stock_page(self, ticker, html_text):
+        source_url = f"https://www.dataroma.com/m/stock.php?sym={ticker.upper()}"
+        text = self._plain_text_from_html(html_text)
+        data = {
+            "source": "Dataroma",
+            "sourceUrl": source_url,
+            "ownershipCount": self._regex_text(r"Ownership count:\s*([\d,]+)", text),
+            "ownershipRank": self._regex_text(r"Ownership rank:\s*([\d,]+)", text),
+            "portfolioPercent": self._regex_text(r"% of all portfolios:\s*([\d.,]+%)", text),
+            "holdPrice": self._regex_text(r"Hold Price\s*\*?\s*:\s*(\$?[\d.,]+)", text),
+        }
+        buys = re.search(r"\bBuys\s+([\d,]+)\s+(\$[\d,]+)", text, flags=re.I)
+        sells = re.search(r"\bSells\s+([\d,]+)\s+(\$[\d,]+)", text, flags=re.I)
+        if buys:
+            data["insiderBuys"] = {"transactions": buys.group(1), "total": buys.group(2)}
+        if sells:
+            data["insiderSells"] = {"transactions": sells.group(1), "total": sells.group(2)}
+
+        has_stats = any(data.get(key) for key in ("ownershipCount", "ownershipRank", "portfolioPercent", "holdPrice"))
+        has_insiders = bool(data.get("insiderBuys") or data.get("insiderSells"))
+        return data if has_stats or has_insiders else None
+
+    def fetch_dataroma_data(self, ticker):
+        if not ENABLE_DATAROMA_FETCHES:
+            return None
+        symbol = (ticker or "").upper().strip()
+        if not symbol or any(not (char.isalnum() or char in ".-") for char in symbol):
+            return None
+        url = f"https://www.dataroma.com/m/stock.php?sym={symbol}"
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": YAHOO_USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Referer": "https://www.dataroma.com/",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=4) as response:
+                html_text = response.read().decode("utf-8", "replace")
+            return self._parse_dataroma_stock_page(symbol, html_text)
+        except Exception as exc:
+            print(f"Dataroma warning for {symbol}: {exc}")
+            return None
+
     def _nasdaq_bid_ask_metrics(self, ticker, quote_fx_rate=1.0, current_price_raw=None, market_cap_raw=None):
         symbol = (ticker or "").upper().strip()
         if not symbol or any(not (char.isalnum() or char in ".-") for char in symbol):
@@ -1712,6 +1772,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     )),
                 )
                 return
+        dataroma_data = None
+        if ENABLE_DATAROMA_FETCHES:
+            dataroma_started = time.perf_counter()
+            dataroma_data = self.fetch_dataroma_data(ticker)
+            dataroma_seconds = round(time.perf_counter() - dataroma_started, 3)
+            self._request_fetch_count += 1
+            timing = getattr(self, "_fetch_timing", None)
+            if isinstance(timing, dict) and isinstance(timing.get("stages"), list):
+                timing["stages"].append({
+                    "key": "dataroma_stock_page",
+                    "label": "Dataroma ownership stats",
+                    "seconds": dataroma_seconds,
+                    "status": "ok" if dataroma_data else "unavailable",
+                })
+                if timing.get("totalSeconds") is not None:
+                    timing["totalSeconds"] = round(float(timing.get("totalSeconds") or 0) + dataroma_seconds, 3)
+                timing["stages"] = sorted(timing["stages"], key=lambda stage: stage.get("seconds", 0), reverse=True)
         structured_metrics = result.get("structured_metrics") or {}
         median_tax_metric = structured_metrics.get("medianTaxRate") if isinstance(structured_metrics, dict) else None
 
@@ -1784,6 +1861,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "priceNyEps": result["price_ny_eps"],
             "payloadVersion": PAYLOAD_VERSION,
             "metrics": structured_metrics,
+            "dataroma": dataroma_data,
             "evSource": "derived" if result["valuation_basis"] == "derivedEV" else "yahoo" if result["valuation_basis"] == "enterpriseValue" else "unavailable",
             "marketCapSource": "yahoo",
             "dataDate": today,
