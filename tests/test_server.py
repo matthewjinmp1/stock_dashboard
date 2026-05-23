@@ -371,17 +371,17 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertAlmostEqual(spread, 0.02)
         self.assertAlmostEqual(cost, 0.000023980815347721824)
 
-    def test_bid_ask_metrics_rejects_stale_large_cap_spread(self):
+    def test_bid_ask_metrics_uses_any_valid_bid_ask_spread(self):
         bid, ask, spread, cost = self.handler._bid_ask_metrics(
             {"bid": 416.02, "ask": 420.00},
             current_price_raw=417.24,
             market_cap_raw=3_000_000_000_000,
         )
 
-        self.assertIsNone(bid)
-        self.assertIsNone(ask)
-        self.assertIsNone(spread)
-        self.assertIsNone(cost)
+        self.assertAlmostEqual(bid, 416.02)
+        self.assertAlmostEqual(ask, 420.00)
+        self.assertAlmostEqual(spread, 3.98)
+        self.assertAlmostEqual(cost, 0.004760651659051241)
 
     def test_nasdaq_bid_ask_metrics_parses_public_quote_payload(self):
         payload = {
