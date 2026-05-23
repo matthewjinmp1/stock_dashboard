@@ -290,12 +290,26 @@ const estimatedMarginData = {
   ticker: 'EST_MARGIN',
   metrics: {
     ...data.metrics,
+    cy_revenue: { raw: 120_000_000_000, display: '120B', kind: 'money' },
+    ny_revenue: { raw: 144_000_000_000, display: '144B', kind: 'money' },
+    currentYearEps: { raw: 10, display: '10', kind: 'number' },
+    nextYearEps: { raw: 14, display: '14', kind: 'number' },
+    dilutedShares: { raw: 3_000_000_000, display: '3B', kind: 'number' },
     currentYearEstimatedNetMargin: { raw: 0.25, display: '25%', kind: 'percent' },
     nextYearEstimatedNetMargin: { raw: 0.2916666667, display: '29.2%', kind: 'percent' },
   },
 };
 assert.strictEqual(api.metricDisplay(estimatedMarginData, 'currentYearEstimatedNetMargin'), '25%', 'CY estimated net margin should display from structured metrics');
 assert.strictEqual(api.metricDisplay(estimatedMarginData, 'nextYearEstimatedNetMargin'), '29.2%', 'NY estimated net margin should display from structured metrics');
+const cyNetMarginCalc = api.calcDefinitions(estimatedMarginData).cy_est_net_margin;
+assert.strictEqual(cyNetMarginCalc.numerator, '30B', 'CY estimated net margin calc should show implied net income');
+assert.strictEqual(cyNetMarginCalc.divisor, '120B', 'CY estimated net margin calc should show CY revenue');
+assert.strictEqual(cyNetMarginCalc.result, '25%', 'CY estimated net margin calc should show margin result');
+assert(cyNetMarginCalc.rows.some(([label, value]) => label === 'Diluted Shares' && value === '3B'), 'CY estimated net margin calc should show diluted shares');
+const nyNetMarginCalc = api.calcDefinitions(estimatedMarginData).ny_est_net_margin;
+assert.strictEqual(nyNetMarginCalc.numerator, '42B', 'NY estimated net margin calc should show implied net income');
+assert.strictEqual(nyNetMarginCalc.divisor, '144B', 'NY estimated net margin calc should show NY revenue');
+assert.strictEqual(nyNetMarginCalc.result, '29.2%', 'NY estimated net margin calc should show margin result');
 
 const bpsMetricHtml = api.metricValueHtml('0.72 bps');
 assert(bpsMetricHtml.includes('value-display-with-unit'), 'basis point metric should render as attached unit markup');

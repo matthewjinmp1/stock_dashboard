@@ -24,7 +24,7 @@ CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 28
+PAYLOAD_VERSION = 29
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -1458,6 +1458,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("currentYearEps", cy_eps_raw, self._format_3sig(cy_eps_raw), "number"),
                 ("nextYearEps", ny_eps_raw, self._format_3sig(ny_eps_raw), "number"),
                 ("yearAgoEps", year_ago_eps_raw, self._format_3sig(year_ago_eps_raw), "number"),
+                ("dilutedShares", diluted_shares_raw, self._format_money(diluted_shares_raw) if diluted_shares_raw else "--", "number"),
                 ("currentYearEpsGrowth", cy_eps_growth_raw, self._format_percent(cy_eps_growth_raw) if cy_eps_growth_raw is not None else "--", "percent"),
                 ("nextYearEpsGrowth", ny_eps_growth_raw, self._format_percent(ny_eps_growth_raw) if ny_eps_growth_raw is not None else "--", "percent"),
                 ("currentYearEstimatedNetMargin", cy_est_net_margin_raw, self._format_percent(cy_est_net_margin_raw) if cy_est_net_margin_raw is not None else "--", "percent"),
