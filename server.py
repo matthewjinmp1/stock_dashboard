@@ -1746,14 +1746,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._send_response(200, self._prune_latest(enrich_cached_payload(cached_payload, cache[ticker], fetch_count=0)))
                 return
 
+        dataroma_future = None
+        dataroma_started = None
+        dataroma_executor = None
+        if ENABLE_DATAROMA_FETCHES:
+            dataroma_executor = ThreadPoolExecutor(max_workers=1)
+            dataroma_started = time.perf_counter()
+            dataroma_future = dataroma_executor.submit(self.fetch_dataroma_data, ticker)
+
         finviz_market_cap_raw = 0
         finviz_enterprise_value_raw = 0
-        result = dict(zip(FETCH_RESULT_FIELDS, self.fetch_yahoo_finance_data(
-            ticker,
-            finviz_ev_raw=0,
-            finviz_market_cap_raw=0,
-            finviz_metrics={},
-        )))
+        try:
+            result = dict(zip(FETCH_RESULT_FIELDS, self.fetch_yahoo_finance_data(
+                ticker,
+                finviz_ev_raw=0,
+                finviz_market_cap_raw=0,
+                finviz_metrics={},
+            )))
+        finally:
+            if dataroma_executor:
+                dataroma_executor.shutdown(wait=False, cancel_futures=True)
 
         if result.get("company_name") == ticker and result.get("valuation_basis") == "unavailable":
             can_preserve_previous = (
@@ -1773,10 +1785,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 )
                 return
         dataroma_data = None
-        if ENABLE_DATAROMA_FETCHES:
-            dataroma_started = time.perf_counter()
-            dataroma_data = self.fetch_dataroma_data(ticker)
+        if dataroma_future:
             dataroma_seconds = round(time.perf_counter() - dataroma_started, 3)
+            try:
+                dataroma_data = dataroma_future.result(timeout=0)
+            except Exception:
+                dataroma_data = None
             self._request_fetch_count += 1
             timing = getattr(self, "_fetch_timing", None)
             if isinstance(timing, dict) and isinstance(timing.get("stages"), list):
@@ -1784,10 +1798,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "key": "dataroma_stock_page",
                     "label": "Dataroma ownership stats",
                     "seconds": dataroma_seconds,
-                    "status": "ok" if dataroma_data else "unavailable",
+                    "status": "ok" if dataroma_data else "timeout" if not dataroma_future.done() else "unavailable",
                 })
-                if timing.get("totalSeconds") is not None:
-                    timing["totalSeconds"] = round(float(timing.get("totalSeconds") or 0) + dataroma_seconds, 3)
                 timing["stages"] = sorted(timing["stages"], key=lambda stage: stage.get("seconds", 0), reverse=True)
         structured_metrics = result.get("structured_metrics") or {}
         median_tax_metric = structured_metrics.get("medianTaxRate") if isinstance(structured_metrics, dict) else None
