@@ -442,6 +442,13 @@ def format_statement_value(label, value, formatter=None):
     return formatter(value)
 
 
+def should_display_blank_statement_row_as_zero(df, label, cols):
+    if df is None or label not in df.index or not cols:
+        return False
+    import pandas as pd
+    return not any(pd.notna(df.loc[label, c]) for c in cols if c in df.columns)
+
+
 def df_to_statement(df, formatter=None, ttm_label="TTM", order_map=None, quarterly_df=None):
     formatter = formatter or format_money
     if df is None or df.empty:
@@ -453,8 +460,7 @@ def df_to_statement(df, formatter=None, ttm_label="TTM", order_map=None, quarter
         return {"periods": [], "rows": []}
 
     ordered_index = ordered_df_index(df, order_map)
-    anchor_cols = cols[:1] + ttm_cols[:1]
-    active_labels = [lbl for lbl in ordered_index if any(pd.notna(df.loc[lbl, c]) for c in anchor_cols)]
+    active_labels = ordered_index
     if not active_labels:
         return {"periods": [], "rows": []}
 
@@ -475,9 +481,10 @@ def df_to_statement(df, formatter=None, ttm_label="TTM", order_map=None, quarter
         if ttm_val is None and raw_values:
             ttm_val = raw_values[0]
 
-        formatted = [format_statement_value(label, ttm_val, formatter) if pd.notna(ttm_val) else "--"]
+        blank_row_is_zero = should_display_blank_statement_row_as_zero(df, label, cols + ttm_cols)
+        formatted = [format_statement_value(label, 0, formatter) if blank_row_is_zero else format_statement_value(label, ttm_val, formatter) if pd.notna(ttm_val) else "--"]
         for v in raw_values:
-            formatted.append(format_statement_value(label, v, formatter) if pd.notna(v) else "--")
+            formatted.append(format_statement_value(label, v, formatter) if pd.notna(v) else format_statement_value(label, 0, formatter) if blank_row_is_zero else "--")
         rows.append({"label": resolve_display_label(label, order_map), "values": formatted})
     return {"periods": periods, "rows": rows}
 
@@ -492,7 +499,7 @@ def df_to_quarterly_statement(df, formatter=None, order_map=None):
         return {"periods": [], "rows": []}
 
     ordered_index = ordered_df_index(df, order_map)
-    active_labels = [lbl for lbl in ordered_index if any(pd.notna(df.loc[lbl, c]) for c in cols)]
+    active_labels = ordered_index
     if not active_labels:
         return {"periods": [], "rows": []}
 
@@ -505,7 +512,8 @@ def df_to_quarterly_statement(df, formatter=None, order_map=None):
     rows = []
     for label in active_labels:
         raw_values = df.loc[label, cols].tolist()
-        formatted = [format_statement_value(label, v, formatter) if pd.notna(v) else "--" for v in raw_values]
+        blank_row_is_zero = should_display_blank_statement_row_as_zero(df, label, cols)
+        formatted = [format_statement_value(label, v, formatter) if pd.notna(v) else format_statement_value(label, 0, formatter) if blank_row_is_zero else "--" for v in raw_values]
         rows.append({"label": resolve_display_label(label, order_map), "values": formatted})
     return {"periods": periods, "rows": rows}
 

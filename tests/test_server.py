@@ -1546,6 +1546,40 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(revenue_row["values"], ["--", "1186.0", "1140.0"])
         self.assertEqual(eps_row["values"], ["0.21", "0.06", "0.03"])
 
+    def test_df_statement_keeps_yahoo_rows_that_are_blank_across_periods(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                pd.Timestamp("2025-12-31"): [1000, None],
+                pd.Timestamp("2024-12-31"): [900, None],
+            },
+            index=["Operating Cash Flow", "Issuance Of Capital Stock"],
+        )
+
+        statement = self.handler._df_to_statement(df, formatter=lambda value: str(int(value)), order_map=server.CASH_FLOW_STATEMENT_TYPES)
+        issuance_row = next(row for row in statement["rows"] if row["label"] == "Issuance Of Capital Stock")
+
+        self.assertEqual(statement["periods"], ["TTM", "2025-12-31", "2024-12-31"])
+        self.assertEqual(issuance_row["values"], ["0", "0", "0"])
+
+    def test_quarterly_statement_keeps_yahoo_rows_that_are_blank_across_periods(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                pd.Timestamp("2025-12-31"): [1000, None],
+                pd.Timestamp("2025-09-30"): [900, None],
+            },
+            index=["Operating Cash Flow", "Issuance Of Capital Stock"],
+        )
+
+        statement = self.handler._df_to_quarterly_statement(df, formatter=lambda value: str(int(value)), order_map=server.CASH_FLOW_STATEMENT_TYPES)
+        issuance_row = next(row for row in statement["rows"] if row["label"] == "Issuance Of Capital Stock")
+
+        self.assertEqual(statement["periods"], ["2025-12-31", "2025-09-30"])
+        self.assertEqual(issuance_row["values"], ["0", "0"])
+
     def test_df_ttm_value_prefers_official_annual_ttm_over_quarter_sum(self):
         import pandas as pd
 
