@@ -27,7 +27,7 @@ PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 ENABLE_DATAROMA_FETCHES = os.environ.get("ENABLE_DATAROMA_FETCHES", "1") != "0"
-PAYLOAD_VERSION = 32
+PAYLOAD_VERSION = 33
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -1383,6 +1383,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             cy_eps_raw = (cy_eps_raw or 0) * financial_fx_rate
             ny_eps_raw = (ny_eps_raw or 0) * financial_fx_rate
             year_ago_eps_raw = (year_ago_eps_raw or 0) * financial_fx_rate
+            after_tax_factor_raw = 1 - median_tax_rate_raw if median_tax_rate_raw is not None else 1
+            after_tax_adj_income_raw = adj_income_raw * after_tax_factor_raw if adj_income_raw and after_tax_factor_raw > 0 else 0
             diluted_shares_raw = self._df_ttm_value(
                 quarterly_income,
                 annual_income,
@@ -1483,6 +1485,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("ev_cy_ebit", safe_ratio(valuation_raw, cy_adj_inc_raw), safe_display(safe_ratio(valuation_raw, cy_adj_inc_raw), self._format_3sig), "ratio"),
                 ("ev_ny_ebit", safe_ratio(valuation_raw, ny_adj_inc_raw), safe_display(safe_ratio(valuation_raw, ny_adj_inc_raw), self._format_3sig), "ratio"),
                 ("adj_income", adj_income_raw, self._format_money(adj_income_raw), "money"),
+                ("afterTaxAdjIncome", after_tax_adj_income_raw, self._format_money(after_tax_adj_income_raw) if after_tax_adj_income_raw else "--", "money"),
                 ("capex", capex_raw, self._format_money(capex_raw), "money"),
                 ("da", da_raw, self._format_money(da_raw), "money"),
                 ("ev", valuation_raw, self._format_money(valuation_raw), "money"),
@@ -1505,10 +1508,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("cy_revenue", cy_revenue_raw or None, self._format_money(cy_revenue_raw) if cy_revenue_raw else "--", "money"),
                 ("ny_revenue", ny_revenue_raw or None, self._format_money(ny_revenue_raw) if ny_revenue_raw else "--", "money"),
                 ("grossPpe", gross_ppe_raw, self._format_money(gross_ppe_raw), "money"),
-                ("adjEbitGrossPpe", safe_ratio(adj_income_raw, gross_ppe_raw), safe_display(safe_ratio(adj_income_raw, gross_ppe_raw), self._format_percent), "percent"),
+                ("adjEbitGrossPpe", safe_ratio(after_tax_adj_income_raw, gross_ppe_raw), safe_display(safe_ratio(after_tax_adj_income_raw, gross_ppe_raw), self._format_percent), "percent"),
                 ("capexAdjIncome", safe_ratio(investment_capex_raw, adj_income_raw), safe_display(safe_ratio(investment_capex_raw, adj_income_raw), self._format_percent), "percent"),
                 ("investmentCapex", investment_capex_raw, self._format_money(investment_capex_raw) if investment_capex_raw else "0", "money"),
-                ("roc", safe_ratio(adj_income_raw, roc_denominator_raw), safe_display(safe_ratio(adj_income_raw, roc_denominator_raw), self._format_percent), "percent"),
+                ("roc", safe_ratio(after_tax_adj_income_raw, roc_denominator_raw), safe_display(safe_ratio(after_tax_adj_income_raw, roc_denominator_raw), self._format_percent), "percent"),
                 ("netWorkingCapital", nwc_raw, self._format_money(nwc_raw), "money"),
                 ("netFixedAssets", net_fixed_assets_raw, self._format_money(net_fixed_assets_raw), "money"),
                 ("receivables", receivables_raw, self._format_money(receivables_raw), "money"),
@@ -1570,10 +1573,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "cy_revenue": self._format_money(cy_revenue_raw) if cy_revenue_raw else "--",
                 "ny_revenue": self._format_money(ny_revenue_raw) if ny_revenue_raw else "--",
                 "gross_ppe": self._format_money(gross_ppe_raw),
-                "adj_ebit_gross_ppe": self._format_percent(adj_income_raw / gross_ppe_raw) if adj_income_raw and gross_ppe_raw else "--",
+                "adj_ebit_gross_ppe": self._format_percent(after_tax_adj_income_raw / gross_ppe_raw) if after_tax_adj_income_raw and gross_ppe_raw else "--",
                 "capex_adj_income": self._format_percent(investment_capex_raw / adj_income_raw) if adj_income_raw else "--",
                 "investment_capex": self._format_money(investment_capex_raw) if investment_capex_raw else "0",
-                "roc": self._format_percent(adj_income_raw / roc_denominator_raw) if adj_income_raw and roc_denominator_raw else "--",
+                "roc": self._format_percent(after_tax_adj_income_raw / roc_denominator_raw) if after_tax_adj_income_raw and roc_denominator_raw else "--",
                 "net_working_capital": self._format_money(nwc_raw),
                 "net_fixed_assets": self._format_money(net_fixed_assets_raw),
                 "receivables": self._format_money(receivables_raw),

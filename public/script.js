@@ -454,9 +454,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (assumptions.margin !== undefined) {
             setMetric(data, 'margin', margin, formatPercentDecimal(margin), 'percent');
             setMetric(data, 'adj_income', pretaxAdjRaw, formatMoneyFront(pretaxAdjRaw), 'money');
-            setMetric(data, 'adjEbitGrossPpe', grossPpeRaw && pretaxAdjRaw ? pretaxAdjRaw / grossPpeRaw : null, grossPpeRaw && pretaxAdjRaw ? formatPercentDecimal(pretaxAdjRaw / grossPpeRaw) : '--', 'percent');
+            setMetric(data, 'afterTaxAdjIncome', afterTaxAdjRaw, afterTaxAdjRaw ? formatMoneyFront(afterTaxAdjRaw) : '--', 'money');
+            setMetric(data, 'adjEbitGrossPpe', grossPpeRaw && afterTaxAdjRaw ? afterTaxAdjRaw / grossPpeRaw : null, grossPpeRaw && afterTaxAdjRaw ? formatPercentDecimal(afterTaxAdjRaw / grossPpeRaw) : '--', 'percent');
             setMetric(data, 'capexAdjIncome', pretaxAdjRaw ? investmentCapexRaw / pretaxAdjRaw : null, pretaxAdjRaw ? formatPercentDecimal(investmentCapexRaw / pretaxAdjRaw) : '--', 'percent');
-            setMetric(data, 'roc', rocDenomRaw && pretaxAdjRaw ? pretaxAdjRaw / rocDenomRaw : null, rocDenomRaw && pretaxAdjRaw ? formatPercentDecimal(pretaxAdjRaw / rocDenomRaw) : '--', 'percent');
+            setMetric(data, 'roc', rocDenomRaw && afterTaxAdjRaw ? afterTaxAdjRaw / rocDenomRaw : null, rocDenomRaw && afterTaxAdjRaw ? formatPercentDecimal(afterTaxAdjRaw / rocDenomRaw) : '--', 'percent');
         }
 
         if (assumptions.cy_growth !== undefined) setMetric(data, 'cy_growth', cyGrowth, formatPercentDecimal(cyGrowth), 'percent');
@@ -1567,14 +1568,16 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             roc: {
                 title: 'Return on Capital',
-                numeratorLabel: 'Adj Op Inc',
-                numerator: val('adj_income'),
+                numeratorLabel: 'After-Tax Adj Inc',
+                numerator: afterTaxAdjIncome,
                 divisorLabel: 'NWC + Net Fixed Assets',
                 divisor: `${val('netWorkingCapital') || '--'} + ${val('netFixedAssets') || '--'}`,
                 resultLabel: 'ROC',
                 result: val('roc'),
-                rows: formulaValue('Adj Op Inc / (Net Working Capital + Net Fixed Assets)', [
+                rows: formulaValue('(Adj Op Inc x (1 - Tax Rate)) / (Net Working Capital + Net Fixed Assets)', [
                     ['Adj Op Inc', val('adj_income')],
+                    ['Median Tax Rate', taxDisplay],
+                    ['After-Tax Adj Inc', afterTaxAdjIncome],
                     ['Receivables', val('receivables')],
                     ['Inventory', val('inventory')],
                     ['Accounts Payable', val('accountsPayable')],
@@ -1585,14 +1588,16 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             adj_ebit_gross_ppe: {
                 title: 'ROGPPE',
-                numeratorLabel: 'Adj Op Inc',
-                numerator: val('adj_income'),
+                numeratorLabel: 'After-Tax Adj Inc',
+                numerator: afterTaxAdjIncome,
                 divisorLabel: 'Gross PP&E',
                 divisor: val('grossPpe'),
                 resultLabel: 'ROGPPE',
                 result: val('adjEbitGrossPpe'),
-                rows: formulaValue('Adj Op Inc / Gross PP&E', [
+                rows: formulaValue('(Adj Op Inc x (1 - Tax Rate)) / Gross PP&E', [
                     ['Adj Op Inc', val('adj_income')],
+                    ['Median Tax Rate', taxDisplay],
+                    ['After-Tax Adj Inc', afterTaxAdjIncome],
                     ['Gross PP&E', val('grossPpe')],
                     ['Result', val('adjEbitGrossPpe')],
                 ]),

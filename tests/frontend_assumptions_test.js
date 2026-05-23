@@ -150,6 +150,9 @@ const data = {
     cy_revenue: { raw: null, display: '--', kind: 'money' },
     ny_revenue: { raw: null, display: '--', kind: 'money' },
     medianTaxRate: { raw: 0.20, display: '20%', kind: 'percent' },
+    grossPpe: { raw: 1_000_000_000, display: '1B', kind: 'money' },
+    netWorkingCapital: { raw: 200_000_000, display: '200M', kind: 'money' },
+    netFixedAssets: { raw: 800_000_000, display: '800M', kind: 'money' },
     ev_adj_ebit: { raw: null, display: '--', kind: 'ratio' },
     ev_cy_ebit: { raw: null, display: '--', kind: 'ratio' },
     ev_ny_ebit: { raw: null, display: '--', kind: 'ratio' },
@@ -165,10 +168,18 @@ assert.notStrictEqual(api.metricDisplay(adjusted, 'ev_cy_ebit'), '--', 'edited p
 assert.notStrictEqual(api.metricDisplay(adjusted, 'ev_ny_ebit'), '--', 'edited positive margin should create EV/NY Adj Inc');
 assertAlmostEqual(api.metricEntry(adjusted, 'adj_income').raw, 280_000_000, 1, 'edited margin should recalculate adjusted income from revenue');
 assertAlmostEqual(api.metricEntry(adjusted, 'ev_adj_ebit').raw, 87.9464285714, 0.0001, 'EV/Adj Inc should use after-tax adjusted income');
+assertAlmostEqual(api.metricEntry(adjusted, 'afterTaxAdjIncome').raw, 224_000_000, 1, 'edited margin should compute after-tax adjusted income');
+assertAlmostEqual(api.metricEntry(adjusted, 'adjEbitGrossPpe').raw, 0.224, 0.0001, 'ROGPPE should use after-tax adjusted income');
+assertAlmostEqual(api.metricEntry(adjusted, 'roc').raw, 0.224, 0.0001, 'ROC should use after-tax adjusted income');
 
 const calc = api.calcDefinitions(adjusted).ev_adj;
 assert.notStrictEqual(calc.divisor, '--', 'calc page denominator should register');
 assert.notStrictEqual(calc.result, '--', 'calc page result should register');
+const rogppeCalc = api.calcDefinitions(adjusted).adj_ebit_gross_ppe;
+assert.strictEqual(rogppeCalc.numerator, '224M', 'ROGPPE calc should show after-tax adjusted income');
+assert(rogppeCalc.rows.some(([label, value]) => label === 'After-Tax Adj Inc' && value === '224M'), 'ROGPPE calc should include after-tax adjusted income bridge');
+const rocCalc = api.calcDefinitions(adjusted).roc;
+assert.strictEqual(rocCalc.numerator, '224M', 'ROC calc should show after-tax adjusted income');
 
 const deLikeValuationData = {
   ...data,
