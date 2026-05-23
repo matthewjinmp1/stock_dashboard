@@ -822,13 +822,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return enterprise_value_raw, "enterpriseValue", "EV", "Current Enterprise Value"
         return market_cap_raw, "marketCap", "Mkt Cap", "Current Market Cap"
 
-    def _estimate_sales_per_share_and_margin(self, revenue_raw, eps_raw, diluted_shares_raw):
+    def _estimated_net_margin_from_eps(self, revenue_raw, eps_raw, diluted_shares_raw):
         if not revenue_raw or not eps_raw or not diluted_shares_raw:
-            return None, None
-        sales_per_share_raw = revenue_raw / diluted_shares_raw
-        if sales_per_share_raw <= 0:
-            return None, None
-        return sales_per_share_raw, eps_raw / sales_per_share_raw
+            return None
+        return (eps_raw * diluted_shares_raw) / revenue_raw
 
     def _parse_finviz_abbrev_to_raw(self, value):
         return parse_abbrev_to_raw(value)
@@ -1306,12 +1303,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 annual_income,
                 ["Diluted Average Shares", "DilutedAverageShares"],
             )
-            cy_sales_per_share_raw, cy_est_net_margin_raw = self._estimate_sales_per_share_and_margin(
+            cy_est_net_margin_raw = self._estimated_net_margin_from_eps(
                 cy_revenue_raw,
                 cy_eps_raw,
                 diluted_shares_raw,
             )
-            ny_sales_per_share_raw, ny_est_net_margin_raw = self._estimate_sales_per_share_and_margin(
+            ny_est_net_margin_raw = self._estimated_net_margin_from_eps(
                 ny_revenue_raw,
                 ny_eps_raw,
                 diluted_shares_raw,
@@ -1463,8 +1460,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("yearAgoEps", year_ago_eps_raw, self._format_3sig(year_ago_eps_raw), "number"),
                 ("currentYearEpsGrowth", cy_eps_growth_raw, self._format_percent(cy_eps_growth_raw) if cy_eps_growth_raw is not None else "--", "percent"),
                 ("nextYearEpsGrowth", ny_eps_growth_raw, self._format_percent(ny_eps_growth_raw) if ny_eps_growth_raw is not None else "--", "percent"),
-                ("currentYearSalesPerShare", cy_sales_per_share_raw, self._format_3sig(cy_sales_per_share_raw) if cy_sales_per_share_raw is not None else "--", "money"),
-                ("nextYearSalesPerShare", ny_sales_per_share_raw, self._format_3sig(ny_sales_per_share_raw) if ny_sales_per_share_raw is not None else "--", "money"),
                 ("currentYearEstimatedNetMargin", cy_est_net_margin_raw, self._format_percent(cy_est_net_margin_raw) if cy_est_net_margin_raw is not None else "--", "percent"),
                 ("nextYearEstimatedNetMargin", ny_est_net_margin_raw, self._format_percent(ny_est_net_margin_raw) if ny_est_net_margin_raw is not None else "--", "percent"),
                 ("priceCurrentEps", safe_ratio(current_price_raw, year_ago_eps_raw), safe_display(safe_ratio(current_price_raw, year_ago_eps_raw), self._format_3sig), "ratio"),

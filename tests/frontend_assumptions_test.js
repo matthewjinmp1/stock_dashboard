@@ -290,14 +290,10 @@ const estimatedMarginData = {
   ticker: 'EST_MARGIN',
   metrics: {
     ...data.metrics,
-    currentYearSalesPerShare: { raw: 40, display: '40', kind: 'money' },
-    nextYearSalesPerShare: { raw: 48, display: '48', kind: 'money' },
     currentYearEstimatedNetMargin: { raw: 0.25, display: '25%', kind: 'percent' },
     nextYearEstimatedNetMargin: { raw: 0.2916666667, display: '29.2%', kind: 'percent' },
   },
 };
-assert.strictEqual(api.metricDisplay(estimatedMarginData, 'currentYearSalesPerShare'), '40', 'CY sales/share should display from structured metrics');
-assert.strictEqual(api.metricDisplay(estimatedMarginData, 'nextYearSalesPerShare'), '48', 'NY sales/share should display from structured metrics');
 assert.strictEqual(api.metricDisplay(estimatedMarginData, 'currentYearEstimatedNetMargin'), '25%', 'CY estimated net margin should display from structured metrics');
 assert.strictEqual(api.metricDisplay(estimatedMarginData, 'nextYearEstimatedNetMargin'), '29.2%', 'NY estimated net margin should display from structured metrics');
 
