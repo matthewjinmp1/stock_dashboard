@@ -170,6 +170,32 @@ const calc = api.calcDefinitions(adjusted).ev_adj;
 assert.notStrictEqual(calc.divisor, '--', 'calc page denominator should register');
 assert.notStrictEqual(calc.result, '--', 'calc page result should register');
 
+const deLikeValuationData = {
+  ...data,
+  ticker: 'DE',
+  ev: '197B',
+  derivedEnterpriseValue: '197B',
+  marketCap: '143B',
+  valuationPrefix: 'EV',
+  valuationNumeratorLabel: 'Derived Enterprise Value',
+  metrics: {
+    ...data.metrics,
+    ev: { raw: 197_487_282_176, display: '197B', kind: 'money', currency: 'USD' },
+    derivedEnterpriseValue: { raw: 197_487_282_176, display: '197B', kind: 'money', currency: 'USD' },
+    marketCap: { raw: 142_927_282_176, display: '143B', kind: 'money', currency: 'USD' },
+    adj_income: { raw: 8_070_000_000, display: '8.07B', kind: 'money', currency: 'USD' },
+    cy_adj_inc: { raw: 7_281_402_194, display: '7.28B', kind: 'money', currency: 'USD' },
+    ny_adj_inc: { raw: 7_900_000_000, display: '7.9B', kind: 'money', currency: 'USD' },
+    ev_adj_ebit: { raw: 31.42, display: '31.4', kind: 'ratio' },
+    ev_cy_ebit: { raw: 36.3, display: '36.3', kind: 'ratio' },
+    ev_ny_ebit: { raw: 32.1, display: '32.1', kind: 'ratio' },
+  },
+};
+const deCalc = api.calcDefinitions(deLikeValuationData).ev_cy;
+assert.strictEqual(deCalc.numeratorLabel, 'Derived Enterprise Value', 'calc page should label the valuation numerator actually used');
+assert.strictEqual(deCalc.numerator, '197B', 'calc page headline numerator should equal metrics.ev');
+assert(deCalc.rows.some(([label, value]) => label === 'Derived Enterprise Value' && value === '197B'), 'calc breakdown should show the EV used in the formula');
+
 const cyCalc = api.calcDefinitions(adjusted).ev_cy;
 assert(cyCalc.rows.some(([label]) => label === '10% Discount Rate'), 'forward valuation calc should show discount rate');
 assert(cyCalc.rows.some(([label, value]) => label === 'Discounted After-Tax CY Adj Op Inc' && value !== '--'), 'forward valuation calc should show discounted denominator');

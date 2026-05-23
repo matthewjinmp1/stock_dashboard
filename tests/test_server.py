@@ -359,7 +359,7 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
 
         self.assertEqual(round(self.handler._market_cap_from_info(info)), 4238062980000)
 
-    def test_enterprise_value_prefers_yfinance_info_value(self):
+    def test_enterprise_value_reads_yfinance_info_value(self):
         self.assertEqual(
             self.handler._enterprise_value_from_info({"enterpriseValue": 182_569_418_752}),
             182_569_418_752,
@@ -369,6 +369,41 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
             125,
         )
         self.assertEqual(self.handler._enterprise_value_from_info({"enterpriseValue": None}), 0)
+
+    def test_valuation_choice_prefers_our_derived_ev(self):
+        valuation, basis, prefix, label = self.handler._valuation_choice(
+            derived_enterprise_value_raw=197_000_000_000,
+            enterprise_value_raw=183_000_000_000,
+            market_cap_raw=143_000_000_000,
+        )
+
+        self.assertEqual(valuation, 197_000_000_000)
+        self.assertEqual(basis, "derivedEV")
+        self.assertEqual(prefix, "EV")
+        self.assertEqual(label, "Derived Enterprise Value")
+
+    def test_valuation_choice_falls_back_to_yahoo_ev_then_market_cap(self):
+        valuation, basis, prefix, label = self.handler._valuation_choice(
+            derived_enterprise_value_raw=0,
+            enterprise_value_raw=183_000_000_000,
+            market_cap_raw=143_000_000_000,
+        )
+
+        self.assertEqual(valuation, 183_000_000_000)
+        self.assertEqual(basis, "enterpriseValue")
+        self.assertEqual(prefix, "EV")
+        self.assertEqual(label, "Current Enterprise Value")
+
+        valuation, basis, prefix, label = self.handler._valuation_choice(
+            derived_enterprise_value_raw=0,
+            enterprise_value_raw=0,
+            market_cap_raw=143_000_000_000,
+        )
+
+        self.assertEqual(valuation, 143_000_000_000)
+        self.assertEqual(basis, "marketCap")
+        self.assertEqual(prefix, "Mkt Cap")
+        self.assertEqual(label, "Current Market Cap")
 
     def test_bid_ask_metrics_accepts_plausible_large_cap_spread(self):
         bid, ask, spread, cost = self.handler._bid_ask_metrics(
@@ -393,6 +428,11 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertAlmostEqual(ask, 420.00)
         self.assertAlmostEqual(spread, 3.98)
         self.assertAlmostEqual(cost, 0.004760651659051241)
+
+    def test_bid_ask_metrics_rejects_missing_or_inverted_quotes(self):
+        self.assertEqual(self.handler._bid_ask_metrics({"bid": 68.25, "ask": 68.15}), (None, None, None, None))
+        self.assertEqual(self.handler._bid_ask_metrics({"bid": 0, "ask": 68.15}), (None, None, None, None))
+        self.assertEqual(self.handler._bid_ask_metrics({"bid": 68.25, "ask": None}), (None, None, None, None))
 
     def test_nasdaq_bid_ask_metrics_parses_public_quote_payload(self):
         payload = {

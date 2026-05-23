@@ -815,6 +815,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         api_enterprise_value = info.get("enterpriseValue", 0) or 0
         return api_enterprise_value * quote_fx_rate if api_enterprise_value > 0 else 0
 
+    def _valuation_choice(self, derived_enterprise_value_raw=0, enterprise_value_raw=0, market_cap_raw=0):
+        if derived_enterprise_value_raw:
+            return derived_enterprise_value_raw, "derivedEV", "EV", "Derived Enterprise Value"
+        if enterprise_value_raw:
+            return enterprise_value_raw, "enterpriseValue", "EV", "Current Enterprise Value"
+        return market_cap_raw, "marketCap", "Mkt Cap", "Current Market Cap"
+
     def _parse_finviz_abbrev_to_raw(self, value):
         return parse_abbrev_to_raw(value)
 
@@ -1302,19 +1309,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             derived_enterprise_value_raw = market_cap_raw - net_cash_raw if market_cap_raw else 0
             enterprise_value_raw = self._enterprise_value_from_info(info, quote_fx_rate)
 
-            valuation_raw = derived_enterprise_value_raw or enterprise_value_raw or market_cap_raw
-            if derived_enterprise_value_raw:
-                valuation_basis = "derivedEV"
-                valuation_prefix = "EV"
-                valuation_numerator_label = "Derived Enterprise Value"
-            elif enterprise_value_raw:
-                valuation_basis = "enterpriseValue"
-                valuation_prefix = "EV"
-                valuation_numerator_label = "Current Enterprise Value"
-            else:
-                valuation_basis = "marketCap"
-                valuation_prefix = "Mkt Cap"
-                valuation_numerator_label = "Current Market Cap"
+            valuation_raw, valuation_basis, valuation_prefix, valuation_numerator_label = self._valuation_choice(
+                derived_enterprise_value_raw=derived_enterprise_value_raw,
+                enterprise_value_raw=enterprise_value_raw,
+                market_cap_raw=market_cap_raw,
+            )
 
             cy_adj_inc_raw = cy_revenue_raw * adj_margin_ratio if cy_revenue_raw and adj_margin_ratio else 0
             ny_adj_inc_raw = ny_revenue_raw * adj_margin_ratio if ny_revenue_raw and adj_margin_ratio else 0
