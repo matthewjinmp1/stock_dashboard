@@ -102,6 +102,48 @@ assert.strictEqual(api.growthRowLabel(), 'QoQ Growth', 'quarterly QoQ mode shoul
 assert.deepStrictEqual(api.growthValues(quarterlyValues, quarterlyPeriods), ['--', '10.0%', '9.1%', '8.3%', '15.4%'], 'quarterly QoQ growth should compare with the prior quarter');
 api.state.periodicity = 'annual';
 
+const ratiosData = {
+  incomeStatement: {
+    annual: {
+      periods: ['TTM', '2025-12-31', '2024-12-31'],
+      rows: [
+        { label: 'Net Income', values: ['12B', '10B', '8B'] },
+      ],
+    },
+    quarterly: {
+      periods: ['2025-03-31', '2025-06-30'],
+      rows: [
+        { label: 'Net Income Common Stockholders', values: ['1B', '1.5B'] },
+      ],
+    },
+  },
+  balanceStatement: {
+    annual: {
+      periods: ['MRQ', '2025-12-31', '2024-12-31'],
+      rows: [
+        { label: 'Total Assets', values: ['120B', '100B', '80B'] },
+      ],
+    },
+    quarterly: {
+      periods: ['2025-03-31', '2025-06-30'],
+      rows: [
+        { label: 'Total Assets', values: ['50B', '60B'] },
+      ],
+    },
+  },
+};
+api.state.periodicity = 'annual';
+const annualRatios = api.buildRatiosStatement(ratiosData);
+assert.deepStrictEqual(Array.from(annualRatios.periods), ['TTM', '2025-12-31', '2024-12-31'], 'annual ratios should use income statement periods');
+assert.strictEqual(annualRatios.rows[0].label, 'ROA', 'annual ratios should include ROA');
+assert.deepStrictEqual(Array.from(annualRatios.rows[0].values), ['10%', '10%', '10%'], 'annual ratios should calculate ROA from net income over total assets, with TTM paired to MRQ assets');
+api.state.periodicity = 'quarterly';
+const quarterlyRatios = api.buildRatiosStatement(ratiosData);
+assert.deepStrictEqual(Array.from(quarterlyRatios.periods), ['2025-03-31', '2025-06-30'], 'quarterly ratios should use income statement periods');
+assert.strictEqual(quarterlyRatios.rows[0].label, 'ROA', 'quarterly ratios should include ROA');
+assert.deepStrictEqual(Array.from(quarterlyRatios.rows[0].values), ['2%', '2.5%'], 'quarterly ratios should calculate ROA from same-period quarterly net income and assets');
+api.state.periodicity = 'annual';
+
 api.state.scanRequestId = 17;
 api.startFetchTimer(0, 17);
 const fetchInfoNode = elements.get('result-fetch-info');

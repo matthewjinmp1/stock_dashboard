@@ -950,6 +950,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ['income', 'Income Statement'],
             ['balance', 'Balance Sheet'],
             ['cash', 'Cash Flow'],
+            ['ratios', 'Ratios'],
             ['all', 'All Accounts'],
             ['starred', 'Starred'],
         ];
@@ -991,8 +992,56 @@ document.addEventListener('DOMContentLoaded', () => {
         let stmt = {};
         if (tab === 'balance') stmt = data.balanceStatement || {};
         else if (tab === 'cash') stmt = data.cashFlowStatement || {};
+        else if (tab === 'ratios') return buildRatiosStatement(data);
         else stmt = data.incomeStatement || {};
         return stmt[state.periodicity || 'annual'] || {};
+    }
+
+    function buildRatiosStatement(data) {
+        const periodicity = state.periodicity || 'annual';
+        const income = ((data || {}).incomeStatement || {})[periodicity] || {};
+        const balance = ((data || {}).balanceStatement || {})[periodicity] || {};
+        const periods = income.periods || balance.periods || [];
+        return {
+            periods,
+            rows: [
+                {
+                    label: 'ROA',
+                    values: periods.map((period) => {
+                        const netIncome = statementValueForPeriod(income, [
+                            'Net Income',
+                            'Net Income Common Stockholders',
+                            'Net Income Applicable To Common Shares',
+                            'Net Income Continuous Operations',
+                        ], period);
+                        const assetPeriod = String(period || '').toUpperCase() === 'TTM' ? firstAvailablePeriod(balance, ['MRQ', 'LATEST', 'TTM']) : period;
+                        const totalAssets = statementValueForPeriod(balance, ['Total Assets'], assetPeriod);
+                        const netIncomeRaw = parseMoney(netIncome);
+                        const totalAssetsRaw = parseMoney(totalAssets);
+                        return totalAssetsRaw ? formatPercentDecimal(netIncomeRaw / totalAssetsRaw) : '--';
+                    }),
+                },
+            ],
+        };
+    }
+
+    function firstAvailablePeriod(statement, candidates) {
+        const periods = statement?.periods || [];
+        const upperPeriods = periods.map((period) => String(period || '').toUpperCase());
+        for (const candidate of candidates) {
+            const idx = upperPeriods.indexOf(String(candidate || '').toUpperCase());
+            if (idx >= 0) return periods[idx];
+        }
+        return periods[0] || '';
+    }
+
+    function statementValueForPeriod(statement, labels, period) {
+        const periods = statement?.periods || [];
+        const idx = periods.findIndex((candidate) => String(candidate || '').toUpperCase() === String(period || '').toUpperCase());
+        if (idx < 0) return '--';
+        const labelSet = new Set(labels.map((label) => label.toLowerCase()));
+        const row = (statement.rows || []).find((candidate) => labelSet.has(String(candidate.label || '').toLowerCase()));
+        return row ? (row.values || [])[idx] || '--' : '--';
     }
 
     function starredKey(statement, label) {
@@ -1019,6 +1068,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ['income', 'Income Statement', (data.incomeStatement || {})[p] || {}],
             ['balance', 'Balance Sheet', (data.balanceStatement || {})[p] || {}],
             ['cash', 'Cash Flow Statement', (data.cashFlowStatement || {})[p] || {}],
+            ['ratios', 'Ratios', buildRatiosStatement(data)],
         ].map(([key, label, statement]) => {
             const rows = (statement.rows || []).filter((row) => state.starredAccounts[starredKey(key, row.label)]);
             if (!rows.length) return '';
@@ -1034,6 +1084,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ['income', 'Income Statement', (data.incomeStatement || {})[p] || {}],
             ['balance', 'Balance Sheet', (data.balanceStatement || {})[p] || {}],
             ['cash', 'Cash Flow Statement', (data.cashFlowStatement || {})[p] || {}],
+            ['ratios', 'Ratios', buildRatiosStatement(data)],
         ].map(([key, label, statement]) => {
             const rows = term
                 ? (statement.rows || []).filter((row) => accountLabelMatchesSearch(row.label, term))
@@ -1729,6 +1780,7 @@ document.addEventListener('DOMContentLoaded', () => {
         parseMoney,
         parsePercentValue,
         accountLabelMatchesSearch,
+        buildRatiosStatement,
         growthValues,
         growthRowLabel,
         startFetchTimer,
