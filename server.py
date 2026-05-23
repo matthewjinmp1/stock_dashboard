@@ -24,7 +24,7 @@ CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
-PAYLOAD_VERSION = 27
+PAYLOAD_VERSION = 28
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -822,6 +822,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return enterprise_value_raw, "enterpriseValue", "EV", "Current Enterprise Value"
         return market_cap_raw, "marketCap", "Mkt Cap", "Current Market Cap"
 
+    def _estimate_sales_per_share_and_margin(self, revenue_raw, eps_raw, diluted_shares_raw):
+        if not revenue_raw or not eps_raw or not diluted_shares_raw:
+            return None, None
+        sales_per_share_raw = revenue_raw / diluted_shares_raw
+        if sales_per_share_raw <= 0:
+            return None, None
+        return sales_per_share_raw, eps_raw / sales_per_share_raw
+
     def _parse_finviz_abbrev_to_raw(self, value):
         return parse_abbrev_to_raw(value)
 
@@ -1293,6 +1301,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             cy_eps_raw = (cy_eps_raw or 0) * financial_fx_rate
             ny_eps_raw = (ny_eps_raw or 0) * financial_fx_rate
             year_ago_eps_raw = (year_ago_eps_raw or 0) * financial_fx_rate
+            diluted_shares_raw = self._df_ttm_value(
+                quarterly_income,
+                annual_income,
+                ["Diluted Average Shares", "DilutedAverageShares"],
+            )
+            cy_sales_per_share_raw, cy_est_net_margin_raw = self._estimate_sales_per_share_and_margin(
+                cy_revenue_raw,
+                cy_eps_raw,
+                diluted_shares_raw,
+            )
+            ny_sales_per_share_raw, ny_est_net_margin_raw = self._estimate_sales_per_share_and_margin(
+                ny_revenue_raw,
+                ny_eps_raw,
+                diluted_shares_raw,
+            )
 
             # Market cap and valuation use quote_fx_rate
             market_cap_raw = self._market_cap_from_info(info, quote_fx_rate)
@@ -1440,6 +1463,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("yearAgoEps", year_ago_eps_raw, self._format_3sig(year_ago_eps_raw), "number"),
                 ("currentYearEpsGrowth", cy_eps_growth_raw, self._format_percent(cy_eps_growth_raw) if cy_eps_growth_raw is not None else "--", "percent"),
                 ("nextYearEpsGrowth", ny_eps_growth_raw, self._format_percent(ny_eps_growth_raw) if ny_eps_growth_raw is not None else "--", "percent"),
+                ("currentYearSalesPerShare", cy_sales_per_share_raw, self._format_3sig(cy_sales_per_share_raw) if cy_sales_per_share_raw is not None else "--", "money"),
+                ("nextYearSalesPerShare", ny_sales_per_share_raw, self._format_3sig(ny_sales_per_share_raw) if ny_sales_per_share_raw is not None else "--", "money"),
+                ("currentYearEstimatedNetMargin", cy_est_net_margin_raw, self._format_percent(cy_est_net_margin_raw) if cy_est_net_margin_raw is not None else "--", "percent"),
+                ("nextYearEstimatedNetMargin", ny_est_net_margin_raw, self._format_percent(ny_est_net_margin_raw) if ny_est_net_margin_raw is not None else "--", "percent"),
                 ("priceCurrentEps", safe_ratio(current_price_raw, year_ago_eps_raw), safe_display(safe_ratio(current_price_raw, year_ago_eps_raw), self._format_3sig), "ratio"),
                 ("priceCyEps", safe_ratio(current_price_raw, cy_eps_raw), safe_display(safe_ratio(current_price_raw, cy_eps_raw), self._format_3sig), "ratio"),
                 ("priceNyEps", safe_ratio(current_price_raw, ny_eps_raw), safe_display(safe_ratio(current_price_raw, ny_eps_raw), self._format_3sig), "ratio"),

@@ -285,6 +285,22 @@ assert.strictEqual(transactionCostCalc.result, '1 bps', 'transaction cost calc s
 assert(transactionCostCalc.rows.some(([label, value]) => label === 'Half Spread' && value !== '--'), 'transaction cost calc should show half spread');
 assert(transactionCostCalc.rows.some(([label, value]) => label === 'Midpoint' && value !== '--'), 'transaction cost calc should show midpoint');
 
+const estimatedMarginData = {
+  ...data,
+  ticker: 'EST_MARGIN',
+  metrics: {
+    ...data.metrics,
+    currentYearSalesPerShare: { raw: 40, display: '40', kind: 'money' },
+    nextYearSalesPerShare: { raw: 48, display: '48', kind: 'money' },
+    currentYearEstimatedNetMargin: { raw: 0.25, display: '25%', kind: 'percent' },
+    nextYearEstimatedNetMargin: { raw: 0.2916666667, display: '29.2%', kind: 'percent' },
+  },
+};
+assert.strictEqual(api.metricDisplay(estimatedMarginData, 'currentYearSalesPerShare'), '40', 'CY sales/share should display from structured metrics');
+assert.strictEqual(api.metricDisplay(estimatedMarginData, 'nextYearSalesPerShare'), '48', 'NY sales/share should display from structured metrics');
+assert.strictEqual(api.metricDisplay(estimatedMarginData, 'currentYearEstimatedNetMargin'), '25%', 'CY estimated net margin should display from structured metrics');
+assert.strictEqual(api.metricDisplay(estimatedMarginData, 'nextYearEstimatedNetMargin'), '29.2%', 'NY estimated net margin should display from structured metrics');
+
 const bpsMetricHtml = api.metricValueHtml('0.72 bps');
 assert(bpsMetricHtml.includes('value-display-with-unit'), 'basis point metric should render as attached unit markup');
 assert(bpsMetricHtml.includes('<span>0.72</span><span class="value-unit">bps</span>'), 'basis point unit should stay attached to the number');

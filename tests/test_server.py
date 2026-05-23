@@ -405,6 +405,30 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertEqual(prefix, "Mkt Cap")
         self.assertEqual(label, "Current Market Cap")
 
+    def test_estimated_net_margin_uses_revenue_eps_and_diluted_shares(self):
+        sales_per_share, net_margin = self.handler._estimate_sales_per_share_and_margin(
+            revenue_raw=120_000_000_000,
+            eps_raw=10,
+            diluted_shares_raw=3_000_000_000,
+        )
+
+        self.assertEqual(sales_per_share, 40)
+        self.assertEqual(net_margin, 0.25)
+
+    def test_estimated_net_margin_requires_complete_positive_inputs(self):
+        self.assertEqual(
+            self.handler._estimate_sales_per_share_and_margin(120_000_000_000, 10, 0),
+            (None, None),
+        )
+        self.assertEqual(
+            self.handler._estimate_sales_per_share_and_margin(0, 10, 3_000_000_000),
+            (None, None),
+        )
+        self.assertEqual(
+            self.handler._estimate_sales_per_share_and_margin(120_000_000_000, 0, 3_000_000_000),
+            (None, None),
+        )
+
     def test_bid_ask_metrics_accepts_plausible_large_cap_spread(self):
         bid, ask, spread, cost = self.handler._bid_ask_metrics(
             {"bid": 416.99, "ask": 417.01},

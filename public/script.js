@@ -366,6 +366,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('CY EPS Growth', val('currentYearEpsGrowth')),
                 metric('NY EPS Growth', val('nextYearEpsGrowth')),
             ]),
+            metricGroup('Est Net Margin', [
+                metric('CY Sales / Share', val('currentYearSalesPerShare')),
+                metric('NY Sales / Share', val('nextYearSalesPerShare')),
+                metric('CY Net Margin', val('currentYearEstimatedNetMargin')),
+                metric('NY Net Margin', val('nextYearEstimatedNetMargin')),
+            ]),
             metricGroup('P/E', [
                 metric('P/LY EPS', val('priceCurrentEps')),
                 metric('P/CY EPS', val('priceCyEps')),
