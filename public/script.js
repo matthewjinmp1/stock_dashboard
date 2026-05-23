@@ -548,12 +548,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!dataroma || !Object.keys(dataroma).length) return '';
         const buys = dataroma.insiderBuys || {};
         const sells = dataroma.insiderSells || {};
-        const sourceUrl = dataroma.sourceUrl || `https://www.dataroma.com/m/stock.php?sym=${encodeURIComponent(data.ticker || '')}`;
         return `<section class="analyst-grid dataroma-grid">
             <div class="metric-group dataroma-card">
                 <div class="section-title-row">
                     <h3>Super Investor Stats</h3>
-                    <a href="${escapeAttr(sourceUrl)}" target="_blank" rel="noopener">Dataroma</a>
                 </div>
                 <div class="dataroma-list">
                     <div><span>Ownership Count</span><strong>${dataromaValue(dataroma.ownershipCount)}</strong></div>
@@ -565,7 +563,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="metric-group dataroma-card">
                 <div class="section-title-row">
                     <h3>Insider Activity</h3>
-                    <a href="${escapeAttr(sourceUrl)}" target="_blank" rel="noopener">Source</a>
                 </div>
                 <div class="dataroma-insiders">
                     <div class="dataroma-insider-head"><span></span><span>Transactions</span><span>Total</span></div>
