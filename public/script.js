@@ -321,6 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderStats(data) {
         data = applyAssumptions(data);
         const val = (key) => metricDisplay(data, key);
+        const netCash = netCashPresentation(data);
         const stats = $('result-stats');
         if (!stats) return;
         stats.classList.remove('stats-grid');
@@ -355,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ]),
             metricGroup('Market', [
                 metric('Market Cap', val('marketCap')),
-                metric('Net Cash', val('netCash'), 'net_cash'),
+                metric(netCash.label, netCash.display, 'net_cash'),
                 metric('Our EV', val('derivedEnterpriseValue')),
             ]),
             metricGroup('Price & Yield', [
@@ -1464,9 +1465,33 @@ document.addEventListener('DOMContentLoaded', () => {
         return epsRaw && dilutedSharesRaw ? formatMoneyFront(epsRaw * dilutedSharesRaw) : '--';
     }
 
+    function netCashPresentation(data) {
+        const entry = metricEntry(data, 'netCash');
+        let rawValue = NaN;
+        if (entry && typeof entry === 'object' && 'raw' in entry) {
+            rawValue = entry.raw === null || entry.raw === undefined ? NaN : Number(entry.raw);
+        } else if (entry && entry !== '--') {
+            rawValue = parseMoney(entry);
+        }
+        if (!Number.isFinite(rawValue)) return { label: 'Net Cash', display: '--', formula: 'Cash & Short Term Investments - Total Debt' };
+        if (rawValue < 0) {
+            return {
+                label: 'Net Debt',
+                display: formatMoneyFront(Math.abs(rawValue)),
+                formula: 'Total Debt - Cash & Short Term Investments',
+            };
+        }
+        return {
+            label: 'Net Cash',
+            display: formatMoneyFront(rawValue),
+            formula: 'Cash & Short Term Investments - Total Debt',
+        };
+    }
+
     function calcDefinitions(data) {
         const val = (key) => metricDisplay(data, key);
         const raw = (key) => metricEntry(data, key);
+        const netCash = netCashPresentation(data);
         const cashBucket = latestStatementValue((data.balanceStatement || {}).annual, [
             'Cash, Equivalents & Short Term Investments',
             'Cash & Short Term Investments',
@@ -1633,17 +1658,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 ]),
             },
             net_cash: {
-                title: 'Net Cash',
-                numeratorLabel: 'Cash & Short Term Investments',
-                numerator: cashBucket,
-                divisorLabel: 'Debt',
-                divisor: totalDebt,
-                resultLabel: 'Net Cash',
-                result: val('netCash'),
-                rows: formulaValue('Cash & Short Term Investments - Total Debt', [
-                    ['Cash & Short Term Investments', cashBucket],
-                    ['Total Debt', totalDebt],
-                    ['Net Cash', val('netCash')],
+                title: netCash.label,
+                numeratorLabel: netCash.label === 'Net Debt' ? 'Total Debt' : 'Cash & Short Term Investments',
+                numerator: netCash.label === 'Net Debt' ? totalDebt : cashBucket,
+                divisorLabel: netCash.label === 'Net Debt' ? 'Cash & Short Term Investments' : 'Debt',
+                divisor: netCash.label === 'Net Debt' ? cashBucket : totalDebt,
+                resultLabel: netCash.label,
+                result: netCash.display,
+                rows: formulaValue(netCash.formula, [
+                    ...(netCash.label === 'Net Debt'
+                        ? [['Total Debt', totalDebt], ['Cash & Short Term Investments', cashBucket]]
+                        : [['Cash & Short Term Investments', cashBucket], ['Total Debt', totalDebt]]),
+                    [netCash.label, netCash.display],
                 ]),
             },
             roc: {
@@ -1806,6 +1832,7 @@ document.addEventListener('DOMContentLoaded', () => {
         metricEntry,
         metricDisplay,
         metricValueHtml,
+        netCashPresentation,
         parseMoney,
         parsePercentValue,
         accountLabelMatchesSearch,

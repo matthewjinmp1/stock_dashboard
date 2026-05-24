@@ -250,6 +250,30 @@ assert(rogppeCalc.rows.some(([label, value]) => label === 'After-Tax Adj Inc' &&
 const rocCalc = api.calcDefinitions(adjusted).roc;
 assert.strictEqual(rocCalc.numerator, '224M', 'ROC calc should show after-tax adjusted income');
 
+const netDebtData = {
+  ...data,
+  metrics: {
+    ...data.metrics,
+    netCash: { raw: -2_300_000_000, display: '-2.3B', kind: 'money' },
+  },
+  balanceStatement: {
+    annual: {
+      periods: ['MRQ'],
+      rows: [
+        { label: 'Cash, Equivalents & Short Term Investments', values: ['1B'] },
+      ],
+    },
+  },
+};
+const netDebtPresentation = api.netCashPresentation(netDebtData);
+assert.strictEqual(netDebtPresentation.label, 'Net Debt', 'negative net cash should relabel as net debt');
+assert.strictEqual(netDebtPresentation.display, '2.3B', 'negative net cash should display as a positive net debt amount');
+assert.strictEqual(netDebtPresentation.formula, 'Total Debt - Cash & Short Term Investments', 'negative net cash should use the net debt formula');
+const netDebtCalc = api.calcDefinitions(netDebtData).net_cash;
+assert.strictEqual(netDebtCalc.title, 'Net Debt', 'net cash calc should relabel negative values as net debt');
+assert.strictEqual(netDebtCalc.result, '2.3B', 'net cash calc should show net debt as a positive amount');
+assert(netDebtCalc.rows.some(([label, value]) => label === 'Net Debt' && value === '2.3B'), 'net debt calc should include the positive net debt result');
+
 const deLikeValuationData = {
   ...data,
   ticker: 'DE',
