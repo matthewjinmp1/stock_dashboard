@@ -27,7 +27,7 @@ PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 ENABLE_DATAROMA_FETCHES = os.environ.get("ENABLE_DATAROMA_FETCHES", "1") != "0"
-PAYLOAD_VERSION = 33
+PAYLOAD_VERSION = 34
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -855,6 +855,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # yfinance may return either 0.0087 for 0.87% or 0.87 for 0.87%.
         return raw_yield / 100 if raw_yield > 0.25 else raw_yield
 
+    def _short_percent_shares_out_from_info(self, info):
+        raw_percent = info.get("sharesPercentSharesOut")
+        try:
+            raw_percent = float(raw_percent) if raw_percent is not None else None
+            if raw_percent and raw_percent > 0:
+                return raw_percent / 100 if raw_percent > 1 else raw_percent
+        except Exception:
+            pass
+
+        try:
+            shares_short = float(info.get("sharesShort") or 0)
+            shares_outstanding = float(info.get("sharesOutstanding") or info.get("impliedSharesOutstanding") or 0)
+            if shares_short > 0 and shares_outstanding > 0:
+                return shares_short / shares_outstanding
+        except Exception:
+            return None
+        return None
+
     def _parse_finviz_abbrev_to_raw(self, value):
         return parse_abbrev_to_raw(value)
 
@@ -1456,7 +1474,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             def safe_display(value, formatter):
                 return formatter(value) if value is not None else "--"
 
-            short_float_raw = info.get("shortPercentOfFloat") if info.get("shortPercentOfFloat") else None
+            short_float_raw = self._short_percent_shares_out_from_info(info)
             dividend_yield_raw = self._dividend_yield_from_info(info)
             bid_price_raw = None
             ask_price_raw = None
@@ -1608,7 +1626,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "price_current_eps": self._format_3sig(current_price_raw / year_ago_eps_raw) if current_price_raw and year_ago_eps_raw else "--",
                 "price_cy_eps": self._format_3sig(current_price_raw / cy_eps_raw) if current_price_raw and cy_eps_raw else "--",
                 "price_ny_eps": self._format_3sig(current_price_raw / ny_eps_raw) if current_price_raw and ny_eps_raw else "--",
-                "short_float": self._format_percent(info.get("shortPercentOfFloat")) if info.get("shortPercentOfFloat") else "--",
+                "short_float": self._format_percent(short_float_raw) if short_float_raw else "--",
                 "structured_metrics": structured_metrics,
             }
             record_stage("build_payload", "Build metrics and statements", build_started)

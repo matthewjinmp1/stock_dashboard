@@ -443,6 +443,32 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertAlmostEqual(self.handler._dividend_yield_from_info({"dividendYield": 0.0087}), 0.0087)
         self.assertAlmostEqual(self.handler._dividend_yield_from_info({"dividendYield": 1.2}), 0.012)
 
+    def test_short_percent_shares_out_prefers_yfinance_metric(self):
+        self.assertAlmostEqual(
+            self.handler._short_percent_shares_out_from_info({
+                "sharesPercentSharesOut": 0.0072,
+                "sharesShort": 50_000_000,
+                "sharesOutstanding": 1_000_000_000,
+                "shortPercentOfFloat": 0.12,
+            }),
+            0.0072,
+        )
+        self.assertAlmostEqual(
+            self.handler._short_percent_shares_out_from_info({"sharesPercentSharesOut": 72}),
+            0.72,
+        )
+
+    def test_short_percent_shares_out_falls_back_to_shares_short_over_outstanding(self):
+        self.assertAlmostEqual(
+            self.handler._short_percent_shares_out_from_info({
+                "sharesShort": 25_000_000,
+                "sharesOutstanding": 1_000_000_000,
+                "shortPercentOfFloat": 0.12,
+            }),
+            0.025,
+        )
+        self.assertIsNone(self.handler._short_percent_shares_out_from_info({"shortPercentOfFloat": 0.12}))
+
     def test_bid_ask_metrics_accepts_plausible_large_cap_spread(self):
         bid, ask, spread, cost = self.handler._bid_ask_metrics(
             {"bid": 416.99, "ask": 417.01},

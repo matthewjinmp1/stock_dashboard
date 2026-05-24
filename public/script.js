@@ -351,7 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('Median Tax Rate', val('medianTaxRate'), '', 'medianTaxRate'),
             ]),
             metricGroup('Short Interest', [
-                metric('Short Float', val('shortFloat')),
+                metric('Short % Shares Out', val('shortFloat')),
             ]),
             metricGroup('Market', [
                 metric('Market Cap', val('marketCap')),
@@ -766,7 +766,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return `<tr>
             ${sortableHeader('ticker', 'Ticker', kind)}${sortableHeader('margin', 'Adj Margin', kind)}
             ${sortableHeader('grossMargin', 'Gross Margin', kind)}${sortableHeader('cy_growth', 'CY Growth', kind)}
-            ${sortableHeader('ny_growth', 'NY Growth', kind)}${sortableHeader('shortFloat', 'Short Float', kind)}
+            ${sortableHeader('ny_growth', 'NY Growth', kind)}${sortableHeader('shortFloat', 'Short % SO', kind)}
             ${sortableHeader('ev_adj_ebit', 'EV/Adj Inc', kind)}${sortableHeader('ev_cy_ebit', 'EV/CY Adj Inc', kind)}
             ${sortableHeader('ev_ny_ebit', 'EV/NY Adj Inc', kind)}<th>Actions</th>
         </tr>`;
