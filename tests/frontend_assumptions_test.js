@@ -108,12 +108,16 @@ const ratiosData = {
       periods: ['TTM', '2025-12-31', '2024-12-31'],
       rows: [
         { label: 'Net Income', values: ['12B', '10B', '8B'] },
+        { label: 'Operating Income', values: ['20B', '18B', '16B'] },
+        { label: 'Tax Rate', values: ['20%', '25%', '25%'] },
       ],
     },
     quarterly: {
       periods: ['2025-03-31', '2025-06-30'],
       rows: [
         { label: 'Net Income Common Stockholders', values: ['1B', '1.5B'] },
+        { label: 'Operating Income', values: ['2B', '2.4B'] },
+        { label: 'Tax Rate', values: ['20%', '25%'] },
       ],
     },
   },
@@ -122,12 +126,18 @@ const ratiosData = {
       periods: ['MRQ', '2025-12-31', '2024-12-31'],
       rows: [
         { label: 'Total Assets', values: ['120B', '100B', '80B'] },
+        { label: 'Total Debt', values: ['30B', '25B', '20B'] },
+        { label: 'Stockholders Equity', values: ['70B', '65B', '60B'] },
+        { label: 'Cash, Equivalents & Short Term Investments', values: ['20B', '15B', '10B'] },
       ],
     },
     quarterly: {
       periods: ['2025-03-31', '2025-06-30'],
       rows: [
         { label: 'Total Assets', values: ['50B', '60B'] },
+        { label: 'Total Debt', values: ['10B', '12B'] },
+        { label: 'Stockholders Equity', values: ['40B', '44B'] },
+        { label: 'Cash, Equivalents & Short Term Investments', values: ['5B', '6B'] },
       ],
     },
   },
@@ -137,11 +147,15 @@ const annualRatios = api.buildRatiosStatement(ratiosData);
 assert.deepStrictEqual(Array.from(annualRatios.periods), ['TTM', '2025-12-31', '2024-12-31'], 'annual ratios should use income statement periods');
 assert.strictEqual(annualRatios.rows[0].label, 'ROA', 'annual ratios should include ROA');
 assert.deepStrictEqual(Array.from(annualRatios.rows[0].values), ['10%', '10%', '10%'], 'annual ratios should calculate ROA from net income over total assets, with TTM paired to MRQ assets');
+assert.strictEqual(annualRatios.rows[1].label, 'ROIC', 'annual ratios should include ROIC');
+assert.deepStrictEqual(Array.from(annualRatios.rows[1].values), ['20%', '18%', '17.1%'], 'annual ROIC should use after-tax operating income over debt plus equity minus cash');
 api.state.periodicity = 'quarterly';
 const quarterlyRatios = api.buildRatiosStatement(ratiosData);
 assert.deepStrictEqual(Array.from(quarterlyRatios.periods), ['2025-03-31', '2025-06-30'], 'quarterly ratios should use income statement periods');
 assert.strictEqual(quarterlyRatios.rows[0].label, 'ROA', 'quarterly ratios should include ROA');
 assert.deepStrictEqual(Array.from(quarterlyRatios.rows[0].values), ['2%', '2.5%'], 'quarterly ratios should calculate ROA from same-period quarterly net income and assets');
+assert.strictEqual(quarterlyRatios.rows[1].label, 'ROIC', 'quarterly ratios should include ROIC');
+assert.deepStrictEqual(Array.from(quarterlyRatios.rows[1].values), ['3.6%', '3.6%'], 'quarterly ROIC should use same-period after-tax operating income and invested capital');
 api.state.periodicity = 'annual';
 
 const balanceForMargin = {

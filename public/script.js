@@ -1021,6 +1021,32 @@ document.addEventListener('DOMContentLoaded', () => {
                         return totalAssetsRaw ? formatPercentDecimal(netIncomeRaw / totalAssetsRaw) : '--';
                     }),
                 },
+                {
+                    label: 'ROIC',
+                    values: periods.map((period) => {
+                        const investedCapitalPeriod = String(period || '').toUpperCase() === 'TTM' ? firstAvailablePeriod(balance, ['MRQ', 'LATEST', 'TTM']) : period;
+                        const operatingIncome = statementValueForPeriod(income, [
+                            'Operating Income',
+                            'Operating Income Loss',
+                        ], period);
+                        const taxRate = statementValueForPeriod(income, ['Tax Rate', 'Tax Rate For Calcs'], period);
+                        const totalDebt = statementValueForPeriod(balance, ['Total Debt'], investedCapitalPeriod);
+                        const equity = statementValueForPeriod(balance, [
+                            'Stockholders Equity',
+                            'Common Stock Equity',
+                            'Total Equity Gross Minority Interest',
+                        ], investedCapitalPeriod);
+                        const cash = statementValueForPeriod(balance, [
+                            'Cash, Equivalents & Short Term Investments',
+                            'Cash And Cash Equivalents',
+                            'Cash & Cash Equivalents',
+                            'Cash Cash Equivalents And Short Term Investments',
+                        ], investedCapitalPeriod);
+                        const afterTaxOperatingIncome = parseMoney(operatingIncome) * (1 - parsePercentValue(taxRate));
+                        const investedCapital = parseMoney(totalDebt) + parseMoney(equity) - parseMoney(cash);
+                        return investedCapital ? formatPercentDecimal(afterTaxOperatingIncome / investedCapital) : '--';
+                    }),
+                },
             ],
         };
     }
