@@ -1512,14 +1512,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const afterTaxAdjIncome = afterTaxIncomeDisplay(raw('adj_income'), taxRate);
         const cyAfterTaxAdjIncome = afterTaxIncomeDisplay(raw('cy_adj_inc'), taxRate);
         const nyAfterTaxAdjIncome = afterTaxIncomeDisplay(raw('ny_adj_inc'), taxRate);
+        const adjustedNetIncomeLabel = 'Adjusted Net Income';
+        const cyAdjustedNetIncomeLabel = 'CY Adjusted Net Income';
+        const nyAdjustedNetIncomeLabel = 'NY Adjusted Net Income';
         return {
             ev_adj: {
-                title: `${data.valuationPrefix || 'EV'} / After-Tax Adj Op Inc`,
+                title: `${data.valuationPrefix || 'EV'} / ${adjustedNetIncomeLabel}`,
                 numeratorLabel: valuationLabel,
                 numerator: val('ev'),
-                divisorLabel: 'After-Tax Adj Op Inc',
+                divisorLabel: adjustedNetIncomeLabel,
                 divisor: afterTaxAdjIncome,
-                resultLabel: `${data.valuationPrefix || 'EV'} / After-Tax Adj Op Inc`,
+                resultLabel: `${data.valuationPrefix || 'EV'} / ${adjustedNetIncomeLabel}`,
                 result: val('ev_adj_ebit'),
                 rows: formulaValue(`${valuationLabel} / (Adj Op Inc x (1 - Tax Rate))`, [
                     [valuationLabel, val('ev')],
@@ -1528,16 +1531,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     ['Adj Op Inc Margin', val('margin')],
                     ['Adj Op Inc', val('adj_income')],
                     ['Median Tax Rate', taxDisplay],
-                    ['After-Tax Adj Op Inc', afterTaxAdjIncome],
+                    [adjustedNetIncomeLabel, afterTaxAdjIncome],
                 ]),
             },
             ev_cy: {
-                title: `${data.valuationPrefix || 'EV'} / After-Tax CY Op Inc`,
+                title: `${data.valuationPrefix || 'EV'} / ${cyAdjustedNetIncomeLabel}`,
                 numeratorLabel: valuationLabel,
                 numerator: val('ev'),
-                divisorLabel: 'After-Tax CY Adj Op Inc',
+                divisorLabel: cyAdjustedNetIncomeLabel,
                 divisor: cyAfterTaxAdjIncome,
-                resultLabel: `${data.valuationPrefix || 'EV'} / After-Tax CY Op Inc`,
+                resultLabel: `${data.valuationPrefix || 'EV'} / ${cyAdjustedNetIncomeLabel}`,
                 result: val('ev_cy_ebit'),
                 rows: formulaValue(`${valuationLabel} / (((Last Year Revenue x (1 + CY Growth) x Adj Op Inc Margin) x (1 - Tax Rate)) / Discount Factor)`, [
                     [valuationLabel, val('ev')],
@@ -1550,17 +1553,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     ['Adj Op Inc Margin', val('margin')],
                     ['CY Adj Op Inc', val('cy_adj_inc')],
                     ['Median Tax Rate', taxDisplay],
-                    ['After-Tax CY Adj Op Inc', cyAfterTaxAdjIncome],
-                    ['Discounted After-Tax CY Adj Op Inc', discountedAfterTaxIncomeDisplay(raw('cy_adj_inc'), taxRate, cyDiscount.factor)],
+                    [cyAdjustedNetIncomeLabel, cyAfterTaxAdjIncome],
+                    [`Discounted ${cyAdjustedNetIncomeLabel}`, discountedAfterTaxIncomeDisplay(raw('cy_adj_inc'), taxRate, cyDiscount.factor)],
                 ]),
             },
             ev_ny: {
-                title: `${data.valuationPrefix || 'EV'} / After-Tax NY Op Inc`,
+                title: `${data.valuationPrefix || 'EV'} / ${nyAdjustedNetIncomeLabel}`,
                 numeratorLabel: valuationLabel,
                 numerator: val('ev'),
-                divisorLabel: 'After-Tax NY Adj Op Inc',
+                divisorLabel: nyAdjustedNetIncomeLabel,
                 divisor: nyAfterTaxAdjIncome,
-                resultLabel: `${data.valuationPrefix || 'EV'} / After-Tax NY Op Inc`,
+                resultLabel: `${data.valuationPrefix || 'EV'} / ${nyAdjustedNetIncomeLabel}`,
                 result: val('ev_ny_ebit'),
                 rows: formulaValue(`${valuationLabel} / (((CY Revenue x (1 + NY Growth) x Adj Op Inc Margin) x (1 - Tax Rate)) / Discount Factor)`, [
                     [valuationLabel, val('ev')],
@@ -1573,8 +1576,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     ['Adj Op Inc Margin', val('margin')],
                     ['NY Adj Op Inc', val('ny_adj_inc')],
                     ['Median Tax Rate', taxDisplay],
-                    ['After-Tax NY Adj Op Inc', nyAfterTaxAdjIncome],
-                    ['Discounted After-Tax NY Adj Op Inc', discountedAfterTaxIncomeDisplay(raw('ny_adj_inc'), taxRate, nyDiscount.factor)],
+                    [nyAdjustedNetIncomeLabel, nyAfterTaxAdjIncome],
+                    [`Discounted ${nyAdjustedNetIncomeLabel}`, discountedAfterTaxIncomeDisplay(raw('ny_adj_inc'), taxRate, nyDiscount.factor)],
                 ]),
             },
             ly_est_net_margin: {
@@ -1674,7 +1677,7 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             roc: {
                 title: 'Return on Capital',
-                numeratorLabel: 'After-Tax Adj Inc',
+                numeratorLabel: adjustedNetIncomeLabel,
                 numerator: afterTaxAdjIncome,
                 divisorLabel: 'NWC + Net Fixed Assets',
                 divisor: `${val('netWorkingCapital') || '--'} + ${val('netFixedAssets') || '--'}`,
@@ -1683,7 +1686,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 rows: formulaValue('(Adj Op Inc x (1 - Tax Rate)) / (Net Working Capital + Net Fixed Assets)', [
                     ['Adj Op Inc', val('adj_income')],
                     ['Median Tax Rate', taxDisplay],
-                    ['After-Tax Adj Inc', afterTaxAdjIncome],
+                    [adjustedNetIncomeLabel, afterTaxAdjIncome],
                     ['Receivables', val('receivables')],
                     ['Inventory', val('inventory')],
                     ['Accounts Payable', val('accountsPayable')],
@@ -1694,7 +1697,7 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             adj_ebit_gross_ppe: {
                 title: 'ROGPPE',
-                numeratorLabel: 'After-Tax Adj Inc',
+                numeratorLabel: adjustedNetIncomeLabel,
                 numerator: afterTaxAdjIncome,
                 divisorLabel: 'Gross PP&E',
                 divisor: val('grossPpe'),
@@ -1703,7 +1706,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 rows: formulaValue('(Adj Op Inc x (1 - Tax Rate)) / Gross PP&E', [
                     ['Adj Op Inc', val('adj_income')],
                     ['Median Tax Rate', taxDisplay],
-                    ['After-Tax Adj Inc', afterTaxAdjIncome],
+                    [adjustedNetIncomeLabel, afterTaxAdjIncome],
                     ['Gross PP&E', val('grossPpe')],
                     ['Result', val('adjEbitGrossPpe')],
                 ]),

@@ -246,7 +246,7 @@ assert.notStrictEqual(calc.divisor, '--', 'calc page denominator should register
 assert.notStrictEqual(calc.result, '--', 'calc page result should register');
 const rogppeCalc = api.calcDefinitions(adjusted).adj_ebit_gross_ppe;
 assert.strictEqual(rogppeCalc.numerator, '224M', 'ROGPPE calc should show after-tax adjusted income');
-assert(rogppeCalc.rows.some(([label, value]) => label === 'After-Tax Adj Inc' && value === '224M'), 'ROGPPE calc should include after-tax adjusted income bridge');
+assert(rogppeCalc.rows.some(([label, value]) => label === 'Adjusted Net Income' && value === '224M'), 'ROGPPE calc should include adjusted net income bridge');
 const rocCalc = api.calcDefinitions(adjusted).roc;
 assert.strictEqual(rocCalc.numerator, '224M', 'ROC calc should show after-tax adjusted income');
 
@@ -302,7 +302,7 @@ assert(deCalc.rows.some(([label, value]) => label === 'Derived Enterprise Value'
 
 const cyCalc = api.calcDefinitions(adjusted).ev_cy;
 assert(cyCalc.rows.some(([label]) => label === '10% Discount Rate'), 'forward valuation calc should show discount rate');
-assert(cyCalc.rows.some(([label, value]) => label === 'Discounted After-Tax CY Adj Op Inc' && value !== '--'), 'forward valuation calc should show discounted denominator');
+assert(cyCalc.rows.some(([label, value]) => label === 'Discounted CY Adjusted Net Income' && value !== '--'), 'forward valuation calc should show discounted denominator');
 
 const blankStructuredData = {
   ...data,
