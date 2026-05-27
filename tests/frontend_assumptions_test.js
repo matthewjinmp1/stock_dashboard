@@ -241,6 +241,17 @@ assertAlmostEqual(api.metricEntry(adjusted, 'afterTaxAdjIncome').raw, 224_000_00
 assertAlmostEqual(api.metricEntry(adjusted, 'adjEbitGrossPpe').raw, 0.224, 0.0001, 'ROGPPE should use after-tax adjusted income');
 assertAlmostEqual(api.metricEntry(adjusted, 'roc').raw, 0.224, 0.0001, 'ROC should use after-tax adjusted income');
 
+const invalidTaxData = {
+  ...data,
+  metrics: {
+    ...data.metrics,
+    medianTaxRate: { raw: 0.55, display: '55%', kind: 'percent' },
+  },
+};
+const sanitizedTax = api.applyAssumptions(invalidTaxData);
+assert.strictEqual(api.metricDisplay(sanitizedTax, 'medianTaxRate'), '20%', 'out-of-range tax rates should display as the default 20% rate');
+assertAlmostEqual(api.metricEntry(sanitizedTax, 'ev_adj_ebit').raw, 87.9464285714, 0.0001, 'out-of-range tax rates should use the default 20% rate in calculations');
+
 const calc = api.calcDefinitions(adjusted).ev_adj;
 assert.notStrictEqual(calc.divisor, '--', 'calc page denominator should register');
 assert.notStrictEqual(calc.result, '--', 'calc page result should register');

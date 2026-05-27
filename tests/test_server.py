@@ -1492,6 +1492,32 @@ class StatementPageBuilderTests(unittest.TestCase):
 
         self.assertEqual(self.handler._median_annual_tax_rate(annual_income), 0.25)
 
+    def test_median_annual_tax_rate_defaults_to_twenty_percent_when_outside_sane_bounds(self):
+        import pandas as pd
+
+        annual_income = pd.DataFrame(
+            {
+                pd.Timestamp("2025-12-31"): [50, 100],
+                pd.Timestamp("2024-12-31"): [45, 100],
+            },
+            index=["Tax Provision", "Pretax Income"],
+        )
+
+        self.assertEqual(self.handler._median_annual_tax_rate(annual_income), 0.20)
+
+    def test_median_annual_tax_rate_sanitizes_existing_tax_rate_row(self):
+        import pandas as pd
+
+        annual_income = pd.DataFrame(
+            {
+                pd.Timestamp("2025-12-31"): [0.45, 100],
+                pd.Timestamp("2024-12-31"): [0.50, 90],
+            },
+            index=["Tax Rate For Calcs", "Pretax Income"],
+        )
+
+        self.assertEqual(self.handler._median_annual_tax_rate(annual_income), 0.20)
+
     def test_median_annual_tax_rate_returns_none_without_profitable_years(self):
         import pandas as pd
 

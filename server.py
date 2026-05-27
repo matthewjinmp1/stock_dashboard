@@ -972,7 +972,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         rates = collect_rates(["Tax Rate For Calcs", "TaxRateForCalcs", "Tax Rate"])
         if rates:
-            return statistics.median(rates)
+            return self._sane_tax_rate_or_default(statistics.median(rates))
 
         tax_labels = ["Tax Provision", "TaxProvision"]
         pretax_labels = ["Pretax Income", "PretaxIncome", "Income Before Tax", "IncomeBeforeTax"]
@@ -994,7 +994,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             rate = tax_raw / pretax_raw
             if 0 <= rate <= 1:
                 rates.append(rate)
-        return statistics.median(rates) if rates else None
+        return self._sane_tax_rate_or_default(statistics.median(rates)) if rates else None
+
+    def _sane_tax_rate_or_default(self, rate):
+        if rate is None:
+            return None
+        try:
+            rate = float(rate)
+        except Exception:
+            return None
+        return rate if 0 <= rate <= 0.40 else 0.20
 
     def _bid_ask_metrics(self, info, quote_fx_rate=1.0, current_price_raw=None, market_cap_raw=None):
         try:

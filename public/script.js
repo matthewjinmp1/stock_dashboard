@@ -428,7 +428,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const margin = assumptions.margin ?? originalMargin;
         const cyGrowth = assumptions.cy_growth ?? (parsePercentValue(metricEntry(data, 'cy_growth')) || parsePercentValue(data.cy_growth));
         const nyGrowth = assumptions.ny_growth ?? (parsePercentValue(metricEntry(data, 'ny_growth')) || parsePercentValue(data.ny_growth));
-        const taxRate = assumptions.medianTaxRate ?? (parsePercentValue(metricEntry(data, 'medianTaxRate')) || parsePercentValue(data.medianTaxRate));
+        const sourceTaxRate = parsePercentValue(metricEntry(data, 'medianTaxRate')) || parsePercentValue(data.medianTaxRate);
+        const taxRate = assumptions.medianTaxRate ?? saneTaxRateOrDefault(sourceTaxRate);
         const afterTaxFactor = 1 - taxRate;
         const originalAdjRaw = parseMoney(metricEntry(data, 'adj_income')) || parseMoney(data.adj_income);
         const impliedRevenueRaw = originalAdjRaw && originalMargin
@@ -463,7 +464,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (assumptions.cy_growth !== undefined) setMetric(data, 'cy_growth', cyGrowth, formatPercentDecimal(cyGrowth), 'percent');
         if (assumptions.ny_growth !== undefined) setMetric(data, 'ny_growth', nyGrowth, formatPercentDecimal(nyGrowth), 'percent');
-        if (assumptions.medianTaxRate !== undefined) setMetric(data, 'medianTaxRate', taxRate, formatPercentDecimal(taxRate), 'percent');
+        if (assumptions.medianTaxRate !== undefined || (sourceTaxRate && sourceTaxRate !== taxRate)) setMetric(data, 'medianTaxRate', taxRate, formatPercentDecimal(taxRate), 'percent');
 
         const existingCyRevenueRaw = parseMoney(metricEntry(data, 'cy_revenue'));
         const existingNyRevenueRaw = parseMoney(metricEntry(data, 'ny_revenue'));
@@ -1432,6 +1433,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return raw && factor > 0 ? formatMoneyFront(raw * factor) : '--';
     }
 
+    function saneTaxRateOrDefault(rate) {
+        const raw = Number(rate);
+        if (!Number.isFinite(raw) || raw === 0) return raw || 0;
+        return raw >= 0 && raw <= 0.40 ? raw : 0.20;
+    }
+
     function discountedAfterTaxIncomeDisplay(value, taxRate, discountFactor) {
         const raw = parseMoney(value);
         const factor = 1 - taxRate;
@@ -1507,8 +1514,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const cyDiscount = forwardDiscountInfo(data, 'cy');
         const nyDiscount = forwardDiscountInfo(data, 'ny');
         const discountLabel = `${(FORWARD_DISCOUNT_RATE * 100).toFixed(0)}% Discount Rate`;
-        const taxRate = parsePercentValue(raw('medianTaxRate'));
-        const taxDisplay = val('medianTaxRate');
+        const sourceTaxRate = parsePercentValue(raw('medianTaxRate'));
+        const taxRate = saneTaxRateOrDefault(sourceTaxRate);
+        const taxDisplay = sourceTaxRate && sourceTaxRate !== taxRate ? formatPercentDecimal(taxRate) : val('medianTaxRate');
         const afterTaxAdjIncome = afterTaxIncomeDisplay(raw('adj_income'), taxRate);
         const cyAfterTaxAdjIncome = afterTaxIncomeDisplay(raw('cy_adj_inc'), taxRate);
         const nyAfterTaxAdjIncome = afterTaxIncomeDisplay(raw('ny_adj_inc'), taxRate);
