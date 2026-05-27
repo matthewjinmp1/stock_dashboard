@@ -1219,7 +1219,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <button class="mini-btn ${growthOn ? 'on blue' : ''}" data-statement="${statementKey}" data-toggle-ratio="growth" data-label="${row.label}">Growth</button>
             ${canMargin ? `<button class="mini-btn ${marginOn ? 'on green' : ''}" data-statement="${statementKey}" data-toggle-ratio="margin" data-label="${row.label}">Margin</button>` : ''}
         </div></td><td class="statement-label-cell">${row.label}</td>${(row.values || []).map(value => `<td>${formatStatementValue(value)}</td>`).join('')}</tr>`;
-        if (growthOn) html += ratioRow(growthRowLabel(), growthValues(row.values || [], periods));
+        if (growthOn) html += ratioRow(growthRowLabel(), growthValues(row.values || [], periods, statementKey));
         if (marginOn) html += ratioRow('Margin', marginValues(row, periods, displayStatement, statementKey));
         return html;
     }
@@ -1274,7 +1274,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${sign}${abs.toFixed(2).replace(/\.?0+$/, '')}`;
     }
 
-    function growthValues(values, periods) {
+    function growthValues(values, periods, statementKey = '') {
         const lookback = state.periodicity === 'quarterly' && state.quarterlyGrowthMode === 'qoq' ? 1 : state.periodicity === 'quarterly' ? 4 : 1;
         return values.map((value, idx) => {
             if (idx < lookback) return '--';
@@ -1304,8 +1304,29 @@ document.addEventListener('DOMContentLoaded', () => {
             const curr = parsePercentBase(value);
             if (!prev || prev === 0 || !curr || curr === 0) return '--';
             if ((prev < 0 && curr > 0) || (prev > 0 && curr < 0)) return '--';
-            return `${((Math.abs(curr) / Math.abs(prev) - 1) * 100).toFixed(1)}%`;
+            const years = annualTtmGrowthYears(periods[idx], periods[prevIdx], statementKey);
+            const growth = Math.pow(Math.abs(curr) / Math.abs(prev), 1 / years) - 1;
+            return `${(growth * 100).toFixed(1)}%`;
         });
+    }
+
+    function annualTtmGrowthYears(currentPeriod, previousPeriod, statementKey = '') {
+        if (state.periodicity !== 'annual' || String(currentPeriod || '').toUpperCase() !== 'TTM') return 1;
+        const ttmEnd = latestQuarterlyPeriodForStatement(statementKey);
+        const previousDate = Date.parse(previousPeriod);
+        const ttmEndDate = Date.parse(ttmEnd);
+        if (!ttmEnd || Number.isNaN(previousDate) || Number.isNaN(ttmEndDate) || ttmEndDate <= previousDate) return 1;
+        return Math.max((ttmEndDate - previousDate) / (365.25 * 24 * 60 * 60 * 1000), 0.01);
+    }
+
+    function latestQuarterlyPeriodForStatement(statementKey = '') {
+        const data = state.latest || {};
+        let statement = data.incomeStatement;
+        if (statementKey === 'cash') statement = data.cashFlowStatement;
+        else if (statementKey === 'balance') statement = data.balanceStatement;
+        else if (statementKey === 'ratios') statement = data.incomeStatement;
+        const periods = ((statement || {}).quarterly || {}).periods || [];
+        return periods.find((period) => !Number.isNaN(Date.parse(period))) || '';
     }
 
     function growthRowLabel() {

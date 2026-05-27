@@ -103,6 +103,17 @@ assert.deepStrictEqual(api.growthValues(quarterlyValues, quarterlyPeriods), ['--
 api.state.periodicity = 'annual';
 assert.deepStrictEqual(api.growthValues(['-7.62B', '-7.95B', '-8.36B', '-8.78B', '-11B'], []), ['--', '4.3%', '5.2%', '5.0%', '25.3%'], 'annual growth should compare magnitude for rows that stay negative');
 assert.deepStrictEqual(api.growthValues(['-100M', '50M'], []), ['--', '--'], 'annual growth should not show misleading percentages when signs flip');
+api.state.latest = {
+  incomeStatement: {
+    quarterly: { periods: ['2026-06-30', '2026-03-31'] },
+  },
+};
+assert.deepStrictEqual(
+  api.growthValues(['100', '120', '132'], ['2024-12-31', '2025-12-31', 'TTM'], 'income'),
+  ['--', '20.0%', '21.2%'],
+  'annual TTM growth should annualize over the fraction of a year between last fiscal year end and the TTM end date',
+);
+api.state.latest = null;
 
 const ratiosData = {
   incomeStatement: {
