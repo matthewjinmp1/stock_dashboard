@@ -758,6 +758,24 @@ button:active {
     box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
 }
 
+.statement-search input::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 1.65rem;
+    height: 1.65rem;
+    margin-left: 0.5rem;
+    border-radius: 999px;
+    cursor: pointer;
+    background:
+        linear-gradient(45deg, transparent 43%, rgba(147, 197, 253, 0.9) 45%, rgba(147, 197, 253, 0.9) 55%, transparent 57%),
+        linear-gradient(-45deg, transparent 43%, rgba(147, 197, 253, 0.9) 45%, rgba(147, 197, 253, 0.9) 55%, transparent 57%);
+    background-color: rgba(30, 41, 59, 0.24);
+}
+
+.statement-search input::-webkit-search-cancel-button:hover {
+    background-color: rgba(56, 189, 248, 0.18);
+}
+
 .statement-tabs {
     display: flex;
     flex-wrap: wrap;
