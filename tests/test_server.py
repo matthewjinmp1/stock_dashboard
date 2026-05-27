@@ -1396,6 +1396,52 @@ class StatementPageBuilderTests(unittest.TestCase):
 
         self.assertEqual(adjusted["values"], ["10B", "8B"])
 
+    def test_add_shareholder_return_sums_dividends_and_buybacks_as_positive_values(self):
+        cash_flow = {
+            "annual": {
+                "periods": ["TTM", "2025-12-31", "2024-12-31"],
+                "rows": [
+                    {"label": "Repurchase Of Capital Stock", "values": ["-8B", "-7B", "--"]},
+                    {"label": "Cash Dividends Paid", "values": ["-3B", "-2.8B", "-2.5B"]},
+                ],
+            },
+            "quarterly": {
+                "periods": ["2026-03-31"],
+                "rows": [
+                    {"label": "Repurchase Of Capital Stock", "values": ["-2.2B"]},
+                    {"label": "Cash Dividends Paid", "values": ["-800M"]},
+                ],
+            },
+        }
+
+        enriched = self.handler._add_shareholder_return(cash_flow)
+        annual_rows = enriched["annual"]["rows"]
+        annual_labels = [row["label"] for row in annual_rows]
+        shareholder_return_annual = next(row for row in annual_rows if row["label"] == "Shareholder Return")
+        shareholder_return_quarterly = next(row for row in enriched["quarterly"]["rows"] if row["label"] == "Shareholder Return")
+
+        self.assertEqual(annual_labels[annual_labels.index("Cash Dividends Paid") + 1], "Shareholder Return")
+        self.assertEqual(shareholder_return_annual["values"], ["11B", "9.8B", "2.5B"])
+        self.assertEqual(shareholder_return_quarterly["values"], ["3B"])
+
+    def test_add_shareholder_return_does_not_duplicate_existing_row(self):
+        cash_flow = {
+            "annual": {
+                "periods": ["TTM"],
+                "rows": [
+                    {"label": "Repurchase Of Capital Stock", "values": ["-8B"]},
+                    {"label": "Cash Dividends Paid", "values": ["-3B"]},
+                    {"label": "Shareholder Return", "values": ["11B"]},
+                ],
+            },
+        }
+
+        enriched = self.handler._add_shareholder_return(cash_flow)
+        shareholder_return_rows = [row for row in enriched["annual"]["rows"] if row["label"] == "Shareholder Return"]
+
+        self.assertEqual(len(shareholder_return_rows), 1)
+        self.assertEqual(shareholder_return_rows[0]["values"], ["11B"])
+
     def test_add_adjusted_net_income_taxes_adjusted_operating_income_by_period(self):
         income = {
             "annual": {

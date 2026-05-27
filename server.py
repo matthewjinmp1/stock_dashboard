@@ -27,7 +27,7 @@ PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 ENABLE_DATAROMA_FETCHES = os.environ.get("ENABLE_DATAROMA_FETCHES", "1") != "0"
-PAYLOAD_VERSION = 35
+PAYLOAD_VERSION = 36
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -498,6 +498,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ],
             },
         }
+        cash_flow_statement = self._add_shareholder_return(cash_flow_statement)
         income_statement = self._add_adjusted_operating_income(income_statement, cash_flow_statement)
         income_statement = self._add_tax_rate(income_statement)
         income_statement = self._add_adjusted_net_income(income_statement)
@@ -947,6 +948,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _add_adjusted_operating_income(self, income_statement, cash_flow_statement, formatter=None):
         return statements.add_adjusted_operating_income(income_statement, cash_flow_statement, formatter or self._format_money)
 
+    def _add_shareholder_return(self, cash_flow_statement, formatter=None):
+        return statements.add_shareholder_return(cash_flow_statement, formatter or self._format_money)
+
     def _add_adjusted_net_income(self, income_statement, formatter=None):
         return statements.add_adjusted_net_income(income_statement, formatter or self._format_money)
 
@@ -1300,6 +1304,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "annual": self._df_to_statement(annual_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES, quarterly_df=quarterly_cashflow),
                 "quarterly": self._df_to_quarterly_statement(quarterly_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES),
             }
+            cash_flow_statement = self._add_shareholder_return(cash_flow_statement)
             income_statement = self._add_adjusted_operating_income(income_statement, cash_flow_statement)
             income_statement = self._add_tax_rate(income_statement)
             income_statement = self._add_adjusted_net_income(income_statement)

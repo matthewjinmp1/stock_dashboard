@@ -249,6 +249,48 @@ def _period_value(statement, row, period):
     return parse_money_to_raw(values[idx])
 
 
+def add_shareholder_return(cash_flow_statement, formatter=None):
+    formatter = formatter or format_money
+    cash_flow_statement = cash_flow_statement or {}
+
+    for period_key in ("annual", "quarterly"):
+        cash_flow = cash_flow_statement.get(period_key)
+        if not isinstance(cash_flow, dict):
+            continue
+        rows = cash_flow.get("rows") or []
+        if any(row.get("label") == "Shareholder Return" for row in rows):
+            continue
+
+        buyback_row = _row_by_label(cash_flow, [
+            "Repurchase Of Capital Stock",
+            "Common Stock Payments",
+            "Net Common Stock Issuance",
+        ])
+        dividend_row = _row_by_label(cash_flow, [
+            "Cash Dividends Paid",
+            "Common Stock Dividend Paid",
+        ])
+        if not buyback_row and not dividend_row:
+            continue
+
+        values = []
+        for period in cash_flow.get("periods") or []:
+            buybacks_raw = _period_value(cash_flow, buyback_row, period)
+            dividends_raw = _period_value(cash_flow, dividend_row, period)
+            if buybacks_raw is None and dividends_raw is None:
+                values.append("--")
+                continue
+            shareholder_return_raw = abs(buybacks_raw or 0) + abs(dividends_raw or 0)
+            values.append(formatter(shareholder_return_raw))
+
+        insert_anchor = dividend_row or buyback_row
+        insert_idx = rows.index(insert_anchor) + 1
+        rows.insert(insert_idx, {"label": "Shareholder Return", "values": values})
+        cash_flow["rows"] = rows
+
+    return cash_flow_statement
+
+
 def add_adjusted_operating_income(income_statement, cash_flow_statement, formatter=None):
     formatter = formatter or format_money
     income_statement = income_statement or {}
