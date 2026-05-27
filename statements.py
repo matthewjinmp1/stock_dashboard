@@ -298,6 +298,54 @@ def add_adjusted_operating_income(income_statement, cash_flow_statement, formatt
     return income_statement
 
 
+def _parse_tax_rate(value):
+    if value in (None, "", "--"):
+        return None
+    try:
+        if isinstance(value, str) and "%" in value:
+            return float(value.replace("%", "").replace(",", "").strip()) / 100
+        rate = float(str(value).replace(",", "").strip())
+        return rate / 100 if rate > 1 else rate
+    except Exception:
+        return None
+
+
+def _sane_statement_tax_rate(value):
+    rate = _parse_tax_rate(value)
+    return rate if rate is not None and 0 <= rate <= 0.40 else 0.20
+
+
+def add_adjusted_net_income(income_statement, formatter=None):
+    formatter = formatter or format_money
+    income_statement = income_statement or {}
+
+    for period_key in ("annual", "quarterly"):
+        income = income_statement.get(period_key)
+        if not isinstance(income, dict):
+            continue
+        rows = income.get("rows") or []
+        adjusted_op_row = _row_by_label(income, ["Adjusted Operating Income"])
+        if not adjusted_op_row or any(row.get("label") == "Adjusted Net Income" for row in rows):
+            continue
+        tax_rate_row = _row_by_label(income, ["Tax Rate", "Tax Rate For Calcs"])
+
+        values = []
+        for idx, period in enumerate(income.get("periods") or []):
+            adjusted_op_raw = _period_value(income, adjusted_op_row, period)
+            if adjusted_op_raw is None:
+                values.append("--")
+                continue
+            tax_rate_value = (tax_rate_row.get("values") or [])[idx] if tax_rate_row else None
+            tax_rate = _sane_statement_tax_rate(tax_rate_value)
+            values.append(formatter(adjusted_op_raw * (1 - tax_rate)))
+
+        insert_idx = rows.index(adjusted_op_row) + 1
+        rows.insert(insert_idx, {"label": "Adjusted Net Income", "values": values})
+        income["rows"] = rows
+
+    return income_statement
+
+
 def add_tax_rate(income_statement, formatter=None):
     formatter = formatter or format_percent
     income_statement = income_statement or {}

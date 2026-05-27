@@ -1396,6 +1396,53 @@ class StatementPageBuilderTests(unittest.TestCase):
 
         self.assertEqual(adjusted["values"], ["10B", "8B"])
 
+    def test_add_adjusted_net_income_taxes_adjusted_operating_income_by_period(self):
+        income = {
+            "annual": {
+                "periods": ["TTM", "2025-12-31", "2024-12-31"],
+                "rows": [
+                    {"label": "Operating Income", "values": ["30B", "20B", "10B"]},
+                    {"label": "Adjusted Operating Income", "values": ["35B", "20B", "10B"]},
+                    {"label": "Tax Rate", "values": ["21%", "50%", "--"]},
+                ],
+            },
+            "quarterly": {
+                "periods": ["2026-03-31"],
+                "rows": [
+                    {"label": "Adjusted Operating Income", "values": ["6B"]},
+                    {"label": "Tax Rate", "values": ["25%"]},
+                ],
+            },
+        }
+
+        enriched = self.handler._add_adjusted_net_income(income)
+        annual_rows = enriched["annual"]["rows"]
+        annual_labels = [row["label"] for row in annual_rows]
+        adjusted_net_annual = next(row for row in annual_rows if row["label"] == "Adjusted Net Income")
+        adjusted_net_quarterly = next(row for row in enriched["quarterly"]["rows"] if row["label"] == "Adjusted Net Income")
+
+        self.assertEqual(annual_labels[annual_labels.index("Adjusted Operating Income") + 1], "Adjusted Net Income")
+        self.assertEqual(adjusted_net_annual["values"], ["27.6B", "16B", "8B"])
+        self.assertEqual(adjusted_net_quarterly["values"], ["4.5B"])
+
+    def test_add_adjusted_net_income_does_not_duplicate_existing_row(self):
+        income = {
+            "annual": {
+                "periods": ["TTM"],
+                "rows": [
+                    {"label": "Adjusted Operating Income", "values": ["10B"]},
+                    {"label": "Adjusted Net Income", "values": ["8B"]},
+                    {"label": "Tax Rate", "values": ["20%"]},
+                ],
+            }
+        }
+
+        enriched = self.handler._add_adjusted_net_income(income)
+        adjusted_net_rows = [row for row in enriched["annual"]["rows"] if row["label"] == "Adjusted Net Income"]
+
+        self.assertEqual(len(adjusted_net_rows), 1)
+        self.assertEqual(adjusted_net_rows[0]["values"], ["8B"])
+
     def test_add_tax_rate_uses_tax_provision_over_pretax_income(self):
         income = {
             "annual": {
