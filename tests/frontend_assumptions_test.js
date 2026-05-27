@@ -101,6 +101,8 @@ api.state.quarterlyGrowthMode = 'qoq';
 assert.strictEqual(api.growthRowLabel(), 'QoQ Growth', 'quarterly QoQ mode should label growth rows');
 assert.deepStrictEqual(api.growthValues(quarterlyValues, quarterlyPeriods), ['--', '10.0%', '9.1%', '8.3%', '15.4%'], 'quarterly QoQ growth should compare with the prior quarter');
 api.state.periodicity = 'annual';
+assert.deepStrictEqual(api.growthValues(['-7.62B', '-7.95B', '-8.36B', '-8.78B', '-11B'], []), ['--', '4.3%', '5.2%', '5.0%', '25.3%'], 'annual growth should compare magnitude for rows that stay negative');
+assert.deepStrictEqual(api.growthValues(['-100M', '50M'], []), ['--', '--'], 'annual growth should not show misleading percentages when signs flip');
 
 const ratiosData = {
   incomeStatement: {

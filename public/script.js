@@ -1302,7 +1302,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (prevIdx < 0) return '--';
             const prev = parsePercentBase(values[prevIdx]);
             const curr = parsePercentBase(value);
-            return (prev && prev !== 0) ? `${((curr / Math.abs(prev) - 1) * 100).toFixed(1)}%` : '--';
+            if (!prev || prev === 0 || !curr || curr === 0) return '--';
+            if ((prev < 0 && curr > 0) || (prev > 0 && curr < 0)) return '--';
+            return `${((Math.abs(curr) / Math.abs(prev) - 1) * 100).toFixed(1)}%`;
         });
     }
 
