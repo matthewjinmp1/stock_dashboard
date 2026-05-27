@@ -1049,6 +1049,27 @@ document.addEventListener('DOMContentLoaded', () => {
                         return investedCapital ? formatPercentDecimal(afterTaxOperatingIncome / investedCapital) : '--';
                     }),
                 },
+                {
+                    label: 'Adj ROIC',
+                    values: periods.map((period) => {
+                        const investedCapitalPeriod = String(period || '').toUpperCase() === 'TTM' ? firstAvailablePeriod(balance, ['MRQ', 'LATEST', 'TTM']) : period;
+                        const adjustedNetIncome = statementValueForPeriod(income, ['Adjusted Net Income'], period);
+                        const totalDebt = statementValueForPeriod(balance, ['Total Debt'], investedCapitalPeriod);
+                        const equity = statementValueForPeriod(balance, [
+                            'Stockholders Equity',
+                            'Common Stock Equity',
+                            'Total Equity Gross Minority Interest',
+                        ], investedCapitalPeriod);
+                        const cash = statementValueForPeriod(balance, [
+                            'Cash, Equivalents & Short Term Investments',
+                            'Cash And Cash Equivalents',
+                            'Cash & Cash Equivalents',
+                            'Cash Cash Equivalents And Short Term Investments',
+                        ], investedCapitalPeriod);
+                        const investedCapital = parseMoney(totalDebt) + parseMoney(equity) - parseMoney(cash);
+                        return investedCapital ? formatPercentDecimal(parseMoney(adjustedNetIncome) / investedCapital) : '--';
+                    }),
+                },
             ],
         };
     }
