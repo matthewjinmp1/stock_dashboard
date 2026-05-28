@@ -312,9 +312,11 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>`;
     }
 
-    function metricGroup(title, items) {
+    function metricGroup(title, items, calcType = '') {
+        const link = calcType ? ' metric-title-link' : '';
+        const calcAttr = calcType ? ` data-calc="${calcType}"` : '';
         return `<section class="metric-group metric-count-${items.length}">
-            <h3>${title}</h3>
+            <h3 class="${link.trim()}"${calcAttr}>${title}</h3>
             <div class="metric-group-grid">${items.join('')}</div>
         </section>`;
     }
@@ -335,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('3Y Growth', val('gp_3y_growth') || '--', 'gp_3y_growth'),
                 metric('CY Growth', val('cy_growth'), '', 'cy_growth'),
                 metric('NY Growth', val('ny_growth'), '', 'ny_growth'),
-            ]),
+            ], 'growth_revenue'),
             metricGroup('Valuation', [
                 metric(`${data.valuationPrefix || 'EV'}/Adj Inc`, val('ev_adj_ebit'), 'ev_adj'),
                 metric(`${data.valuationPrefix || 'EV'}/CY Adj Inc`, val('ev_cy_ebit'), 'ev_cy'),
@@ -1607,6 +1609,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const cyAdjustedNetIncomeLabel = 'CY Adjusted Net Income';
         const nyAdjustedNetIncomeLabel = 'NY Adjusted Net Income';
         return {
+            growth_revenue: {
+                title: 'Revenue Growth',
+                numeratorLabel: 'Last Year Revenue',
+                numerator: cyRevenueBaseDisplay,
+                divisorLabel: 'NY Revenue',
+                divisor: val('ny_revenue'),
+                resultLabel: 'Revenue Bridge',
+                result: `${cyRevenueBaseDisplay} → ${val('cy_revenue')} → ${val('ny_revenue')}`,
+                rows: formulaValue('Last Year Revenue x (1 + Growth Rate)', [
+                    ['Last Year Revenue', cyRevenueBaseDisplay],
+                    ['CY Growth', val('cy_growth')],
+                    ['CY Revenue', val('cy_revenue')],
+                    ['NY Growth', val('ny_growth')],
+                    ['NY Revenue', val('ny_revenue')],
+                ]),
+            },
             ev_adj: {
                 title: `${data.valuationPrefix || 'EV'} / ${adjustedNetIncomeLabel}`,
                 numeratorLabel: valuationLabel,

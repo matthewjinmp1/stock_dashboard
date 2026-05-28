@@ -382,6 +382,12 @@ const cyCalc = api.calcDefinitions(adjusted).ev_cy;
 assert(cyCalc.rows.some(([label]) => label === '10% Discount Rate'), 'forward valuation calc should show discount rate');
 assert(cyCalc.rows.some(([label, value]) => label === 'Discounted CY Adjusted Net Income' && value !== '--'), 'forward valuation calc should show discounted denominator');
 
+const growthRevenueCalc = api.calcDefinitions(adjusted).growth_revenue;
+assert.strictEqual(growthRevenueCalc.title, 'Revenue Growth', 'growth section should link to a revenue bridge calc');
+assert(growthRevenueCalc.rows.some(([label, value]) => label === 'Last Year Revenue' && value === '950M'), 'growth calc should include last year revenue');
+assert(growthRevenueCalc.rows.some(([label, value]) => label === 'CY Revenue' && value !== '--'), 'growth calc should include CY revenue');
+assert(growthRevenueCalc.rows.some(([label, value]) => label === 'NY Revenue' && value !== '--'), 'growth calc should include NY revenue');
+
 const blankStructuredData = {
   ...data,
   ticker: 'LEGACY',
