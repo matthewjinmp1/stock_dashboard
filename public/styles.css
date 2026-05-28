@@ -446,6 +446,7 @@ button:active {
 }
 
 .metric-title-link {
+    display: inline-block;
     border-bottom: 2px dashed rgba(148, 163, 184, 0.45);
     cursor: pointer;
 }
