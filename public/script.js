@@ -1326,6 +1326,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!prev || prev === 0 || !curr || curr === 0) return '--';
             if ((prev < 0 && curr > 0) || (prev > 0 && curr < 0)) return '--';
             const years = annualTtmGrowthYears(periods[idx], periods[prevIdx], statementKey);
+            if (!years || years <= 0) return '--';
             const growth = Math.pow(Math.abs(curr) / Math.abs(prev), 1 / years) - 1;
             return `${(growth * 100).toFixed(1)}%`;
         });
@@ -1336,7 +1337,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const ttmEnd = latestQuarterlyPeriodForStatement(statementKey);
         const previousDate = Date.parse(previousPeriod);
         const ttmEndDate = Date.parse(ttmEnd);
-        if (!ttmEnd || Number.isNaN(previousDate) || Number.isNaN(ttmEndDate) || ttmEndDate <= previousDate) return 1;
+        if (!ttmEnd || Number.isNaN(previousDate) || Number.isNaN(ttmEndDate)) return 1;
+        if (ttmEndDate <= previousDate) return 0;
         return Math.max((ttmEndDate - previousDate) / (365.25 * 24 * 60 * 60 * 1000), 0.01);
     }
 

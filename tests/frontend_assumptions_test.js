@@ -113,6 +113,16 @@ assert.deepStrictEqual(
   ['--', '20.0%', '21.2%'],
   'annual TTM growth should annualize over the fraction of a year between last fiscal year end and the TTM end date',
 );
+api.state.latest = {
+  incomeStatement: {
+    quarterly: { periods: ['2025-12-31', '2025-09-30'] },
+  },
+};
+assert.deepStrictEqual(
+  api.growthValues(['100', '120', '120'], ['2024-12-31', '2025-12-31', 'TTM'], 'income'),
+  ['--', '20.0%', '--'],
+  'annual TTM growth should be blank when TTM ends at the latest annual period',
+);
 api.state.latest = null;
 
 api.state.loadedTicker = 'AAPL';
