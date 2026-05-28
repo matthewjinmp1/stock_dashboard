@@ -27,7 +27,7 @@ PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 ENABLE_DATAROMA_FETCHES = os.environ.get("ENABLE_DATAROMA_FETCHES", "1") != "0"
-PAYLOAD_VERSION = 37
+PAYLOAD_VERSION = 38
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -1625,7 +1625,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "inventory": self._format_money(inventory_raw),
                 "accounts_payable": self._format_money(accounts_payable_raw),
                 "financial_currency": financial_currency,
-                "usd_fx_rate": quote_fx_rate,
+                "usd_fx_rate": financial_fx_rate,
                 "company_name": company_name,
                 "income_statement": income_statement,
                 "balance_statement": balance_statement,
