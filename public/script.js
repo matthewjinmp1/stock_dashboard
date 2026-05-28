@@ -341,9 +341,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric(`${data.valuationPrefix || 'EV'}/CY Adj Inc`, val('ev_cy_ebit'), 'ev_cy'),
                 metric(`${data.valuationPrefix || 'EV'}/NY Adj Inc`, val('ev_ny_ebit'), 'ev_ny'),
             ]),
-            metricGroup('Leverage', [
-                metric('Net Debt / Adj Inc', val('netDebtAdjIncome'), 'net_debt_adj_income'),
-            ]),
             metricGroup('Returns', [
                 metric('ROGPPE', val('adjEbitGrossPpe'), 'adj_ebit_gross_ppe'),
                 metric('ROC', val('roc'), 'roc'),
@@ -382,6 +379,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('P/LY EPS', val('priceCurrentEps')),
                 metric('P/CY EPS', val('priceCyEps')),
                 metric('P/NY EPS', val('priceNyEps')),
+            ]),
+            metricGroup('Leverage', [
+                metric('Net Debt / Adj Inc', val('netDebtAdjIncome'), 'net_debt_adj_income'),
             ]),
             renderDataromaCards(data),
             renderAnalystCards(data),
