@@ -115,6 +115,28 @@ assert.deepStrictEqual(
 );
 api.state.latest = null;
 
+api.state.loadedTicker = 'AAPL';
+api.state.periodicity = 'quarterly';
+api.state.statementTab = 'income';
+api.state.quarterlyGrowthMode = 'qoq';
+api.state.statementSearch = 'rev';
+api.resetStatementDefaultsForTicker({ ticker: 'MSFT' });
+assert.strictEqual(api.state.loadedTicker, 'MSFT', 'new tickers should become the loaded statement ticker');
+assert.strictEqual(api.state.periodicity, 'annual', 'new tickers should default statements to annual');
+assert.strictEqual(api.state.statementTab, 'starred', 'new tickers should default statements to starred');
+assert.strictEqual(api.state.quarterlyGrowthMode, 'yoy', 'new tickers should reset quarterly growth mode');
+assert.strictEqual(api.state.statementSearch, '', 'new tickers should clear statement search');
+
+api.state.periodicity = 'quarterly';
+api.state.statementTab = 'cash';
+api.state.quarterlyGrowthMode = 'qoq';
+api.state.statementSearch = 'cash';
+api.resetStatementDefaultsForTicker({ ticker: 'MSFT' });
+assert.strictEqual(api.state.periodicity, 'quarterly', 'same-ticker refreshes should keep statement periodicity');
+assert.strictEqual(api.state.statementTab, 'cash', 'same-ticker refreshes should keep statement tab');
+assert.strictEqual(api.state.quarterlyGrowthMode, 'qoq', 'same-ticker refreshes should keep quarterly growth mode');
+assert.strictEqual(api.state.statementSearch, 'cash', 'same-ticker refreshes should keep active statement search');
+
 const ratiosData = {
   incomeStatement: {
     annual: {

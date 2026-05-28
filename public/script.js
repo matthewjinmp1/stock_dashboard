@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
         groups: [],
         sort: {},
         scanRequestId: 0,
+        loadedTicker: null,
     };
     let activeFetchTimer = null;
     localStorage.removeItem('stock_assumptions');
@@ -640,8 +641,22 @@ document.addEventListener('DOMContentLoaded', () => {
         return data;
     }
 
+    function resetStatementDefaultsForTicker(data, fallbackTicker) {
+        const nextTicker = String(data?.ticker || fallbackTicker || '').toUpperCase();
+        if (!nextTicker || nextTicker === state.loadedTicker) return;
+        state.loadedTicker = nextTicker;
+        state.periodicity = 'annual';
+        state.statementTab = 'starred';
+        state.quarterlyGrowthMode = 'yoy';
+        state.statementSearch = '';
+        localStorage.setItem('stock_periodicity', state.periodicity);
+        localStorage.setItem('stock_statement_tab', state.statementTab);
+        localStorage.setItem('stock_quarterly_growth_mode', state.quarterlyGrowthMode);
+    }
+
     function renderTickerResult(data, fallbackTicker) {
         const ticker = data.ticker || fallbackTicker;
+        resetStatementDefaultsForTicker(data, fallbackTicker);
         state.latest = data;
         $('result-stats').classList.remove('hidden');
         $('result-ticker').textContent = ticker;
@@ -1898,6 +1913,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startFetchTimer,
         stopFetchTimer,
         resetAssumption,
+        resetStatementDefaultsForTicker,
     };
 
     window.removeTicker = (ticker) => {
