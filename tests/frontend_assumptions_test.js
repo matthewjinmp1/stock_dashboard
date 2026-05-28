@@ -281,6 +281,28 @@ assertAlmostEqual(api.metricEntry(adjusted, 'ev_adj_ebit').raw, 87.9464285714, 0
 assertAlmostEqual(api.metricEntry(adjusted, 'afterTaxAdjIncome').raw, 224_000_000, 1, 'edited margin should compute after-tax adjusted income');
 assertAlmostEqual(api.metricEntry(adjusted, 'adjEbitGrossPpe').raw, 0.224, 0.0001, 'ROGPPE should use after-tax adjusted income');
 assertAlmostEqual(api.metricEntry(adjusted, 'roc').raw, 0.224, 0.0001, 'ROC should use after-tax adjusted income');
+assert.strictEqual(api.metricDisplay(adjusted, 'netDebtAdjIncome'), '0', 'net cash or no debt should show zero leverage');
+
+const adjustedWithDebt = api.applyAssumptions({
+  ...data,
+  metrics: {
+    ...data.metrics,
+    netCash: { raw: -2_240_000_000, display: '-2.24B', kind: 'money' },
+  },
+});
+assertAlmostEqual(api.metricEntry(adjustedWithDebt, 'netDebtAdjIncome').raw, 10, 0.0001, 'net debt to adjusted income should use positive net debt over adjusted net income');
+assert.strictEqual(api.metricDisplay(adjustedWithDebt, 'netDebtAdjIncome'), '10', 'net debt to adjusted income should display as a ratio');
+
+delete api.state.assumptions.NEG;
+const negativeAdjustedIncomeWithDebt = api.applyAssumptions({
+  ...data,
+  metrics: {
+    ...data.metrics,
+    netCash: { raw: -100_000_000, display: '-100M', kind: 'money' },
+  },
+});
+assert.strictEqual(api.metricDisplay(negativeAdjustedIncomeWithDebt, 'netDebtAdjIncome'), '∞', 'positive net debt with negative adjusted net income should show infinity');
+api.state.assumptions.NEG = { margin: 0.28 };
 
 const invalidTaxData = {
   ...data,
@@ -325,6 +347,10 @@ const netDebtCalc = api.calcDefinitions(netDebtData).net_cash;
 assert.strictEqual(netDebtCalc.title, 'Net Debt', 'net cash calc should relabel negative values as net debt');
 assert.strictEqual(netDebtCalc.result, '2.3B', 'net cash calc should show net debt as a positive amount');
 assert(netDebtCalc.rows.some(([label, value]) => label === 'Net Debt' && value === '2.3B'), 'net debt calc should include the positive net debt result');
+const leverageCalc = api.calcDefinitions(adjustedWithDebt).net_debt_adj_income;
+assert.strictEqual(leverageCalc.numerator, '2.2B', 'leverage calc should use positive net debt');
+assert.strictEqual(leverageCalc.divisor, '224M', 'leverage calc should use adjusted net income');
+assert.strictEqual(leverageCalc.result, '10', 'leverage calc should show net debt over adjusted net income');
 
 const deLikeValuationData = {
   ...data,

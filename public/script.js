@@ -341,6 +341,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric(`${data.valuationPrefix || 'EV'}/CY Adj Inc`, val('ev_cy_ebit'), 'ev_cy'),
                 metric(`${data.valuationPrefix || 'EV'}/NY Adj Inc`, val('ev_ny_ebit'), 'ev_ny'),
             ]),
+            metricGroup('Leverage', [
+                metric('Net Debt / Adj Inc', val('netDebtAdjIncome'), 'net_debt_adj_income'),
+            ]),
             metricGroup('Returns', [
                 metric('ROGPPE', val('adjEbitGrossPpe'), 'adj_ebit_gross_ppe'),
                 metric('ROC', val('roc'), 'roc'),
@@ -453,6 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const baseAdjRaw = originalAdjRaw || (revenueRaw * margin);
         const pretaxAdjRaw = assumptions.margin !== undefined ? revenueRaw * margin : baseAdjRaw;
         const afterTaxAdjRaw = pretaxAdjRaw && afterTaxFactor > 0 ? pretaxAdjRaw * afterTaxFactor : 0;
+        setLeverageMetric(data, afterTaxAdjRaw);
 
         if (assumptions.margin !== undefined) {
             setMetric(data, 'margin', margin, formatPercentDecimal(margin), 'percent');
@@ -1531,6 +1535,24 @@ document.addEventListener('DOMContentLoaded', () => {
         return epsRaw && dilutedSharesRaw ? formatMoneyFront(epsRaw * dilutedSharesRaw) : '--';
     }
 
+    function netDebtRaw(data) {
+        const netCashRaw = parseMoney(metricEntry(data, 'netCash'));
+        return netCashRaw < 0 ? Math.abs(netCashRaw) : 0;
+    }
+
+    function leverageMetricValue(data, adjustedNetIncomeRaw) {
+        const debtRaw = netDebtRaw(data);
+        if (debtRaw <= 0) return { raw: 0, display: '0' };
+        if (!Number.isFinite(adjustedNetIncomeRaw) || adjustedNetIncomeRaw <= 0) return { raw: null, display: '∞' };
+        const raw = debtRaw / adjustedNetIncomeRaw;
+        return { raw, display: formatRatio(raw) };
+    }
+
+    function setLeverageMetric(data, adjustedNetIncomeRaw) {
+        const leverage = leverageMetricValue(data, adjustedNetIncomeRaw);
+        setMetric(data, 'netDebtAdjIncome', leverage.raw, leverage.display, 'ratio');
+    }
+
     function netCashPresentation(data) {
         const entry = metricEntry(data, 'netCash');
         let rawValue = NaN;
@@ -1558,6 +1580,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const val = (key) => metricDisplay(data, key);
         const raw = (key) => metricEntry(data, key);
         const netCash = netCashPresentation(data);
+        const netDebt = netDebtRaw(data);
+        const netDebtDisplay = netDebt ? formatMoneyFront(netDebt) : '0';
         const cashBucket = latestStatementValue((data.balanceStatement || {}).annual, [
             'Cash, Equivalents & Short Term Investments',
             'Cash & Short Term Investments',
@@ -1740,6 +1764,23 @@ document.addEventListener('DOMContentLoaded', () => {
                         ? [['Total Debt', totalDebt], ['Cash & Short Term Investments', cashBucket]]
                         : [['Cash & Short Term Investments', cashBucket], ['Total Debt', totalDebt]]),
                     [netCash.label, netCash.display],
+                ]),
+            },
+            net_debt_adj_income: {
+                title: 'Net Debt / Adjusted Net Income',
+                numeratorLabel: 'Net Debt',
+                numerator: netDebtDisplay,
+                divisorLabel: adjustedNetIncomeLabel,
+                divisor: afterTaxAdjIncome,
+                resultLabel: 'Net Debt / Adjusted Net Income',
+                result: val('netDebtAdjIncome'),
+                rows: formulaValue('max(Total Debt - Cash & Short Term Investments, 0) / Adjusted Net Income', [
+                    ['Net Cash', raw('netCash') ? val('netCash') : '--'],
+                    ['Net Debt', netDebtDisplay],
+                    ['Adj Op Inc', val('adj_income')],
+                    ['Median Tax Rate', taxDisplay],
+                    [adjustedNetIncomeLabel, afterTaxAdjIncome],
+                    ['Net Debt / Adjusted Net Income', val('netDebtAdjIncome')],
                 ]),
             },
             roc: {
