@@ -1325,6 +1325,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const curr = parsePercentBase(value);
             if (!prev || prev === 0 || !curr || curr === 0) return '--';
             if ((prev < 0 && curr > 0) || (prev > 0 && curr < 0)) return '--';
+            if (state.periodicity === 'annual' && String(periods[idx] || '').toUpperCase() === 'TTM' && Math.abs(curr) === Math.abs(prev)) return '--';
             const years = annualTtmGrowthYears(periods[idx], periods[prevIdx], statementKey);
             if (!years || years <= 0) return '--';
             const growth = Math.pow(Math.abs(curr) / Math.abs(prev), 1 / years) - 1;

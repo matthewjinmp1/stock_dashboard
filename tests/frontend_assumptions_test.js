@@ -123,6 +123,16 @@ assert.deepStrictEqual(
   ['--', '20.0%', '--'],
   'annual TTM growth should be blank when TTM ends at the latest annual period',
 );
+api.state.latest = {
+  incomeStatement: {
+    quarterly: { periods: ['2026-03-31', '2025-12-31'] },
+  },
+};
+assert.deepStrictEqual(
+  api.growthValues(['100', '120', '120'], ['2024-12-31', '2025-12-31', 'TTM'], 'income'),
+  ['--', '20.0%', '--'],
+  'annual TTM growth should be blank when the TTM value is the same as the latest annual value',
+);
 api.state.latest = null;
 
 api.state.loadedTicker = 'AAPL';
