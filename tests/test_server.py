@@ -1489,6 +1489,52 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(len(adjusted_net_rows), 1)
         self.assertEqual(adjusted_net_rows[0]["values"], ["8B"])
 
+    def test_add_adjusted_eps_uses_adjusted_net_income_over_diluted_shares(self):
+        income = {
+            "annual": {
+                "periods": ["TTM", "2025-12-31", "2024-12-31"],
+                "rows": [
+                    {"label": "Adjusted Net Income", "values": ["27.6B", "16B", "--"]},
+                    {"label": "Diluted Average Shares", "values": ["2.3B", "2B", "2B"]},
+                ],
+            },
+            "quarterly": {
+                "periods": ["2026-03-31"],
+                "rows": [
+                    {"label": "Adjusted Net Income", "values": ["4.5B"]},
+                    {"label": "Diluted Average Shares", "values": ["500M"]},
+                ],
+            },
+        }
+
+        enriched = self.handler._add_adjusted_eps(income)
+        annual_rows = enriched["annual"]["rows"]
+        annual_labels = [row["label"] for row in annual_rows]
+        adjusted_eps_annual = next(row for row in annual_rows if row["label"] == "Adjusted EPS")
+        adjusted_eps_quarterly = next(row for row in enriched["quarterly"]["rows"] if row["label"] == "Adjusted EPS")
+
+        self.assertEqual(annual_labels[annual_labels.index("Adjusted Net Income") + 1], "Adjusted EPS")
+        self.assertEqual(adjusted_eps_annual["values"], ["12", "8", "--"])
+        self.assertEqual(adjusted_eps_quarterly["values"], ["9"])
+
+    def test_add_adjusted_eps_does_not_duplicate_existing_row(self):
+        income = {
+            "annual": {
+                "periods": ["TTM"],
+                "rows": [
+                    {"label": "Adjusted Net Income", "values": ["8B"]},
+                    {"label": "Adjusted EPS", "values": ["4"]},
+                    {"label": "Diluted Average Shares", "values": ["2B"]},
+                ],
+            }
+        }
+
+        enriched = self.handler._add_adjusted_eps(income)
+        adjusted_eps_rows = [row for row in enriched["annual"]["rows"] if row["label"] == "Adjusted EPS"]
+
+        self.assertEqual(len(adjusted_eps_rows), 1)
+        self.assertEqual(adjusted_eps_rows[0]["values"], ["4"])
+
     def test_add_tax_rate_uses_tax_provision_over_pretax_income(self):
         income = {
             "annual": {

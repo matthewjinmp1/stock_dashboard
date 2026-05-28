@@ -1,6 +1,6 @@
 import re
 
-from formatters import format_money, format_percent, parse_money_to_raw
+from formatters import format_3sig, format_money, format_percent, parse_money_to_raw
 
 
 def unwrap_annual(statement):
@@ -383,6 +383,40 @@ def add_adjusted_net_income(income_statement, formatter=None):
 
         insert_idx = rows.index(adjusted_op_row) + 1
         rows.insert(insert_idx, {"label": "Adjusted Net Income", "values": values})
+        income["rows"] = rows
+
+    return income_statement
+
+
+def add_adjusted_eps(income_statement, formatter=None):
+    formatter = formatter or format_3sig
+    income_statement = income_statement or {}
+
+    for period_key in ("annual", "quarterly"):
+        income = income_statement.get(period_key)
+        if not isinstance(income, dict):
+            continue
+        rows = income.get("rows") or []
+        adjusted_net_row = _row_by_label(income, ["Adjusted Net Income"])
+        diluted_shares_row = _row_by_label(income, [
+            "Diluted Average Shares",
+            "Diluted Avg Shares",
+            "Diluted Shares",
+        ])
+        if not adjusted_net_row or not diluted_shares_row or any(row.get("label") == "Adjusted EPS" for row in rows):
+            continue
+
+        values = []
+        for period in income.get("periods") or []:
+            adjusted_net_raw = _period_value(income, adjusted_net_row, period)
+            diluted_shares_raw = _period_value(income, diluted_shares_row, period)
+            if adjusted_net_raw is None or not diluted_shares_raw:
+                values.append("--")
+                continue
+            values.append(formatter(adjusted_net_raw / diluted_shares_raw))
+
+        insert_idx = rows.index(adjusted_net_row) + 1
+        rows.insert(insert_idx, {"label": "Adjusted EPS", "values": values})
         income["rows"] = rows
 
     return income_statement

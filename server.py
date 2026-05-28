@@ -27,7 +27,7 @@ PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 ENABLE_DATAROMA_FETCHES = os.environ.get("ENABLE_DATAROMA_FETCHES", "1") != "0"
-PAYLOAD_VERSION = 36
+PAYLOAD_VERSION = 37
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -502,6 +502,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         income_statement = self._add_adjusted_operating_income(income_statement, cash_flow_statement)
         income_statement = self._add_tax_rate(income_statement)
         income_statement = self._add_adjusted_net_income(income_statement)
+        income_statement = self._add_adjusted_eps(income_statement)
         revenue_raw = 100e9
         gross_profit_raw = 60e9
         operating_income_raw = 30e9
@@ -954,6 +955,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _add_adjusted_net_income(self, income_statement, formatter=None):
         return statements.add_adjusted_net_income(income_statement, formatter or self._format_money)
 
+    def _add_adjusted_eps(self, income_statement, formatter=None):
+        return statements.add_adjusted_eps(income_statement, formatter or self._format_3sig)
+
     def _add_tax_rate(self, income_statement, formatter=None):
         return statements.add_tax_rate(income_statement, formatter or self._format_percent)
 
@@ -1308,6 +1312,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             income_statement = self._add_adjusted_operating_income(income_statement, cash_flow_statement)
             income_statement = self._add_tax_rate(income_statement)
             income_statement = self._add_adjusted_net_income(income_statement)
+            income_statement = self._add_adjusted_eps(income_statement)
 
             # Core metrics from DataFrames (TTM using quarterly sums) — all converted to USD
             last_year_revenue_raw = self._df_raw_value(annual_income, ["Total Revenue", "TotalRevenue"]) * financial_fx_rate
