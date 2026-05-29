@@ -238,6 +238,28 @@ assert.deepStrictEqual(
   'balance sheet margin rows should use total assets as the denominator',
 );
 
+api.state.latest = {
+  incomeStatement: {
+    annual: {
+      periods: ['TTM', '2025-12-31'],
+      rows: [{ label: 'Total Revenue', values: ['200B', '100B'] }],
+    },
+  },
+};
+const cashForMargin = {
+  periods: ['TTM', '2025-12-31'],
+  rows: [
+    { label: 'Operating Cash Flow', values: ['50B', '40B'] },
+    { label: 'Capital Expenditures', values: ['-20B', '-10B'] },
+  ],
+};
+assert.deepStrictEqual(
+  api.marginValues(cashForMargin.rows[1], cashForMargin.periods, cashForMargin, 'cash'),
+  ['-10.0%', '-10.0%'],
+  'cash flow margin rows should use income statement revenue as the denominator instead of operating cash flow',
+);
+api.state.latest = null;
+
 api.state.scanRequestId = 17;
 api.startFetchTimer(0, 17);
 const fetchInfoNode = elements.get('result-fetch-info');

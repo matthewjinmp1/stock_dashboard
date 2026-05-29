@@ -1376,15 +1376,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function marginValues(row, periods, statement, statementKey = '') {
-        const denominator = (statement.rows || []).find((r) => {
-            if (statementKey === 'balance') return r.label === 'Total Assets';
-            return r.label === 'Total Revenue' || r.label === 'Operating Cash Flow';
-        });
         return (row.values || []).map((value, idx) => {
-            const denom = denominator ? parsePercentBase(denominator.values[idx]) : 0;
+            const denom = marginDenominatorValue(periods[idx], idx, statement, statementKey);
             const num = parsePercentBase(value);
             return denom ? `${((num / denom) * 100).toFixed(1)}%` : '--';
         });
+    }
+
+    function marginDenominatorValue(period, idx, statement, statementKey = '') {
+        if (statementKey === 'cash') {
+            const income = (((state.latest || {}).incomeStatement || {})[state.periodicity || 'annual']) || {};
+            return parsePercentBase(statementValueForPeriod(income, ['Total Revenue'], period));
+        }
+        const denominatorLabel = statementKey === 'balance' ? 'Total Assets' : 'Total Revenue';
+        const denominator = (statement.rows || []).find((r) => r.label === denominatorLabel);
+        return denominator ? parsePercentBase(denominator.values[idx]) : 0;
     }
 
     function latestStatementValue(statement, labels) {
