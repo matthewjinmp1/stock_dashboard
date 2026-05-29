@@ -1411,8 +1411,22 @@ document.addEventListener('DOMContentLoaded', () => {
             return parsePercentBase(statementValueForPeriod(income, ['Total Revenue'], period));
         }
         const denominatorLabel = statementKey === 'balance' ? 'Total Assets' : 'Total Revenue';
-        const denominator = (statement.rows || []).find((r) => r.label === denominatorLabel);
+        const fullStatement = fullStatementForMargin(statementKey) || statement;
+        let denominator = (fullStatement.rows || []).find((r) => r.label === denominatorLabel);
+        if (!denominator) denominator = (statement.rows || []).find((r) => r.label === denominatorLabel);
+        if (denominator && fullStatement !== statement) {
+            const fullIdx = (fullStatement.periods || []).findIndex((candidate) => String(candidate || '').toUpperCase() === String(period || '').toUpperCase());
+            if (fullIdx >= 0) return parsePercentBase((denominator.values || [])[fullIdx]);
+        }
         return denominator ? parsePercentBase(denominator.values[idx]) : 0;
+    }
+
+    function fullStatementForMargin(statementKey = '') {
+        const data = state.latest || {};
+        const periodicity = state.periodicity || 'annual';
+        if (statementKey === 'balance') return ((data.balanceStatement || {})[periodicity]) || null;
+        if (statementKey === 'income') return ((data.incomeStatement || {})[periodicity]) || null;
+        return null;
     }
 
     function latestStatementValue(statement, labels) {

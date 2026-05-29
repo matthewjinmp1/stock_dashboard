@@ -257,10 +257,22 @@ api.state.latest = {
   incomeStatement: {
     annual: {
       periods: ['TTM', '2025-12-31'],
-      rows: [{ label: 'Total Revenue', values: ['200B', '100B'] }],
+      rows: [
+        { label: 'Total Revenue', values: ['200B', '100B'] },
+        { label: 'EBITDA', values: ['40B', '25B'] },
+      ],
     },
   },
 };
+const filteredIncomeForMargin = {
+  periods: ['TTM', '2025-12-31'],
+  rows: [{ label: 'EBITDA', values: ['40B', '25B'] }],
+};
+assert.deepStrictEqual(
+  api.marginValues(filteredIncomeForMargin.rows[0], filteredIncomeForMargin.periods, filteredIncomeForMargin, 'income'),
+  ['20.0%', '25.0%'],
+  'filtered income statement margin rows should use revenue from the full income statement',
+);
 const cashForMargin = {
   periods: ['TTM', '2025-12-31'],
   rows: [
