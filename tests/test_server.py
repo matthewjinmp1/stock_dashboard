@@ -1442,6 +1442,64 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(len(shareholder_return_rows), 1)
         self.assertEqual(shareholder_return_rows[0]["values"], ["11B"])
 
+    def test_add_dividend_per_share_uses_cash_dividends_over_diluted_shares(self):
+        cash_flow = {
+            "annual": {
+                "periods": ["TTM", "2025-12-31", "2024-12-31"],
+                "rows": [
+                    {"label": "Cash Dividends Paid", "values": ["-3B", "-2.8B", "--"]},
+                    {"label": "Shareholder Return", "values": ["11B", "9.8B", "--"]},
+                ],
+            },
+            "quarterly": {
+                "periods": ["2026-03-31"],
+                "rows": [{"label": "Cash Dividends Paid", "values": ["-800M"]}],
+            },
+        }
+        income = {
+            "annual": {
+                "periods": ["TTM", "2025-12-31", "2024-12-31"],
+                "rows": [{"label": "Diluted Average Shares", "values": ["2B", "2B", "2B"]}],
+            },
+            "quarterly": {
+                "periods": ["2026-03-31"],
+                "rows": [{"label": "Diluted Average Shares", "values": ["500M"]}],
+            },
+        }
+
+        enriched = self.handler._add_dividend_per_share(cash_flow, income)
+        annual_rows = enriched["annual"]["rows"]
+        annual_labels = [row["label"] for row in annual_rows]
+        dividend_per_share_annual = next(row for row in annual_rows if row["label"] == "Dividend Per Share")
+        dividend_per_share_quarterly = next(row for row in enriched["quarterly"]["rows"] if row["label"] == "Dividend Per Share")
+
+        self.assertEqual(annual_labels[annual_labels.index("Cash Dividends Paid") + 1], "Dividend Per Share")
+        self.assertEqual(dividend_per_share_annual["values"], ["1.5", "1.4", "--"])
+        self.assertEqual(dividend_per_share_quarterly["values"], ["1.6"])
+
+    def test_add_dividend_per_share_does_not_duplicate_existing_row(self):
+        cash_flow = {
+            "annual": {
+                "periods": ["TTM"],
+                "rows": [
+                    {"label": "Cash Dividends Paid", "values": ["-3B"]},
+                    {"label": "Dividend Per Share", "values": ["1.5"]},
+                ],
+            },
+        }
+        income = {
+            "annual": {
+                "periods": ["TTM"],
+                "rows": [{"label": "Diluted Average Shares", "values": ["2B"]}],
+            },
+        }
+
+        enriched = self.handler._add_dividend_per_share(cash_flow, income)
+        dividend_per_share_rows = [row for row in enriched["annual"]["rows"] if row["label"] == "Dividend Per Share"]
+
+        self.assertEqual(len(dividend_per_share_rows), 1)
+        self.assertEqual(dividend_per_share_rows[0]["values"], ["1.5"])
+
     def test_add_adjusted_net_income_taxes_adjusted_operating_income_by_period(self):
         income = {
             "annual": {

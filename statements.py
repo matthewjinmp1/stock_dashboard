@@ -291,6 +291,48 @@ def add_shareholder_return(cash_flow_statement, formatter=None):
     return cash_flow_statement
 
 
+def add_dividend_per_share(cash_flow_statement, income_statement, formatter=None):
+    formatter = formatter or format_3sig
+    cash_flow_statement = cash_flow_statement or {}
+    income_statement = income_statement or {}
+
+    for period_key in ("annual", "quarterly"):
+        cash_flow = cash_flow_statement.get(period_key)
+        income = income_statement.get(period_key)
+        if not isinstance(cash_flow, dict) or not isinstance(income, dict):
+            continue
+        rows = cash_flow.get("rows") or []
+        if any(row.get("label") == "Dividend Per Share" for row in rows):
+            continue
+
+        dividend_row = _row_by_label(cash_flow, [
+            "Cash Dividends Paid",
+            "Common Stock Dividend Paid",
+        ])
+        diluted_shares_row = _row_by_label(income, [
+            "Diluted Average Shares",
+            "Diluted Avg Shares",
+            "Diluted Shares",
+        ])
+        if not dividend_row or not diluted_shares_row:
+            continue
+
+        values = []
+        for period in cash_flow.get("periods") or []:
+            dividends_raw = _period_value(cash_flow, dividend_row, period)
+            diluted_shares_raw = _period_value(income, diluted_shares_row, period)
+            if dividends_raw is None or not diluted_shares_raw:
+                values.append("--")
+                continue
+            values.append(formatter(abs(dividends_raw) / diluted_shares_raw))
+
+        insert_idx = rows.index(dividend_row) + 1
+        rows.insert(insert_idx, {"label": "Dividend Per Share", "values": values})
+        cash_flow["rows"] = rows
+
+    return cash_flow_statement
+
+
 def add_adjusted_operating_income(income_statement, cash_flow_statement, formatter=None):
     formatter = formatter or format_money
     income_statement = income_statement or {}

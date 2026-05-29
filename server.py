@@ -499,6 +499,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             },
         }
         cash_flow_statement = self._add_shareholder_return(cash_flow_statement)
+        cash_flow_statement = self._add_dividend_per_share(cash_flow_statement, income_statement)
         income_statement = self._add_adjusted_operating_income(income_statement, cash_flow_statement)
         income_statement = self._add_tax_rate(income_statement)
         income_statement = self._add_adjusted_net_income(income_statement)
@@ -952,6 +953,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _add_shareholder_return(self, cash_flow_statement, formatter=None):
         return statements.add_shareholder_return(cash_flow_statement, formatter or self._format_money)
 
+    def _add_dividend_per_share(self, cash_flow_statement, income_statement, formatter=None):
+        return statements.add_dividend_per_share(cash_flow_statement, income_statement, formatter or self._format_3sig)
+
     def _add_adjusted_net_income(self, income_statement, formatter=None):
         return statements.add_adjusted_net_income(income_statement, formatter or self._format_money)
 
@@ -1309,6 +1313,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "quarterly": self._df_to_quarterly_statement(quarterly_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES),
             }
             cash_flow_statement = self._add_shareholder_return(cash_flow_statement)
+            cash_flow_statement = self._add_dividend_per_share(cash_flow_statement, income_statement)
             income_statement = self._add_adjusted_operating_income(income_statement, cash_flow_statement)
             income_statement = self._add_tax_rate(income_statement)
             income_statement = self._add_adjusted_net_income(income_statement)
