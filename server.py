@@ -27,7 +27,7 @@ PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 ENABLE_DATAROMA_FETCHES = os.environ.get("ENABLE_DATAROMA_FETCHES", "1") != "0"
-PAYLOAD_VERSION = 38
+PAYLOAD_VERSION = 39
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -1760,6 +1760,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 for row in flat.get("rows", [])
             )
 
+        def cache_has_missing_dividend_per_share(payload):
+            statement = payload.get("cashFlowStatement") or {}
+            flat = self._unwrap_annual(statement)
+            labels = {row.get("label") for row in flat.get("rows", [])}
+            return "Cash Dividends Paid" in labels and "Dividend Per Share" not in labels
+
         def cache_is_usable(payload):
             return (
                 isinstance(payload, dict)
@@ -1770,6 +1776,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 and payload.get("cashFlowStatement")
                 and not cache_has_missing_ttm_anchor(payload)
                 and not cache_has_missing_adjusted_operating_income(payload)
+                and not cache_has_missing_dividend_per_share(payload)
             )
 
         def enrich_cached_payload(cached_payload, cached_entry, fetch_count=0, refresh_error=False):
