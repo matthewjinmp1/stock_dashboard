@@ -1050,47 +1050,6 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(captured["payload"]["companyName"], "Microsoft Corporation")
         mock_fetch.assert_called_once()
 
-    def test_same_day_cache_with_cash_dividends_missing_dividend_per_share_is_refetched(self):
-        handler = make_handler()
-        captured = {}
-        today = server.datetime.date.today().isoformat()
-        cached_payload = {
-            "ticker": "MSFT",
-            "companyName": "Microsoft Corporation",
-            "marketCap": "3.14T",
-            "payloadVersion": server.PAYLOAD_VERSION,
-            "incomeStatement": {
-                "periods": ["TTM"],
-                "rows": [
-                    {"label": "Total Revenue", "values": ["305B"]},
-                    {"label": "Gross Profit", "values": ["209B"]},
-                    {"label": "Operating Income", "values": ["143B"]},
-                    {"label": "Adjusted Operating Income", "values": ["143B"]},
-                ],
-            },
-            "balanceStatement": fake_statement("Balance"),
-            "cashFlowStatement": {
-                "periods": ["TTM"],
-                "rows": [{"label": "Cash Dividends Paid", "values": ["-11B"]}],
-            },
-        }
-
-        def fake_send_response(status, payload):
-            captured["status"] = status
-            captured["payload"] = payload
-
-        with mock.patch("server.load_cache", return_value={
-            "MSFT": {"date": today, "pulledAt": "2026-04-20T10:00:00", "data": cached_payload}
-        }), \
-             mock.patch("server.save_cache"), \
-             mock.patch.object(handler, "fetch_yahoo_finance_data", return_value=make_fetch_result()) as mock_fetch, \
-             mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
-            handler.handle_api_request("MSFT", refresh=False)
-
-        self.assertEqual(captured["status"], 200)
-        self.assertEqual(captured["payload"]["companyName"], "Microsoft Corporation")
-        mock_fetch.assert_called_once()
-
     def test_same_day_cache_with_missing_ttm_anchor_is_refetched(self):
         handler = make_handler()
         captured = {}

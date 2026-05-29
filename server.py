@@ -1760,12 +1760,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 for row in flat.get("rows", [])
             )
 
-        def cache_has_missing_dividend_per_share(payload):
-            statement = payload.get("cashFlowStatement") or {}
-            flat = self._unwrap_annual(statement)
-            labels = {row.get("label") for row in flat.get("rows", [])}
-            return "Cash Dividends Paid" in labels and "Dividend Per Share" not in labels
-
         def cache_is_usable(payload):
             return (
                 isinstance(payload, dict)
@@ -1776,7 +1770,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 and payload.get("cashFlowStatement")
                 and not cache_has_missing_ttm_anchor(payload)
                 and not cache_has_missing_adjusted_operating_income(payload)
-                and not cache_has_missing_dividend_per_share(payload)
             )
 
         def enrich_cached_payload(cached_payload, cached_entry, fetch_count=0, refresh_error=False):
