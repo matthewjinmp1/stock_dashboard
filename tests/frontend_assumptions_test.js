@@ -186,6 +186,7 @@ const ratiosData = {
         { label: 'Total Debt', values: ['30B', '25B', '20B'] },
         { label: 'Stockholders Equity', values: ['70B', '65B', '60B'] },
         { label: 'Cash, Equivalents & Short Term Investments', values: ['20B', '15B', '10B'] },
+        { label: 'Gross PP&E', values: ['200B', '150B', '100B'] },
       ],
     },
     quarterly: {
@@ -195,6 +196,7 @@ const ratiosData = {
         { label: 'Total Debt', values: ['10B', '12B'] },
         { label: 'Stockholders Equity', values: ['40B', '44B'] },
         { label: 'Cash, Equivalents & Short Term Investments', values: ['5B', '6B'] },
+        { label: 'Gross PP&E', values: ['20B', '25B'] },
       ],
     },
   },
@@ -208,6 +210,8 @@ assert.strictEqual(annualRatios.rows[1].label, 'ROIC', 'annual ratios should inc
 assert.deepStrictEqual(Array.from(annualRatios.rows[1].values), ['20%', '18%', '17.1%'], 'annual ROIC should use after-tax operating income over debt plus equity minus cash');
 assert.strictEqual(annualRatios.rows[2].label, 'Adj ROIC', 'annual ratios should include adjusted ROIC');
 assert.deepStrictEqual(Array.from(annualRatios.rows[2].values), ['22.5%', '20%', '20%'], 'annual Adj ROIC should use adjusted net income over debt plus equity minus cash');
+assert.strictEqual(annualRatios.rows[3].label, 'ROGPPE', 'annual ratios should include ROGPPE');
+assert.deepStrictEqual(Array.from(annualRatios.rows[3].values), ['9%', '10%', '14%'], 'annual ROGPPE should use adjusted net income over gross PP&E, with TTM paired to MRQ gross PP&E');
 api.state.periodicity = 'quarterly';
 const quarterlyRatios = api.buildRatiosStatement(ratiosData);
 assert.deepStrictEqual(Array.from(quarterlyRatios.periods), ['2025-03-31', '2025-06-30'], 'quarterly ratios should use income statement periods');
@@ -217,6 +221,8 @@ assert.strictEqual(quarterlyRatios.rows[1].label, 'ROIC', 'quarterly ratios shou
 assert.deepStrictEqual(Array.from(quarterlyRatios.rows[1].values), ['3.6%', '3.6%'], 'quarterly ROIC should use same-period after-tax operating income and invested capital');
 assert.strictEqual(quarterlyRatios.rows[2].label, 'Adj ROIC', 'quarterly ratios should include adjusted ROIC');
 assert.deepStrictEqual(Array.from(quarterlyRatios.rows[2].values), ['4%', '4%'], 'quarterly Adj ROIC should use same-period adjusted net income and invested capital');
+assert.strictEqual(quarterlyRatios.rows[3].label, 'ROGPPE', 'quarterly ratios should include ROGPPE');
+assert.deepStrictEqual(Array.from(quarterlyRatios.rows[3].values), ['9%', '8%'], 'quarterly ROGPPE should use same-period adjusted net income and gross PP&E');
 api.state.periodicity = 'annual';
 
 const balanceForMargin = {

@@ -1091,6 +1091,23 @@ document.addEventListener('DOMContentLoaded', () => {
                         return investedCapital ? formatPercentDecimal(parseMoney(adjustedNetIncome) / investedCapital) : '--';
                     }),
                 },
+                {
+                    label: 'ROGPPE',
+                    values: periods.map((period) => {
+                        const balancePeriod = String(period || '').toUpperCase() === 'TTM' ? firstAvailablePeriod(balance, ['MRQ', 'LATEST', 'TTM']) : period;
+                        const adjustedNetIncome = statementValueForPeriod(income, ['Adjusted Net Income'], period);
+                        const grossPpe = statementValueForPeriod(balance, [
+                            'Gross PP&E',
+                            'Gross PPE',
+                            'GrossPPE',
+                            'Net PP&E',
+                            'Net PPE',
+                            'NetPPE',
+                        ], balancePeriod);
+                        const grossPpeRaw = parseMoney(grossPpe);
+                        return grossPpeRaw ? formatPercentDecimal(parseMoney(adjustedNetIncome) / grossPpeRaw) : '--';
+                    }),
+                },
             ],
         };
     }
