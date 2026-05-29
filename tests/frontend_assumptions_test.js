@@ -103,6 +103,11 @@ assert.deepStrictEqual(api.growthValues(quarterlyValues, quarterlyPeriods), ['--
 api.state.periodicity = 'annual';
 assert.deepStrictEqual(api.growthValues(['-7.62B', '-7.95B', '-8.36B', '-8.78B', '-11B'], []), ['--', '4.3%', '5.2%', '5.0%', '25.3%'], 'annual growth should compare magnitude for rows that stay negative');
 assert.deepStrictEqual(api.growthValues(['-100M', '50M'], []), ['--', '--'], 'annual growth should not show misleading percentages when signs flip');
+assert.deepStrictEqual(
+  api.growthValues(['100', '--', '121'], ['2022-12-31', '2023-12-31', '2024-12-31']),
+  ['--', '--', '10.0%'],
+  'annual growth should bridge blank periods and annualize over the date gap',
+);
 api.state.latest = {
   incomeStatement: {
     quarterly: { periods: ['2026-06-30', '2026-03-31'] },
@@ -132,6 +137,16 @@ assert.deepStrictEqual(
   api.growthValues(['100', '120', '120'], ['2024-12-31', '2025-12-31', 'TTM'], 'income'),
   ['--', '20.0%', '--'],
   'annual TTM growth should be blank when the TTM value is the same as the latest annual value',
+);
+api.state.latest = {
+  incomeStatement: {
+    quarterly: { periods: ['2026-03-31', '2025-12-31'] },
+  },
+};
+assert.deepStrictEqual(
+  api.growthValues(['466M', '482M', '496M', '--', '556M'], ['2022-12-31', '2023-12-31', '2024-12-31', '2025-12-31', 'TTM'], 'income'),
+  ['--', '3.4%', '2.9%', '--', '9.6%'],
+  'annual TTM growth should bridge blank annual periods and annualize from the nearest prior value',
 );
 api.state.latest = null;
 

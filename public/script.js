@@ -1338,16 +1338,38 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (prevIdx < 0) return '--';
+            if (state.periodicity === 'annual') {
+                prevIdx = previousAnnualValueIndex(values, idx);
+                if (prevIdx < 0) return '--';
+            }
             const prev = parsePercentBase(values[prevIdx]);
             const curr = parsePercentBase(value);
             if (!prev || prev === 0 || !curr || curr === 0) return '--';
             if ((prev < 0 && curr > 0) || (prev > 0 && curr < 0)) return '--';
             if (state.periodicity === 'annual' && String(periods[idx] || '').toUpperCase() === 'TTM' && Math.abs(curr) === Math.abs(prev)) return '--';
-            const years = annualTtmGrowthYears(periods[idx], periods[prevIdx], statementKey);
+            const years = growthYears(periods[idx], periods[prevIdx], statementKey, idx - prevIdx);
             if (!years || years <= 0) return '--';
             const growth = Math.pow(Math.abs(curr) / Math.abs(prev), 1 / years) - 1;
             return `${(growth * 100).toFixed(1)}%`;
         });
+    }
+
+    function previousAnnualValueIndex(values, idx) {
+        for (let prevIdx = idx - 1; prevIdx >= 0; prevIdx -= 1) {
+            if (parsePercentBase(values[prevIdx])) return prevIdx;
+        }
+        return -1;
+    }
+
+    function growthYears(currentPeriod, previousPeriod, statementKey = '', fallbackYears = 1) {
+        if (state.periodicity !== 'annual') return 1;
+        if (String(currentPeriod || '').toUpperCase() === 'TTM') return annualTtmGrowthYears(currentPeriod, previousPeriod, statementKey);
+        const currentDate = Date.parse(currentPeriod);
+        const previousDate = Date.parse(previousPeriod);
+        if (!Number.isNaN(currentDate) && !Number.isNaN(previousDate) && currentDate > previousDate) {
+            return Math.max((currentDate - previousDate) / (365.25 * 24 * 60 * 60 * 1000), 0.01);
+        }
+        return Math.max(fallbackYears || 1, 1);
     }
 
     function annualTtmGrowthYears(currentPeriod, previousPeriod, statementKey = '') {
