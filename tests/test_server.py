@@ -458,7 +458,7 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertIsNone(self.handler._estimated_net_margin_from_eps(0, 10, 3_000_000_000))
         self.assertIsNone(self.handler._estimated_net_margin_from_eps(120_000_000_000, 0, 3_000_000_000))
 
-    def test_growth_from_revenue_estimate_matches_displayed_bridge_base(self):
+    def test_growth_from_revenue_estimate_falls_back_when_yahoo_growth_is_missing(self):
         self.assertAlmostEqual(
             self.handler._growth_from_revenue_estimate(6_958_767_500, 10_222_000_000),
             -0.31923620622187,

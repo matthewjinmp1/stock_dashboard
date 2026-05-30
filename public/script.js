@@ -445,7 +445,7 @@ document.addEventListener('DOMContentLoaded', () => {
             || parseMoney(data.revenue)
             || statementRevenueRaw(data)
             || impliedRevenueRaw;
-        const cyRevenueBaseRaw = lastYearRevenueRaw(data) || revenueRaw;
+        const cyRevenueBaseRaw = parseMoney(metricEntry(data, 'cyRevenueBase')) || lastYearRevenueRaw(data) || revenueRaw;
         const valuationRaw = parseMoney(metricEntry(data, 'ev'))
             || parseMoney(data.ev)
             || parseMoney(metricEntry(data, 'derivedEnterpriseValue'))
@@ -1657,7 +1657,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const formulaValue = (formula, rows) => compactFormulaRows([['Formula', formula], ...rows]);
         const valuationLabel = data.valuationNumeratorLabel || 'Valuation Numerator';
         const gpLabel = '3Y Growth';
-        const cyRevenueBase = lastYearRevenueRaw(data);
+        const cyRevenueBase = parseMoney(metricEntry(data, 'cyRevenueBase')) || lastYearRevenueRaw(data);
         const cyRevenueBaseDisplay = cyRevenueBase ? formatMoneyFront(cyRevenueBase) : '--';
         const cyDiscount = forwardDiscountInfo(data, 'cy');
         const nyDiscount = forwardDiscountInfo(data, 'ny');

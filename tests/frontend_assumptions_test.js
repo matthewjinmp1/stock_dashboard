@@ -463,6 +463,23 @@ assert(growthRevenueCalc.rows.some(([label, value]) => label === 'Last Year Reve
 assert(growthRevenueCalc.rows.some(([label, value]) => label === 'CY Revenue' && value !== '--'), 'growth calc should include CY revenue');
 assert(growthRevenueCalc.rows.some(([label, value]) => label === 'NY Revenue' && value !== '--'), 'growth calc should include NY revenue');
 
+const estimateBaseData = {
+  ...data,
+  ticker: 'ESTBASE',
+  metrics: {
+    ...data.metrics,
+    cyRevenueBase: { raw: 6_156_000_000, display: '6.16B', kind: 'money' },
+    cy_revenue: { raw: 6_958_767_500, display: '6.96B', kind: 'money' },
+    cy_growth: { raw: 0.1304, display: '13%', kind: 'percent' },
+  },
+};
+const estimateBaseCalc = api.calcDefinitions(estimateBaseData).growth_revenue;
+assert(estimateBaseCalc.rows.some(([label, value]) => label === 'Last Year Revenue' && value === '6.2B'), 'growth calc should prefer Yahoo estimate year-ago sales when present');
+
+api.state.assumptions.ESTBASE = { cy_growth: 0.20 };
+const adjustedEstimateBase = api.applyAssumptions(estimateBaseData);
+assertAlmostEqual(api.metricEntry(adjustedEstimateBase, 'cy_revenue').raw, 7_387_200_000, 1, 'edited CY growth should use Yahoo estimate year-ago sales when present');
+
 const blankStructuredData = {
   ...data,
   ticker: 'LEGACY',

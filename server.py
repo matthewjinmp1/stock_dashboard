@@ -27,7 +27,7 @@ PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 ENABLE_DATAROMA_FETCHES = os.environ.get("ENABLE_DATAROMA_FETCHES", "1") != "0"
-PAYLOAD_VERSION = 41
+PAYLOAD_VERSION = 42
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -1453,6 +1453,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             # Revenue estimates from info (native currency — will be converted to USD below)
             cy_revenue_raw = info.get("revenueEstimates", {}).get("avg", 0) if isinstance(info.get("revenueEstimates"), dict) else 0
+            cy_revenue_base_raw = 0
             ny_revenue_raw = 0
             cy_growth_raw = None
             ny_growth_raw = None
@@ -1478,6 +1479,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if re_est is not None and not re_est.empty:
                     if "0y" in re_est.index:
                         cy_revenue_raw = float(re_est.loc["0y", "avg"]) if "avg" in re_est.columns and pd.notna(re_est.loc["0y", "avg"]) else cy_revenue_raw
+                        cy_revenue_base_raw = float(re_est.loc["0y", "yearAgoRevenue"]) if "yearAgoRevenue" in re_est.columns and pd.notna(re_est.loc["0y", "yearAgoRevenue"]) else cy_revenue_base_raw
                         cy_growth_raw = float(re_est.loc["0y", "growth"]) if "growth" in re_est.columns and pd.notna(re_est.loc["0y", "growth"]) else cy_growth_raw
                     if "+1y" in re_est.index:
                         ny_revenue_raw = float(re_est.loc["+1y", "avg"]) if "avg" in re_est.columns and pd.notna(re_est.loc["+1y", "avg"]) else ny_revenue_raw
@@ -1487,9 +1489,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             # Convert revenue estimates and 3Y GP values from native currency to USD
             cy_revenue_raw = (cy_revenue_raw or 0) * financial_fx_rate
+            cy_revenue_base_raw = (cy_revenue_base_raw or 0) * financial_fx_rate
             ny_revenue_raw = (ny_revenue_raw or 0) * financial_fx_rate
-            cy_growth_raw = self._growth_from_revenue_estimate(cy_revenue_raw, last_year_revenue_raw)
-            ny_growth_raw = self._growth_from_revenue_estimate(ny_revenue_raw, cy_revenue_raw)
+            if cy_growth_raw is None:
+                cy_growth_raw = self._growth_from_revenue_estimate(cy_revenue_raw, cy_revenue_base_raw or last_year_revenue_raw)
+            if ny_growth_raw is None:
+                ny_growth_raw = self._growth_from_revenue_estimate(ny_revenue_raw, cy_revenue_raw)
             gp_3y_start_raw = (gp_3y_start_raw or 0) * financial_fx_rate
             gp_3y_end_raw = (gp_3y_end_raw or 0) * financial_fx_rate
             median_tax_rate_raw = self._median_annual_tax_rate(annual_income)
@@ -1521,7 +1526,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 diluted_shares_raw,
             )
             last_year_est_net_margin_raw = self._estimated_net_margin_from_eps(
-                last_year_revenue_raw,
+                cy_revenue_base_raw or last_year_revenue_raw,
                 year_ago_eps_raw,
                 diluted_shares_raw,
             )
@@ -1617,6 +1622,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 ("ev_adj_ebit", safe_ratio(valuation_raw, adj_income_raw), safe_display(safe_ratio(valuation_raw, adj_income_raw), self._format_3sig), "ratio"),
                 ("cy_growth", cy_growth_raw, self._format_percent(cy_growth_raw) if cy_growth_raw is not None else "--", "percent"),
                 ("ny_growth", ny_growth_raw, self._format_percent(ny_growth_raw) if ny_growth_raw is not None else "--", "percent"),
+                ("cyRevenueBase", cy_revenue_base_raw or None, self._format_money(cy_revenue_base_raw) if cy_revenue_base_raw else "--", "money"),
                 ("gp_3y_growth", gp_3y_growth_raw, self._format_percent(gp_3y_growth_raw) if gp_3y_growth_raw is not None else "--", "percent"),
                 ("gp_3y_start", gp_3y_start_raw or None, self._format_money(gp_3y_start_raw) if gp_3y_start_raw else "--", "money"),
                 ("gp_3y_end", gp_3y_end_raw or None, self._format_money(gp_3y_end_raw) if gp_3y_end_raw else "--", "money"),
