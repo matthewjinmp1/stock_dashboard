@@ -458,6 +458,18 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertIsNone(self.handler._estimated_net_margin_from_eps(0, 10, 3_000_000_000))
         self.assertIsNone(self.handler._estimated_net_margin_from_eps(120_000_000_000, 0, 3_000_000_000))
 
+    def test_growth_from_revenue_estimate_matches_displayed_bridge_base(self):
+        self.assertAlmostEqual(
+            self.handler._growth_from_revenue_estimate(6_958_767_500, 10_222_000_000),
+            -0.31923620622187,
+        )
+        self.assertAlmostEqual(
+            self.handler._growth_from_revenue_estimate(7_794_614_400, 6_958_767_500),
+            0.12011421562798,
+        )
+        self.assertIsNone(self.handler._growth_from_revenue_estimate(0, 10_222_000_000))
+        self.assertIsNone(self.handler._growth_from_revenue_estimate(6_958_767_500, 0))
+
     def test_dividend_yield_prefers_rate_over_price(self):
         self.assertAlmostEqual(
             self.handler._dividend_yield_from_info({

@@ -27,7 +27,7 @@ PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 ENABLE_DATAROMA_FETCHES = os.environ.get("ENABLE_DATAROMA_FETCHES", "1") != "0"
-PAYLOAD_VERSION = 40
+PAYLOAD_VERSION = 41
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -860,6 +860,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return None
         return (eps_raw * diluted_shares_raw) / revenue_raw
 
+    def _growth_from_revenue_estimate(self, estimate_raw, base_raw):
+        if not estimate_raw or not base_raw:
+            return None
+        return (estimate_raw / abs(base_raw)) - 1
+
     def _dividend_yield_from_info(self, info):
         dividend_rate_raw = info.get("dividendRate") or info.get("trailingAnnualDividendRate")
         native_price_raw = info.get("currentPrice") or info.get("regularMarketPrice")
@@ -1483,8 +1488,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # Convert revenue estimates and 3Y GP values from native currency to USD
             cy_revenue_raw = (cy_revenue_raw or 0) * financial_fx_rate
             ny_revenue_raw = (ny_revenue_raw or 0) * financial_fx_rate
-            if cy_growth_raw is None and cy_revenue_raw and last_year_revenue_raw:
-                cy_growth_raw = (cy_revenue_raw / abs(last_year_revenue_raw)) - 1
+            cy_growth_raw = self._growth_from_revenue_estimate(cy_revenue_raw, last_year_revenue_raw)
+            ny_growth_raw = self._growth_from_revenue_estimate(ny_revenue_raw, cy_revenue_raw)
             gp_3y_start_raw = (gp_3y_start_raw or 0) * financial_fx_rate
             gp_3y_end_raw = (gp_3y_end_raw or 0) * financial_fx_rate
             median_tax_rate_raw = self._median_annual_tax_rate(annual_income)
