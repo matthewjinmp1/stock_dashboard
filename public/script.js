@@ -642,6 +642,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ...(data.fetchTiming || {}),
             clientSeconds,
         };
+        if (data.invalidTicker) throw new Error(data.error || `${ticker} is not a valid ticker.`);
         state.dataByTicker[ticker] = data;
         saveTickerData();
         return data;

@@ -1245,6 +1245,31 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["valuationBasis"], "marketCap")
         self.assertEqual(payload["companyName"], "Meta Platforms, Inc.")
 
+    def test_invalid_ticker_payload_is_marked_for_frontend_rejection(self):
+        handler = make_handler()
+        captured = {}
+
+        def fake_fetch(_ticker, **_kwargs):
+            handler._fetch_timing = {"source": "invalid", "totalSeconds": 0.25, "stages": []}
+            return handler._empty_fetch_tuple("NOTAREAL")
+
+        def fake_send_response(status, payload):
+            captured["status"] = status
+            captured["payload"] = payload
+
+        with mock.patch("server.load_cache", return_value={}), \
+             mock.patch("server.save_cache"), \
+             mock.patch.object(server, "ENABLE_DATAROMA_FETCHES", False), \
+             mock.patch.object(handler, "fetch_yahoo_finance_data", side_effect=fake_fetch), \
+             mock.patch.object(handler, "_send_response", side_effect=fake_send_response):
+            handler.handle_api_request("NOTAREAL", refresh=True)
+
+        self.assertEqual(captured["status"], 200)
+        payload = captured["payload"]
+        self.assertTrue(payload["invalidTicker"])
+        self.assertEqual(payload["error"], "NOTAREAL is not a valid ticker.")
+        self.assertEqual(payload["fetchTiming"]["source"], "invalid")
+
 
 class StatementPageBuilderTests(unittest.TestCase):
     def setUp(self):

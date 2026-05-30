@@ -1898,9 +1898,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 timing["stages"] = sorted(timing["stages"], key=lambda stage: stage.get("seconds", 0), reverse=True)
         structured_metrics = result.get("structured_metrics") or {}
         median_tax_metric = structured_metrics.get("medianTaxRate") if isinstance(structured_metrics, dict) else None
+        fetch_timing = getattr(self, "_fetch_timing", {"source": "fresh", "totalSeconds": None, "stages": []})
+        invalid_ticker = isinstance(fetch_timing, dict) and fetch_timing.get("source") == "invalid"
 
         payload = {
             "ticker": ticker,
+            "invalidTicker": invalid_ticker,
+            "error": f"{ticker} is not a valid ticker." if invalid_ticker else None,
             "shortFloat": result.get("short_float") or "--",
             "income": result["income"],
             "margin": result["margin"],
@@ -1974,7 +1978,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "dataDate": today,
             "pulledAt": pulled_at,
             "fetchCount": getattr(self, "_request_fetch_count", 0),
-            "fetchTiming": getattr(self, "_fetch_timing", {"source": "fresh", "totalSeconds": None, "stages": []}),
+            "fetchTiming": fetch_timing,
         }
 
         metrics = payload.get("metrics") or {}
