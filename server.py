@@ -829,6 +829,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return enterprise_value_raw, "enterpriseValue", "EV", "Current Enterprise Value"
         return market_cap_raw, "marketCap", "Mkt Cap", "Current Market Cap"
 
+    def _yfinance_info_looks_valid(self, ticker, info):
+        if not isinstance(info, dict) or not info:
+            return False
+        if str(info.get("quoteType") or "").upper() == "NONE":
+            return False
+        return any(info.get(key) not in (None, "", 0) for key in [
+            "longName",
+            "shortName",
+            "marketCap",
+            "currentPrice",
+            "regularMarketPrice",
+            "financialCurrency",
+            "currency",
+            "quoteType",
+        ])
+
     def _estimated_net_margin_from_eps(self, revenue_raw, eps_raw, diluted_shares_raw):
         if not revenue_raw or not eps_raw or not diluted_shares_raw:
             return None
@@ -1213,7 +1229,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     pass
                 return {}
 
-            with ThreadPoolExecutor(max_workers=6) as executor:
+            executor = ThreadPoolExecutor(max_workers=6)
+            try:
                 statements_started = time.perf_counter()
                 futures = {
                     "info": executor.submit(fetch_info),
@@ -1230,7 +1247,32 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 }
                 self._request_fetch_count += 10
 
-                info = futures["info"].result() or {}
+                try:
+                    info = futures["info"].result() or {}
+                except Exception:
+                    for future in futures.values():
+                        future.cancel()
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    executor = None
+                    self._fetch_timing = {
+                        "source": "invalid",
+                        "totalSeconds": round(time.perf_counter() - fetch_started, 3),
+                        "stages": sorted(timing_stages, key=lambda stage: stage.get("seconds", 0), reverse=True),
+                    }
+                    return self._empty_fetch_tuple(ticker)
+
+                if not self._yfinance_info_looks_valid(ticker, info):
+                    for future in futures.values():
+                        future.cancel()
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    executor = None
+                    record_stage("invalid_ticker", "Invalid ticker rejected", fetch_started)
+                    self._fetch_timing = {
+                        "source": "invalid",
+                        "totalSeconds": round(time.perf_counter() - fetch_started, 3),
+                        "stages": sorted(timing_stages, key=lambda stage: stage.get("seconds", 0), reverse=True),
+                    }
+                    return self._empty_fetch_tuple(ticker)
 
                 raw_currency = (info.get("financialCurrency") or info.get("currency"))
                 financial_currency = self._infer_currency_from_ticker(ticker, raw_currency)
@@ -1267,6 +1309,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     quote_fx_rate = financial_fx_rate
                 else:
                     quote_fx_rate = futures["quote_fx"].result() if "quote_fx" in futures else 1.0
+            finally:
+                if executor is not None:
+                    executor.shutdown(wait=True)
 
             early_bid_ask_metrics = timed(
                 "nasdaq_bid_ask",

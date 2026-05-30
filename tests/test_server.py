@@ -371,6 +371,15 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         )
         self.assertEqual(self.handler._enterprise_value_from_info({"enterpriseValue": None}), 0)
 
+    def test_yfinance_info_validity_rejects_empty_or_none_quote_type(self):
+        self.assertFalse(self.handler._yfinance_info_looks_valid("BADTICKER", {}))
+        self.assertFalse(self.handler._yfinance_info_looks_valid("BADTICKER", {"quoteType": "NONE"}))
+
+    def test_yfinance_info_validity_accepts_real_quote_markers(self):
+        self.assertTrue(self.handler._yfinance_info_looks_valid("MSFT", {"quoteType": "EQUITY"}))
+        self.assertTrue(self.handler._yfinance_info_looks_valid("MSFT", {"longName": "Microsoft Corporation"}))
+        self.assertTrue(self.handler._yfinance_info_looks_valid("MSFT", {"currentPrice": 450.0}))
+
     def test_valuation_choice_prefers_our_derived_ev(self):
         valuation, basis, prefix, label = self.handler._valuation_choice(
             derived_enterprise_value_raw=197_000_000_000,
