@@ -27,7 +27,7 @@ PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 ENABLE_DATAROMA_FETCHES = os.environ.get("ENABLE_DATAROMA_FETCHES", "1") != "0"
-PAYLOAD_VERSION = 39
+PAYLOAD_VERSION = 40
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -845,6 +845,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "quoteType",
         ])
 
+    def _estimate_fx_rate(self, ticker, currency, financial_currency, financial_fx_rate, quote_currency, quote_fx_rate, fetch_fx_rate):
+        currency = self._infer_currency_from_ticker(ticker, currency).upper()
+        if currency == "USD":
+            return 1.0
+        if currency == financial_currency:
+            return financial_fx_rate
+        if currency == quote_currency:
+            return quote_fx_rate
+        return fetch_fx_rate(currency)
+
     def _estimated_net_margin_from_eps(self, revenue_raw, eps_raw, diluted_shares_raw):
         if not revenue_raw or not eps_raw or not diluted_shares_raw:
             return None
@@ -1428,6 +1438,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             cy_eps_raw = info.get("forwardEps", 0) or 0
             year_ago_eps_raw = info.get("trailingEps", 0) or 0
             ny_eps_raw = 0
+            cy_eps_currency = quote_currency
+            year_ago_eps_currency = quote_currency
+            ny_eps_currency = quote_currency
             cy_eps_growth_raw = None
             ny_eps_growth_raw = None
             if cy_eps_raw and year_ago_eps_raw and year_ago_eps_raw != 0:
@@ -1447,9 +1460,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         cy_eps_raw = float(ee.loc["0y", "avg"]) if "avg" in ee.columns and pd.notna(ee.loc["0y", "avg"]) else cy_eps_raw
                         year_ago_eps_raw = float(ee.loc["0y", "yearAgoEps"]) if "yearAgoEps" in ee.columns and pd.notna(ee.loc["0y", "yearAgoEps"]) else year_ago_eps_raw
                         cy_eps_growth_raw = float(ee.loc["0y", "growth"]) if "growth" in ee.columns and pd.notna(ee.loc["0y", "growth"]) else cy_eps_growth_raw
+                        if "currency" in ee.columns and pd.notna(ee.loc["0y", "currency"]):
+                            cy_eps_currency = str(ee.loc["0y", "currency"]).upper()
+                            year_ago_eps_currency = cy_eps_currency
                     if "+1y" in ee.index:
                         ny_eps_raw = float(ee.loc["+1y", "avg"]) if "avg" in ee.columns and pd.notna(ee.loc["+1y", "avg"]) else ny_eps_raw
                         ny_eps_growth_raw = float(ee.loc["+1y", "growth"]) if "growth" in ee.columns and pd.notna(ee.loc["+1y", "growth"]) else ny_eps_growth_raw
+                        if "currency" in ee.columns and pd.notna(ee.loc["+1y", "currency"]):
+                            ny_eps_currency = str(ee.loc["+1y", "currency"]).upper()
 
                 re_est = estimate_frames.get("revenue")
                 if re_est is not None and not re_est.empty:
@@ -1471,10 +1489,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             gp_3y_end_raw = (gp_3y_end_raw or 0) * financial_fx_rate
             median_tax_rate_raw = self._median_annual_tax_rate(annual_income)
 
-            # Apply correct conversion to EPS based on quote vs financial currency
-            cy_eps_raw = (cy_eps_raw or 0) * financial_fx_rate
-            ny_eps_raw = (ny_eps_raw or 0) * financial_fx_rate
-            year_ago_eps_raw = (year_ago_eps_raw or 0) * financial_fx_rate
+            def estimate_fx_rate(currency):
+                return self._estimate_fx_rate(
+                    ticker,
+                    currency,
+                    financial_currency,
+                    financial_fx_rate,
+                    quote_currency,
+                    quote_fx_rate,
+                    fetch_fx_rate,
+                )
+
+            cy_eps_raw = (cy_eps_raw or 0) * estimate_fx_rate(cy_eps_currency)
+            ny_eps_raw = (ny_eps_raw or 0) * estimate_fx_rate(ny_eps_currency)
+            year_ago_eps_raw = (year_ago_eps_raw or 0) * estimate_fx_rate(year_ago_eps_currency)
             after_tax_factor_raw = 1 - median_tax_rate_raw if median_tax_rate_raw is not None else 1
             after_tax_adj_income_raw = adj_income_raw * after_tax_factor_raw if adj_income_raw and after_tax_factor_raw > 0 else 0
             diluted_shares_raw = self._df_ttm_value(

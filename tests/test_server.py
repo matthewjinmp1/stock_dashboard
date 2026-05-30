@@ -380,6 +380,27 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertTrue(self.handler._yfinance_info_looks_valid("MSFT", {"longName": "Microsoft Corporation"}))
         self.assertTrue(self.handler._yfinance_info_looks_valid("MSFT", {"currentPrice": 450.0}))
 
+    def test_estimate_fx_rate_uses_estimate_currency_not_financial_currency(self):
+        fallback = mock.Mock(return_value=0.5)
+
+        self.assertEqual(
+            self.handler._estimate_fx_rate("TSM", "USD", "TWD", 0.032, "USD", 1.0, fallback),
+            1.0,
+        )
+        self.assertEqual(
+            self.handler._estimate_fx_rate("TSM", "TWD", "TWD", 0.032, "USD", 1.0, fallback),
+            0.032,
+        )
+        self.assertEqual(
+            self.handler._estimate_fx_rate("SHOP.TO", "CAD", "USD", 1.0, "CAD", 0.73, fallback),
+            0.73,
+        )
+        self.assertEqual(
+            self.handler._estimate_fx_rate("XYZ", "EUR", "TWD", 0.032, "USD", 1.0, fallback),
+            0.5,
+        )
+        fallback.assert_called_once_with("EUR")
+
     def test_valuation_choice_prefers_our_derived_ev(self):
         valuation, basis, prefix, label = self.handler._valuation_choice(
             derived_enterprise_value_raw=197_000_000_000,
