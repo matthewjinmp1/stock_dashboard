@@ -20,6 +20,13 @@ coverage_available=0
 if python3 -c "import coverage" >/dev/null 2>&1; then
     coverage_available=1
 fi
+node_bin=""
+bundled_node="/Users/matthewjohnson/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node"
+if command -v node >/dev/null 2>&1; then
+    node_bin="$(command -v node)"
+elif [[ -x "${bundled_node}" ]]; then
+    node_bin="${bundled_node}"
+fi
 
 echo "Running stock_analysis test suite..."
 echo "Python tests discovered: ${python_test_count}"
@@ -41,8 +48,8 @@ if [[ "${coverage_available}" == "1" ]]; then
     python3 -m coverage report -m server.py statements.py formatters.py cache_store.py || status=$?
 fi
 
-if command -v node >/dev/null 2>&1; then
-    node tests/frontend_assumptions_test.js || status=$?
+if [[ -n "${node_bin}" ]]; then
+    "${node_bin}" tests/frontend_assumptions_test.js || status=$?
 else
     echo
     echo "Frontend tests: skipped (node not found on PATH)"
@@ -62,6 +69,7 @@ echo "Test summary:"
 echo "  Python tests: ${python_test_count}"
 echo "  Frontend assertions found: ${frontend_assert_count}"
 echo "  Coverage enabled: $([[ "${coverage_available}" == "1" ]] && echo yes || echo no)"
+echo "  Frontend runner: $([[ -n "${node_bin}" ]] && echo "${node_bin}" || echo skipped)"
 echo "  Elapsed: ${elapsed}"
 
 exit "${status}"
