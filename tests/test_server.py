@@ -8,6 +8,7 @@ from unittest import mock
 
 import pandas as pd
 
+import formatters
 import server
 import statements
 import datetime
@@ -240,6 +241,22 @@ def make_fetch_result(**overrides):
     }
     values.update(overrides)
     return tuple(values[key] for key in FETCH_RESULT_FIELDS)
+
+
+class FormatterTests(unittest.TestCase):
+    def test_format_money_uses_compact_units_and_preserves_sign(self):
+        self.assertEqual(formatters.format_money(0), "0")
+        self.assertEqual(formatters.format_money(1_250_000), "1.25M")
+        self.assertEqual(formatters.format_money(-2_300_000_000), "-2.3B")
+        self.assertEqual(formatters.format_money(3_160_000_000_000), "3.16T")
+        self.assertEqual(formatters.format_money("bad"), "--")
+
+    def test_parse_abbrev_to_raw_handles_units_commas_and_invalid_values(self):
+        self.assertEqual(formatters.parse_abbrev_to_raw("1.25B"), 1_250_000_000)
+        self.assertEqual(formatters.parse_abbrev_to_raw("-2.3M"), -2_300_000)
+        self.assertEqual(formatters.parse_abbrev_to_raw("4,500K"), 4_500_000)
+        self.assertEqual(formatters.parse_abbrev_to_raw("--"), 0)
+        self.assertEqual(formatters.parse_abbrev_to_raw("not-a-number"), 0)
 
 
 class CacheDatabaseTests(unittest.TestCase):

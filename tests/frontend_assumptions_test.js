@@ -89,6 +89,7 @@ assert(api, 'test API should be exposed');
 assert(api.accountLabelMatchesSearch('Operating Income', 'op'), 'search should match the prefix of the first word');
 assert(api.accountLabelMatchesSearch('Operating Income', 'inc'), 'search should match the prefix of any word');
 assert(api.accountLabelMatchesSearch('Net Non Operating Interest Income Expense', 'int inc'), 'multi-word search should match word prefixes across the label');
+assert(api.accountLabelMatchesSearch('Cash, Equivalents & Short Term Investments', 'eq sh inv'), 'search should treat punctuation as word boundaries');
 assert(!api.accountLabelMatchesSearch('Operating Income', 'come'), 'search should not match arbitrary substrings inside a word');
 
 const quarterlyPeriods = ['2024-03-31', '2024-06-30', '2024-09-30', '2024-12-31', '2025-03-31'];
@@ -235,6 +236,45 @@ assert.strictEqual(annualRatios.rows[2].label, 'Adj ROIC', 'annual ratios should
 assert.deepStrictEqual(Array.from(annualRatios.rows[2].values), ['22.5%', '20%', '20%'], 'annual Adj ROIC should use adjusted net income over debt plus equity minus cash');
 assert.strictEqual(annualRatios.rows[3].label, 'ROGPPE', 'annual ratios should include ROGPPE');
 assert.deepStrictEqual(Array.from(annualRatios.rows[3].values), ['9%', '10%', '14%'], 'annual ROGPPE should use adjusted net income over gross PP&E, with TTM paired to MRQ gross PP&E');
+const netPpeFallbackRatios = api.buildRatiosStatement({
+  incomeStatement: {
+    annual: {
+      periods: ['TTM'],
+      rows: [{ label: 'Adjusted Net Income', values: ['10B'] }],
+    },
+  },
+  balanceStatement: {
+    annual: {
+      periods: ['MRQ'],
+      rows: [{ label: 'Net PP&E', values: ['50B'] }],
+    },
+  },
+});
+assert.strictEqual(netPpeFallbackRatios.rows[3].values[0], '20%', 'ROGPPE should fall back to net PP&E when gross PP&E is unavailable');
+const noInvestedCapitalRatios = api.buildRatiosStatement({
+  incomeStatement: {
+    annual: {
+      periods: ['2025-12-31'],
+      rows: [
+        { label: 'Operating Income', values: ['10B'] },
+        { label: 'Adjusted Net Income', values: ['8B'] },
+        { label: 'Tax Rate', values: ['20%'] },
+      ],
+    },
+  },
+  balanceStatement: {
+    annual: {
+      periods: ['2025-12-31'],
+      rows: [
+        { label: 'Total Debt', values: ['10B'] },
+        { label: 'Stockholders Equity', values: ['5B'] },
+        { label: 'Cash, Equivalents & Short Term Investments', values: ['15B'] },
+      ],
+    },
+  },
+});
+assert.strictEqual(noInvestedCapitalRatios.rows[1].values[0], '--', 'ROIC should be blank when invested capital is zero');
+assert.strictEqual(noInvestedCapitalRatios.rows[2].values[0], '--', 'Adj ROIC should be blank when invested capital is zero');
 api.state.periodicity = 'quarterly';
 const quarterlyRatios = api.buildRatiosStatement(ratiosData);
 assert.deepStrictEqual(Array.from(quarterlyRatios.periods), ['2025-03-31', '2025-06-30'], 'quarterly ratios should use income statement periods');
