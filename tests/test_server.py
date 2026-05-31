@@ -6,6 +6,8 @@ import threading
 import unittest
 from unittest import mock
 
+import pandas as pd
+
 import server
 import datetime
 
@@ -1379,6 +1381,53 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(merged["periods"], ["TTM", "2025-06-30", "2024-06-30", "2023-06-30", "2022-06-30"])
         self.assertEqual(revenue_row["values"], ["305B", "282B", "245B", "212B", "198B"])
         self.assertEqual(income_row["values"], ["143B", "129B", "109B", "88.5B", "83.4B"])
+
+    def test_income_statement_order_places_bank_interest_lines_after_revenue(self):
+        df = pd.DataFrame(
+            {
+                pd.Timestamp("2025-12-31"): [
+                    100,
+                    20,
+                    70,
+                    40,
+                    30,
+                    10,
+                    5,
+                    25,
+                    7,
+                    6,
+                ],
+            },
+            index=[
+                "Selling General And Administration",
+                "Tax Provision",
+                "Total Revenue",
+                "Interest Income",
+                "Interest Expense",
+                "Net Interest Income",
+                "Special Income Charges",
+                "Pretax Income",
+                "Selling And Marketing Expense",
+                "General And Administrative Expense",
+            ],
+        )
+
+        statement = self.handler._df_to_statement(df, order_map=server.INCOME_STATEMENT_TYPES)
+        labels = [row["label"] for row in statement["rows"]]
+
+        self.assertEqual(labels[:9], [
+            "Total Revenue",
+            "Interest Income",
+            "Interest Expense",
+            "Net Interest Income",
+            "Selling, General & Administrative",
+            "Selling & Marketing Expense",
+            "General & Administrative Expense",
+            "Special Income Charges",
+            "Pretax Income",
+        ])
+        self.assertLess(labels.index("Net Interest Income"), labels.index("Selling, General & Administrative"))
+        self.assertLess(labels.index("Special Income Charges"), labels.index("Pretax Income"))
 
     def test_add_adjusted_operating_income_uses_metric_formula_by_period(self):
         income = {
