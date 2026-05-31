@@ -9,6 +9,7 @@ from unittest import mock
 import pandas as pd
 
 import server
+import statements
 import datetime
 
 
@@ -403,6 +404,24 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         )
         fallback.assert_called_once_with("EUR")
 
+    def test_infer_currency_from_ticker_suffix_only_when_currency_is_missing_or_usd(self):
+        self.assertEqual(self.handler._infer_currency_from_ticker("BABA", "CNY"), "CNY")
+        self.assertEqual(self.handler._infer_currency_from_ticker("0700.HK", "USD"), "HKD")
+        self.assertEqual(self.handler._infer_currency_from_ticker("PDD", None), "USD")
+        self.assertEqual(self.handler._infer_currency_from_ticker("SHOP.TO", ""), "CAD")
+        self.assertEqual(self.handler._infer_currency_from_ticker("ASML.AS", "EUR"), "EUR")
+
+    def test_structured_metrics_attach_currency_only_to_money_values(self):
+        metrics = self.handler._structured_metrics([
+            ("revenue", 100, "100", "money"),
+            ("margin", 0.25, "25%", "percent"),
+            ("beta", 1.1, "1.1", "number"),
+        ], currency="USD")
+
+        self.assertEqual(metrics["revenue"]["currency"], "USD")
+        self.assertNotIn("currency", metrics["margin"])
+        self.assertNotIn("currency", metrics["beta"])
+
     def test_valuation_choice_prefers_our_derived_ev(self):
         valuation, basis, prefix, label = self.handler._valuation_choice(
             derived_enterprise_value_raw=197_000_000_000,
@@ -609,6 +628,8 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
     def test_transaction_cost_formats_as_basis_points(self):
         self.assertEqual(self.handler._format_basis_points(0.000048009986077128595), "0.48 bps")
         self.assertEqual(self.handler._format_basis_points(0.0005), "5 bps")
+        self.assertEqual(self.handler._format_basis_points(0), "0 bps")
+        self.assertEqual(self.handler._format_basis_points("bad"), "--")
 
     def test_delegates_to_yfinance_without_manual_fetches(self):
         expected = tuple(f"value-{idx}" for idx, _field in enumerate(FETCH_RESULT_FIELDS))
@@ -2132,6 +2153,34 @@ class StatementPageBuilderTests(unittest.TestCase):
         # Verify only one Total Revenue row (deduplication check)
         labels = [row["label"] for row in q_stmt["rows"]]
         self.assertEqual(labels.count("Total Revenue"), 1)
+
+    def test_build_statement_from_timeseries_keeps_zero_value_accounts(self):
+        selected_results = [
+            {
+                "meta": {"type": ["annualIssuanceOfCapitalStock"]},
+                "annualIssuanceOfCapitalStock": [
+                    {"asOfDate": "2025-12-31", "reportedValue": {"raw": 0}},
+                    {"asOfDate": "2024-12-31", "reportedValue": {"raw": 0}},
+                ],
+            },
+            {
+                "meta": {"type": ["quarterlyIssuanceOfCapitalStock"]},
+                "quarterlyIssuanceOfCapitalStock": [
+                    {"asOfDate": "2026-03-31", "reportedValue": {"raw": 0}},
+                ],
+            },
+        ]
+
+        statement = statements.build_statement_from_timeseries_results(
+            selected_results,
+            {"IssuanceOfCapitalStock": "Issuance of Capital Stock"},
+            formatter=lambda value: str(int(value)),
+        )
+
+        self.assertEqual(statement["annual"]["periods"], ["TTM", "2025-12-31", "2024-12-31"])
+        self.assertEqual(statement["annual"]["rows"][0]["label"], "Issuance of Capital Stock")
+        self.assertEqual(statement["annual"]["rows"][0]["values"], ["0", "0", "0"])
+        self.assertEqual(statement["quarterly"]["rows"][0]["values"], ["0"])
 
 if __name__ == "__main__":
     unittest.main()

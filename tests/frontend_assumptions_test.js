@@ -108,6 +108,14 @@ assert.deepStrictEqual(
   ['--', '--', '10.0%'],
   'annual growth should bridge blank periods and annualize over the date gap',
 );
+assert.deepStrictEqual(
+  api.growthValues(
+    ['466M', '482M', '496M', '--', '556M'],
+    ['2021-12-31', '2022-12-31', '2023-12-31', '2024-12-31', '2025-12-31'],
+  ),
+  ['--', '3.4%', '2.9%', '--', '5.9%'],
+  'annual growth should bridge multi-year money gaps by annualizing between the nearest real values',
+);
 api.state.latest = {
   incomeStatement: {
     quarterly: { periods: ['2026-06-30', '2026-03-31'] },
