@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
         watchlist: JSON.parse(localStorage.getItem('stock_watchlist') || '[]'),
         starred: JSON.parse(localStorage.getItem('stock_starred_tickers') || '[]'),
         most: JSON.parse(localStorage.getItem('stock_search_counts') || '{}'),
-        assumptions: {},
+        assumptions: JSON.parse(localStorage.getItem('stock_assumptions') || '{}'),
         statementTab: localStorage.getItem('stock_statement_tab') || 'income',
         periodicity: localStorage.getItem('stock_periodicity') || 'annual',
         quarterlyGrowthMode: localStorage.getItem('stock_quarterly_growth_mode') || 'yoy',
@@ -23,7 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
         loadedTicker: null,
     };
     let activeFetchTimer = null;
-    localStorage.removeItem('stock_assumptions');
     localStorage.removeItem('stock_statement_search');
 
     const views = {
@@ -53,6 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function saveTickerData() {
         save('stock_data_by_ticker', state.dataByTicker);
+    }
+
+    function saveAssumptions() {
+        save('stock_assumptions', state.assumptions);
     }
 
     function hasEnabledStarredAccount(accounts) {
@@ -538,6 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.assumptions[ticker][key] = parsed / 100;
         }
         if (!Object.keys(state.assumptions[ticker]).length) delete state.assumptions[ticker];
+        saveAssumptions();
         renderStats(state.latest);
     }
 
@@ -546,6 +550,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!ticker || !key || !state.assumptions[ticker]) return;
         delete state.assumptions[ticker][key];
         if (!Object.keys(state.assumptions[ticker]).length) delete state.assumptions[ticker];
+        saveAssumptions();
         renderStats(state.latest);
     }
 
@@ -630,7 +635,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function fetchTicker(ticker, refresh = false) {
-        delete state.assumptions[ticker];
         const started = performance.now();
         const url = `/api/short-interest/${ticker}${refresh ? '?refresh=1' : ''}`;
         const response = await fetch(url);
@@ -2035,6 +2039,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startFetchTimer,
         stopFetchTimer,
         resetAssumption,
+        saveAssumptions,
         resetStatementDefaultsForTicker,
     };
 

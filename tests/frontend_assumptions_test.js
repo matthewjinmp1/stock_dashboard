@@ -525,6 +525,10 @@ api.state.latest = editedTaxData;
 api.resetAssumption('medianTaxRate');
 assert.strictEqual(api.state.assumptions.TAX.margin, 0.28, 'reset should keep other edited assumptions');
 assert.strictEqual(api.state.assumptions.TAX.medianTaxRate, undefined, 'reset should clear the selected edited assumption');
+assert(JSON.parse(storage.get('stock_assumptions')).TAX.margin === 0.28, 'reset should persist the remaining edited assumptions');
+api.resetAssumption('margin');
+assert.strictEqual(api.state.assumptions.TAX, undefined, 'resetting the final edited assumption should remove the ticker entry');
+assert.strictEqual(JSON.parse(storage.get('stock_assumptions')).TAX, undefined, 'resetting the final edited assumption should persist removal');
 
 const editedGrowthData = { ...data, ticker: 'GROWTH' };
 api.state.assumptions.GROWTH = { margin: 0.28, cy_growth: 0.20, ny_growth: 0.10 };
@@ -538,6 +542,8 @@ assertAlmostEqual(api.metricEntry(adjustedGrowth, 'ev_cy_ebit').raw, 84.85505316
 assertAlmostEqual(api.metricEntry(adjustedGrowth, 'ev_ny_ebit').raw, 84.8495177193, 0.0001, 'NY valuation should use after-tax discounted forward income');
 assert.notStrictEqual(api.metricDisplay(adjustedGrowth, 'ev_cy_ebit'), '--', 'edited growth should keep CY valuation active');
 assert.notStrictEqual(api.metricDisplay(adjustedGrowth, 'ev_ny_ebit'), '--', 'edited growth should keep NY valuation active');
+api.saveAssumptions();
+assert.strictEqual(JSON.parse(storage.get('stock_assumptions')).GROWTH.cy_growth, 0.20, 'edited assumptions should persist across scans until reset');
 
 const zeroInvestmentData = {
   ...data,
