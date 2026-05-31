@@ -23,22 +23,30 @@ fi
 
 echo "Running stock_analysis test suite..."
 echo "Python tests discovered: ${python_test_count}"
-echo "Frontend assertion references: ${frontend_assert_count}"
+echo "Frontend assertions found: ${frontend_assert_count}"
+
+status=0
 
 if [[ "${coverage_available}" == "1" ]]; then
     python3 -m coverage erase
-    python3 -m coverage run --source=server,statements,formatters,cache_store -m unittest discover -s tests -v
+    python3 -m coverage run --source=server,statements,formatters,cache_store -m unittest discover -s tests -v || status=$?
 else
     echo "Coverage: unavailable (install Python package 'coverage' to enable it)"
-    python3 -m unittest discover -s tests -v
+    python3 -m unittest discover -s tests -v || status=$?
 fi
-
-node tests/frontend_assumptions_test.js
 
 if [[ "${coverage_available}" == "1" ]]; then
     echo
     echo "Python coverage:"
-    python3 -m coverage report -m server.py statements.py formatters.py cache_store.py
+    python3 -m coverage report -m server.py statements.py formatters.py cache_store.py || status=$?
+fi
+
+if command -v node >/dev/null 2>&1; then
+    node tests/frontend_assumptions_test.js || status=$?
+else
+    echo
+    echo "Frontend tests: skipped (node not found on PATH)"
+    status=127
 fi
 
 finished_at="$(python3 -c 'import time; print(time.time())')"
@@ -52,6 +60,8 @@ PY
 echo
 echo "Test summary:"
 echo "  Python tests: ${python_test_count}"
-echo "  Frontend assertion references: ${frontend_assert_count}"
+echo "  Frontend assertions found: ${frontend_assert_count}"
 echo "  Coverage enabled: $([[ "${coverage_available}" == "1" ]] && echo yes || echo no)"
 echo "  Elapsed: ${elapsed}"
+
+exit "${status}"
