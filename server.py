@@ -1383,7 +1383,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # Core metrics from DataFrames (TTM using quarterly sums) — all converted to USD
             last_year_revenue_raw = self._df_raw_value(annual_income, ["Total Revenue", "TotalRevenue"]) * financial_fx_rate
             revenue_raw = (self._df_ttm_value(quarterly_income, annual_income, ["Total Revenue", "TotalRevenue"]) or info.get("totalRevenue", 0) or 0) * financial_fx_rate
-            operating_income_raw = (self._df_ttm_value(quarterly_income, annual_income, ["Operating Income", "OperatingIncome"]) or info.get("operatingIncome", 0) or 0) * financial_fx_rate
+            operating_income_raw = (self._df_ttm_value(quarterly_income, annual_income, [
+                "Total Operating Income As Reported",
+                "TotalOperatingIncomeAsReported",
+                "Operating Income",
+                "OperatingIncome",
+            ]) or info.get("operatingIncome", 0) or 0) * financial_fx_rate
             gross_profit_raw = (self._df_ttm_value(quarterly_income, annual_income, ["Gross Profit", "GrossProfit"]) or info.get("grossProfits", 0) or 0) * financial_fx_rate
             capex_raw = abs(self._df_ttm_value(quarterly_cashflow, annual_cashflow, ["Capital Expenditure", "CapitalExpenditure"], absolute=True)) * financial_fx_rate
             da_raw = self._df_ttm_value(quarterly_cashflow, annual_cashflow, ["Depreciation And Amortization", "DepreciationAndAmortization", "Reconciled Depreciation", "ReconciledDepreciation"])

@@ -1510,6 +1510,50 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertEqual(adjusted_annual["values"], ["35B", "20B"])
         self.assertEqual(adjusted_quarterly, {"label": "Adjusted Operating Income", "values": ["6B"]})
 
+    def test_add_adjusted_operating_income_prefers_reported_operating_income(self):
+        income = {
+            "annual": {
+                "periods": ["2025-12-31"],
+                "rows": [
+                    {"label": "Total Revenue", "values": ["15.1B"]},
+                    {"label": "Operating Income", "values": ["-3.86B"]},
+                    {"label": "Total Operating Income As Reported", "values": ["5.61B"]},
+                ],
+            }
+        }
+        cash_flow = {
+            "annual": {
+                "periods": ["2025-12-31"],
+                "rows": [
+                    {"label": "Depreciation & Amortization", "values": ["2.02B"]},
+                    {"label": "Capital Expenditures", "values": ["-2.70B"]},
+                ],
+            }
+        }
+
+        enriched = self.handler._add_adjusted_operating_income(income, cash_flow)
+        rows = enriched["annual"]["rows"]
+        adjusted = next(row for row in rows if row["label"] == "Adjusted Operating Income")
+
+        self.assertEqual(adjusted["values"], ["5.61B"])
+        self.assertEqual(rows.index(adjusted), rows.index(next(row for row in rows if row["label"] == "Total Operating Income As Reported")) + 1)
+
+    def test_df_statement_displays_reported_operating_income_when_generic_row_is_bad(self):
+        df = pd.DataFrame(
+            {
+                pd.Timestamp("2025-12-31"): [15_078_000_000, -3_860_000_000, 5_609_000_000],
+            },
+            index=["Total Revenue", "Operating Income", "Total Operating Income As Reported"],
+        )
+
+        statement = self.handler._df_to_statement(df, order_map=server.INCOME_STATEMENT_TYPES)
+        labels = [row["label"] for row in statement["rows"]]
+        operating_row = next(row for row in statement["rows"] if row["label"] == "Operating Income")
+
+        self.assertEqual(labels.count("Operating Income"), 1)
+        self.assertNotIn("Total Operating Income As Reported", labels)
+        self.assertEqual(operating_row["values"], ["5.61B", "5.61B"])
+
     def test_add_adjusted_operating_income_does_not_duplicate_existing_row(self):
         income = {
             "annual": {

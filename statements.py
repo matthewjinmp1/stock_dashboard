@@ -166,6 +166,8 @@ def build_statement_from_timeseries_results(selected_results, type_map, formatte
     }
     res["annual"] = prune_sparse_periods(res["annual"])
     res["quarterly"] = prune_sparse_periods(res["quarterly"])
+    res["annual"] = prefer_reported_operating_income(res["annual"])
+    res["quarterly"] = prefer_reported_operating_income(res["quarterly"])
     return res
 
 
@@ -230,11 +232,30 @@ def merge_statement_rows(primary, secondary):
     return _merge(primary, secondary)
 
 
+def prefer_reported_operating_income(statement):
+    if not isinstance(statement, dict):
+        return statement
+    rows = statement.get("rows") or []
+    reported = next((row for row in rows if row.get("label") == "Total Operating Income As Reported"), None)
+    if not reported:
+        return statement
+
+    operating = next((row for row in rows if row.get("label") == "Operating Income"), None)
+    if operating:
+        operating["values"] = list(reported.get("values") or [])
+        statement["rows"] = [row for row in rows if row is not reported]
+    else:
+        reported["label"] = "Operating Income"
+    return statement
+
+
 def _row_by_label(statement, labels):
-    labels_lower = {label.lower() for label in labels}
-    for row in (statement or {}).get("rows", []):
-        if str(row.get("label", "")).lower() in labels_lower:
-            return row
+    rows = (statement or {}).get("rows", [])
+    for label in labels:
+        label_lower = label.lower()
+        for row in rows:
+            if str(row.get("label", "")).lower() == label_lower:
+                return row
     return None
 
 
@@ -347,7 +368,10 @@ def add_adjusted_operating_income(income_statement, cash_flow_statement, formatt
         if any(row.get("label") == "Adjusted Operating Income" for row in rows):
             continue
 
-        operating_row = _row_by_label(income, ["Operating Income"])
+        operating_row = _row_by_label(income, [
+            "Total Operating Income As Reported",
+            "Operating Income",
+        ])
         da_row = _row_by_label(cash_flow, [
             "Depreciation & Amortization",
             "Depreciation And Amortization",
@@ -652,7 +676,7 @@ def df_to_statement(df, formatter=None, ttm_label="TTM", order_map=None, quarter
         for v in raw_values:
             formatted.append(format_statement_value(label, v, formatter) if pd.notna(v) else format_statement_value(label, 0, formatter) if blank_row_is_zero else "--")
         rows.append({"label": resolve_display_label(label, order_map), "values": formatted})
-    return {"periods": periods, "rows": rows}
+    return prefer_reported_operating_income({"periods": periods, "rows": rows})
 
 
 def df_to_quarterly_statement(df, formatter=None, order_map=None):
@@ -681,7 +705,7 @@ def df_to_quarterly_statement(df, formatter=None, order_map=None):
         blank_row_is_zero = should_display_blank_statement_row_as_zero(df, label, cols)
         formatted = [format_statement_value(label, v, formatter) if pd.notna(v) else format_statement_value(label, 0, formatter) if blank_row_is_zero else "--" for v in raw_values]
         rows.append({"label": resolve_display_label(label, order_map), "values": formatted})
-    return {"periods": periods, "rows": rows}
+    return prefer_reported_operating_income({"periods": periods, "rows": rows})
 
 
 def df_raw_value(df, row_labels, col_index=0):
