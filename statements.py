@@ -279,18 +279,15 @@ def add_net_debt(balance_statement, formatter=None):
         if not isinstance(balance, dict):
             continue
         rows = balance.get("rows") or []
-        if any(row.get("label") == "Net Debt" for row in rows):
-            continue
-
+        existing_net_debt_row = _row_by_label(balance, ["Net Debt"])
         total_debt_row = _row_by_label(balance, ["Total Debt"])
-        current_debt_row = _row_by_label(balance, [
-            "Current Debt",
-            "Short Term Debt",
+        current_debt_row = _row_by_label(balance, ["Current Debt", "Short Term Debt"])
+        long_term_debt_row = _row_by_label(balance, ["Long Term Debt"])
+        current_debt_and_lease_row = _row_by_label(balance, [
             "Current Debt And Capital Lease Obligation",
             "Current Debt & Capital Lease Obligation",
         ])
-        long_term_debt_row = _row_by_label(balance, [
-            "Long Term Debt",
+        long_term_debt_and_lease_row = _row_by_label(balance, [
             "Long Term Debt And Capital Lease Obligation",
             "Long Term Debt & Capital Lease Obligation",
         ])
@@ -305,16 +302,19 @@ def add_net_debt(balance_statement, formatter=None):
             "Other Short Term Investments",
             "Short Term Investments",
         ])
-        if not (total_debt_row or current_debt_row or long_term_debt_row) or not (cash_row or short_investments_row):
+        if not (total_debt_row or (current_debt_row and long_term_debt_row) or (current_debt_and_lease_row and long_term_debt_and_lease_row)) or not (cash_row or short_investments_row):
             continue
 
         values = []
-        has_debt_component_rows = current_debt_row or long_term_debt_row
         for period in balance.get("periods") or []:
             current_debt_raw = _period_value(balance, current_debt_row, period)
             long_term_debt_raw = _period_value(balance, long_term_debt_row, period)
-            if has_debt_component_rows and (current_debt_raw is not None or long_term_debt_raw is not None):
-                total_debt_raw = (current_debt_raw or 0) + (long_term_debt_raw or 0)
+            current_debt_and_lease_raw = _period_value(balance, current_debt_and_lease_row, period)
+            long_term_debt_and_lease_raw = _period_value(balance, long_term_debt_and_lease_row, period)
+            if current_debt_raw is not None and long_term_debt_raw is not None:
+                total_debt_raw = current_debt_raw + long_term_debt_raw
+            elif current_debt_and_lease_raw is not None and long_term_debt_and_lease_raw is not None:
+                total_debt_raw = current_debt_and_lease_raw + long_term_debt_and_lease_raw
             else:
                 total_debt_raw = _period_value(balance, total_debt_row, period)
             cash_raw = _period_value(balance, cash_row, period)
@@ -327,9 +327,12 @@ def add_net_debt(balance_statement, formatter=None):
                 continue
             values.append(formatter(total_debt_raw - cash_raw))
 
-        insert_anchor = total_debt_row or long_term_debt_row or current_debt_row
-        insert_idx = rows.index(insert_anchor) + 1
-        rows.insert(insert_idx, {"label": "Net Debt", "values": values})
+        insert_anchor = total_debt_row or long_term_debt_row or current_debt_row or long_term_debt_and_lease_row or current_debt_and_lease_row
+        if existing_net_debt_row:
+            existing_net_debt_row["values"] = values
+        else:
+            insert_idx = rows.index(insert_anchor) + 1
+            rows.insert(insert_idx, {"label": "Net Debt", "values": values})
         balance["rows"] = rows
 
     return balance_statement

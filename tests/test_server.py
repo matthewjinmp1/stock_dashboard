@@ -1592,6 +1592,27 @@ class StatementPageBuilderTests(unittest.TestCase):
 
         self.assertEqual(net_debt["values"], ["7B", "5B"])
 
+    def test_add_net_debt_replaces_sparse_yahoo_row_and_uses_matched_debt_rows(self):
+        balance = {
+            "annual": {
+                "periods": ["MRQ", "2025-12-31", "2024-12-31", "2023-12-31", "2022-12-31"],
+                "rows": [
+                    {"label": "Cash, Equivalents & Short Term Investments", "values": ["81.6B", "81.6B", "77.8B", "65.4B", "40.7B"]},
+                    {"label": "Current Debt & Capital Lease Obligation", "values": ["2.21B", "2.21B", "1.94B", "1.62B", "1.37B"]},
+                    {"label": "Long Term Debt", "values": ["58.7B", "58.7B", "28.8B", "18.4B", "9.92B"]},
+                    {"label": "Long Term Debt & Capital Lease Obligation", "values": ["81.7B", "81.7B", "47.1B", "35.6B", "25.2B"]},
+                    {"label": "Total Debt", "values": ["83.9B", "83.9B", "49.1B", "37.2B", "26.6B"]},
+                    {"label": "Net Debt", "values": ["22.9B", "22.9B", "--", "--", "--"]},
+                ],
+            }
+        }
+
+        enriched = self.handler._add_net_debt(balance)
+        net_debt_rows = [row for row in enriched["annual"]["rows"] if row["label"] == "Net Debt"]
+
+        self.assertEqual(len(net_debt_rows), 1)
+        self.assertEqual(net_debt_rows[0]["values"], ["2.31B", "2.31B", "-28.8B", "-28.2B", "-14.1B"])
+
     def test_add_adjusted_operating_income_does_not_duplicate_existing_row(self):
         income = {
             "annual": {
