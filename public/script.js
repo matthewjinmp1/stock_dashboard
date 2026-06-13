@@ -1219,7 +1219,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const normalizedLabel = String(label || '').toLowerCase().trim();
         const normalizedTerm = String(term || '').toLowerCase().trim();
         if (!normalizedTerm) return true;
-        const groups = normalizedTerm.split(',').map((part) => part.trim()).filter(Boolean);
+        const groups = normalizedTerm.split(';').map((part) => part.trim()).filter(Boolean);
         if (groups.length > 1) return groups.some((group) => accountLabelMatchesSearch(label, group));
         if (normalizedLabel.startsWith(normalizedTerm)) return true;
         const words = normalizedLabel.match(/[a-z0-9]+/g) || [];
