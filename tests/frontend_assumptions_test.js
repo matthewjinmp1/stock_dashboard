@@ -90,10 +90,10 @@ assert(api.accountLabelMatchesSearch('Operating Income', 'op'), 'search should m
 assert(api.accountLabelMatchesSearch('Operating Income', 'inc'), 'search should match the prefix of any word');
 assert(api.accountLabelMatchesSearch('Net Non Operating Interest Income Expense', 'int inc'), 'multi-word search should match word prefixes across the label');
 assert(api.accountLabelMatchesSearch('Cash, Equivalents & Short Term Investments', 'eq sh inv'), 'search should treat punctuation as word boundaries');
-assert(api.accountLabelMatchesSearch('Total Revenue', 'cash; rev'), 'semicolon-separated search should match any group');
-assert(api.accountLabelMatchesSearch('Cash Dividends Paid', 'rev; cash div'), 'semicolon-separated search should preserve multi-word matching inside each group');
+assert(api.accountLabelMatchesSearch('Total Revenue', 'cash, rev'), 'comma-separated search should match any group');
+assert(api.accountLabelMatchesSearch('Cash Dividends Paid', 'rev, cash div'), 'comma-separated search should preserve multi-word matching inside each group');
 assert(!api.accountLabelMatchesSearch('Operating Income', 'come'), 'search should not match arbitrary substrings inside a word');
-assert(!api.accountLabelMatchesSearch('Operating Income', 'rev; cash'), 'semicolon-separated search should reject labels that match none of the groups');
+assert(!api.accountLabelMatchesSearch('Operating Income', 'rev, cash'), 'comma-separated search should reject labels that match none of the groups');
 
 const quarterlyPeriods = ['2024-03-31', '2024-06-30', '2024-09-30', '2024-12-31', '2025-03-31'];
 const quarterlyValues = ['100', '110', '120', '130', '150'];
