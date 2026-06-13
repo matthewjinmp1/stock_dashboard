@@ -714,6 +714,10 @@ button:active {
     min-width: max-content;
 }
 
+.copy-statements-btn {
+    min-width: 4.4rem;
+}
+
 .quarterly-growth-controls {
     display: inline-flex;
     gap: 0.5rem;

@@ -899,6 +899,8 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('stock_quarterly_growth_mode', state.quarterlyGrowthMode);
             renderStatements(state.latest);
         }
+        const copyStatements = event.target.closest('[data-copy-statements]');
+        if (copyStatements) copyVisibleStatements(copyStatements);
         const statement = event.target.closest('[data-statement-tab]');
         if (statement) {
             state.statementTab = statement.dataset.statementTab;
@@ -996,6 +998,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <button class="mini-btn ${state.quarterlyGrowthMode === 'yoy' ? 'on blue' : ''}" data-quarterly-growth-mode="yoy">YoY</button>
                             <button class="mini-btn ${state.quarterlyGrowthMode === 'qoq' ? 'on blue' : ''}" data-quarterly-growth-mode="qoq">QoQ</button>
                         </span>
+                        <button class="mini-btn copy-statements-btn" data-copy-statements type="button">Copy</button>
                 </div>
             </div>
             <div class="statement-toolbar">
@@ -1014,6 +1017,104 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.statementTab === 'starred') return renderStarredStatementTable(data);
         if (state.statementTab === 'all') return renderAllStatementTable(data);
         return renderStatementTable(statementForTab(data, state.statementTab), state.statementTab);
+    }
+
+    async function copyVisibleStatements(button) {
+        const text = buildStatementCopyText(state.latest);
+        if (!text) return;
+        try {
+            await writeClipboardText(text);
+            flashCopyButton(button, 'Copied');
+        } catch (error) {
+            console.warn('Statement copy failed', error);
+            flashCopyButton(button, 'Failed');
+        }
+    }
+
+    function writeClipboardText(text) {
+        if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.left = '-9999px';
+        document.body.appendChild(area);
+        area.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(area);
+        return ok ? Promise.resolve() : Promise.reject(new Error('Clipboard unavailable'));
+    }
+
+    function flashCopyButton(button, label) {
+        if (!button) return;
+        const original = button.textContent;
+        button.textContent = label;
+        window.setTimeout(() => {
+            button.textContent = original;
+        }, 1200);
+    }
+
+    function buildStatementCopyText(data) {
+        const sections = statementSectionsForCurrentView(data);
+        return sections.map((section) => statementSectionCopyText(section)).filter(Boolean).join('\n\n');
+    }
+
+    function statementSectionsForCurrentView(data) {
+        if (!data) return [];
+        const p = state.periodicity || 'annual';
+        const baseSections = [
+            { key: 'income', title: 'Income Statement', statement: (data.incomeStatement || {})[p] || {} },
+            { key: 'balance', title: 'Balance Sheet', statement: (data.balanceStatement || {})[p] || {} },
+            { key: 'cash', title: 'Cash Flow Statement', statement: (data.cashFlowStatement || {})[p] || {} },
+            { key: 'ratios', title: 'Ratios', statement: buildRatiosStatement(data) },
+        ];
+        if (state.statementTab === 'all') return baseSections;
+        if (state.statementTab === 'starred') {
+            return baseSections.map((section) => ({
+                ...section,
+                statement: {
+                    periods: section.statement.periods || [],
+                    rows: (section.statement.rows || []).filter((row) => state.starredAccounts[starredKey(section.key, row.label)]),
+                },
+            }));
+        }
+        const statement = statementForTab(data, state.statementTab);
+        const title = {
+            income: 'Income Statement',
+            balance: 'Balance Sheet',
+            cash: 'Cash Flow Statement',
+            ratios: 'Ratios',
+        }[state.statementTab] || 'Statement';
+        return [{ key: state.statementTab, title, statement }];
+    }
+
+    function statementSectionCopyText(section) {
+        const statement = statementForDisplay(section.statement || {});
+        const periods = statement.periods || [];
+        const rows = filterStatementRows(statement.rows || []);
+        if (!rows.length) return '';
+        const includeTitle = state.statementTab === 'all' || state.statementTab === 'starred';
+        const lines = [
+            ['Line Item', ...periods].map(tsvCell).join('\t'),
+            ...rows.map((row) => [row.label, ...(row.values || []).map(statementCopyValue)].map(tsvCell).join('\t')),
+        ];
+        return includeTitle ? [section.title, ...lines].join('\n') : lines.join('\n');
+    }
+
+    function statementCopyValue(value) {
+        const display = formatSigned(value);
+        if (!display || display === '--') return '';
+        if (/%$/.test(display.trim())) return display.replace(/\+/g, '');
+        const raw = parseMoney(display);
+        if (!raw) {
+            const plain = Number(String(display).replace(/,/g, '').trim());
+            return Number.isFinite(plain) ? String(plain) : display;
+        }
+        return String(raw);
+    }
+
+    function tsvCell(value) {
+        return String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim();
     }
 
     function statementForTab(data, tab) {
@@ -2034,6 +2135,8 @@ document.addEventListener('DOMContentLoaded', () => {
         parseMoney,
         parsePercentValue,
         accountLabelMatchesSearch,
+        buildStatementCopyText,
+        statementCopyValue,
         buildRatiosStatement,
         growthValues,
         growthRowLabel,

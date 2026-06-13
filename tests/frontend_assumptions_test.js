@@ -95,6 +95,33 @@ assert(api.accountLabelMatchesSearch('Cash Dividends Paid', 'rev, cash div'), 'c
 assert(!api.accountLabelMatchesSearch('Operating Income', 'come'), 'search should not match arbitrary substrings inside a word');
 assert(!api.accountLabelMatchesSearch('Operating Income', 'rev, cash'), 'comma-separated search should reject labels that match none of the groups');
 
+api.state.statementTab = 'income';
+api.state.periodicity = 'annual';
+api.state.statementSearch = '';
+const copyData = {
+  incomeStatement: {
+    annual: {
+      periods: ['2024-12-31', '2025-12-31', 'TTM'],
+      rows: [
+        { label: 'Total Revenue', values: ['1.2B', '1,500,000', '--'] },
+        { label: 'Gross Margin', values: ['22%', '23.5%', '24%'] },
+      ],
+    },
+  },
+};
+assert.strictEqual(
+  api.buildStatementCopyText(copyData),
+  'Line Item\t2024-12-31\t2025-12-31\tTTM\nTotal Revenue\t1200000000\t1500000\t\nGross Margin\t22%\t23.5%\t24%',
+  'statement copy should use tab-separated raw numbers without B/M suffixes',
+);
+api.state.statementSearch = 'rev';
+assert.strictEqual(
+  api.buildStatementCopyText(copyData),
+  'Line Item\t2024-12-31\t2025-12-31\tTTM\nTotal Revenue\t1200000000\t1500000\t',
+  'statement copy should respect visible search-filtered rows',
+);
+api.state.statementSearch = '';
+
 const quarterlyPeriods = ['2024-03-31', '2024-06-30', '2024-09-30', '2024-12-31', '2025-03-31'];
 const quarterlyValues = ['100', '110', '120', '130', '150'];
 api.state.periodicity = 'quarterly';
