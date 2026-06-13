@@ -283,8 +283,17 @@ def add_net_debt(balance_statement, formatter=None):
             continue
 
         total_debt_row = _row_by_label(balance, ["Total Debt"])
-        current_debt_row = _row_by_label(balance, ["Current Debt", "Current Debt And Capital Lease Obligation"])
-        long_term_debt_row = _row_by_label(balance, ["Long Term Debt", "Long Term Debt And Capital Lease Obligation"])
+        current_debt_row = _row_by_label(balance, [
+            "Current Debt",
+            "Short Term Debt",
+            "Current Debt And Capital Lease Obligation",
+            "Current Debt & Capital Lease Obligation",
+        ])
+        long_term_debt_row = _row_by_label(balance, [
+            "Long Term Debt",
+            "Long Term Debt And Capital Lease Obligation",
+            "Long Term Debt & Capital Lease Obligation",
+        ])
         cash_row = _row_by_label(balance, [
             "Cash, Equivalents & Short Term Investments",
             "Cash Cash Equivalents and Short Term Investments",
@@ -300,13 +309,16 @@ def add_net_debt(balance_statement, formatter=None):
             continue
 
         values = []
+        has_debt_component_rows = current_debt_row or long_term_debt_row
         for period in balance.get("periods") or []:
-            total_debt_raw = _period_value(balance, total_debt_row, period)
-            if total_debt_raw is None:
-                if current_debt_row or long_term_debt_row:
-                    current_debt_raw = _period_value(balance, current_debt_row, period) or 0
-                    long_term_debt_raw = _period_value(balance, long_term_debt_row, period) or 0
-                    total_debt_raw = current_debt_raw + long_term_debt_raw
+            current_debt_raw = _period_value(balance, current_debt_row, period)
+            long_term_debt_raw = _period_value(balance, long_term_debt_row, period)
+            if has_debt_component_rows:
+                total_debt_raw = (current_debt_raw or 0) + (long_term_debt_raw or 0)
+                if current_debt_raw is None and long_term_debt_raw is None:
+                    total_debt_raw = None
+            else:
+                total_debt_raw = _period_value(balance, total_debt_row, period)
             cash_raw = _period_value(balance, cash_row, period)
             if cash_raw is None:
                 cash_raw = 0

@@ -1554,13 +1554,15 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertNotIn("Total Operating Income As Reported", labels)
         self.assertEqual(operating_row["values"], ["5.61B", "5.61B"])
 
-    def test_add_net_debt_uses_total_debt_minus_cash_and_floors_at_zero(self):
+    def test_add_net_debt_uses_debt_components_minus_cash_and_floors_at_zero(self):
         balance = {
             "annual": {
                 "periods": ["MRQ", "2025-12-31", "2024-12-31"],
                 "rows": [
                     {"label": "Cash, Equivalents & Short Term Investments", "values": ["20B", "40B", "10B"]},
-                    {"label": "Total Debt", "values": ["50B", "25B", "--"]},
+                    {"label": "Current Debt", "values": ["5B", "2B", "--"]},
+                    {"label": "Long Term Debt", "values": ["45B", "23B", "--"]},
+                    {"label": "Total Debt", "values": ["999B", "999B", "999B"]},
                 ],
             }
         }
