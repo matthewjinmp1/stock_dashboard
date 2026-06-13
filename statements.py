@@ -270,6 +270,61 @@ def _period_value(statement, row, period):
     return parse_money_to_raw(values[idx])
 
 
+def add_net_debt(balance_statement, formatter=None):
+    formatter = formatter or format_money
+    balance_statement = balance_statement or {}
+
+    for period_key in ("annual", "quarterly"):
+        balance = balance_statement.get(period_key)
+        if not isinstance(balance, dict):
+            continue
+        rows = balance.get("rows") or []
+        if any(row.get("label") == "Net Debt" for row in rows):
+            continue
+
+        total_debt_row = _row_by_label(balance, ["Total Debt"])
+        current_debt_row = _row_by_label(balance, ["Current Debt", "Current Debt And Capital Lease Obligation"])
+        long_term_debt_row = _row_by_label(balance, ["Long Term Debt", "Long Term Debt And Capital Lease Obligation"])
+        cash_row = _row_by_label(balance, [
+            "Cash, Equivalents & Short Term Investments",
+            "Cash Cash Equivalents and Short Term Investments",
+            "Cash & Short Term Investments",
+            "Cash & Cash Equivalents",
+            "Cash and Cash Equivalents",
+        ])
+        short_investments_row = _row_by_label(balance, [
+            "Other Short Term Investments",
+            "Short Term Investments",
+        ])
+        if not (total_debt_row or current_debt_row or long_term_debt_row) or not (cash_row or short_investments_row):
+            continue
+
+        values = []
+        for period in balance.get("periods") or []:
+            total_debt_raw = _period_value(balance, total_debt_row, period)
+            if total_debt_raw is None:
+                if current_debt_row or long_term_debt_row:
+                    current_debt_raw = _period_value(balance, current_debt_row, period) or 0
+                    long_term_debt_raw = _period_value(balance, long_term_debt_row, period) or 0
+                    total_debt_raw = current_debt_raw + long_term_debt_raw
+            cash_raw = _period_value(balance, cash_row, period)
+            if cash_raw is None:
+                cash_raw = 0
+            if cash_row and cash_row.get("label") in ("Cash & Cash Equivalents", "Cash and Cash Equivalents"):
+                cash_raw += _period_value(balance, short_investments_row, period) or 0
+            if total_debt_raw is None:
+                values.append("--")
+                continue
+            values.append(formatter(max(total_debt_raw - cash_raw, 0)))
+
+        insert_anchor = total_debt_row or long_term_debt_row or current_debt_row
+        insert_idx = rows.index(insert_anchor) + 1
+        rows.insert(insert_idx, {"label": "Net Debt", "values": values})
+        balance["rows"] = rows
+
+    return balance_statement
+
+
 def add_shareholder_return(cash_flow_statement, formatter=None):
     formatter = formatter or format_money
     cash_flow_statement = cash_flow_statement or {}

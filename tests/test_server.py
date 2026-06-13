@@ -1554,6 +1554,42 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertNotIn("Total Operating Income As Reported", labels)
         self.assertEqual(operating_row["values"], ["5.61B", "5.61B"])
 
+    def test_add_net_debt_uses_total_debt_minus_cash_and_floors_at_zero(self):
+        balance = {
+            "annual": {
+                "periods": ["MRQ", "2025-12-31", "2024-12-31"],
+                "rows": [
+                    {"label": "Cash, Equivalents & Short Term Investments", "values": ["20B", "40B", "10B"]},
+                    {"label": "Total Debt", "values": ["50B", "25B", "--"]},
+                ],
+            }
+        }
+
+        enriched = self.handler._add_net_debt(balance)
+        rows = enriched["annual"]["rows"]
+        net_debt = next(row for row in rows if row["label"] == "Net Debt")
+
+        self.assertEqual(net_debt["values"], ["30B", "0", "--"])
+        self.assertEqual(rows.index(net_debt), rows.index(next(row for row in rows if row["label"] == "Total Debt")) + 1)
+
+    def test_add_net_debt_falls_back_to_current_plus_long_term_debt(self):
+        balance = {
+            "quarterly": {
+                "periods": ["2026-03-31", "2025-12-31"],
+                "rows": [
+                    {"label": "Cash & Cash Equivalents", "values": ["5B", "4B"]},
+                    {"label": "Other Short Term Investments", "values": ["1B", "2B"]},
+                    {"label": "Current Debt", "values": ["3B", "2B"]},
+                    {"label": "Long Term Debt", "values": ["10B", "9B"]},
+                ],
+            }
+        }
+
+        enriched = self.handler._add_net_debt(balance)
+        net_debt = next(row for row in enriched["quarterly"]["rows"] if row["label"] == "Net Debt")
+
+        self.assertEqual(net_debt["values"], ["7B", "5B"])
+
     def test_add_adjusted_operating_income_does_not_duplicate_existing_row(self):
         income = {
             "annual": {

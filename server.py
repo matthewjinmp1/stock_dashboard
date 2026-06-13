@@ -985,6 +985,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _add_shareholder_return(self, cash_flow_statement, formatter=None):
         return statements.add_shareholder_return(cash_flow_statement, formatter or self._format_money)
 
+    def _add_net_debt(self, balance_statement, formatter=None):
+        return statements.add_net_debt(balance_statement, formatter or self._format_money)
+
     def _add_dividend_per_share(self, cash_flow_statement, income_statement, formatter=None):
         return statements.add_dividend_per_share(cash_flow_statement, income_statement, formatter or self._format_3sig)
 
@@ -1369,6 +1372,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "annual": self._df_to_statement(annual_balance, formatter=fx_formatter, ttm_label="MRQ", order_map=BALANCE_STATEMENT_TYPES),
                 "quarterly": self._df_to_quarterly_statement(quarterly_balance, formatter=fx_formatter, order_map=BALANCE_STATEMENT_TYPES),
             }
+            balance_statement = self._add_net_debt(balance_statement)
             cash_flow_statement = {
                 "annual": self._df_to_statement(annual_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES, quarterly_df=quarterly_cashflow),
                 "quarterly": self._df_to_quarterly_statement(quarterly_cashflow, formatter=fx_formatter, order_map=CASH_FLOW_STATEMENT_TYPES),
