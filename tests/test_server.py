@@ -1554,7 +1554,7 @@ class StatementPageBuilderTests(unittest.TestCase):
         self.assertNotIn("Total Operating Income As Reported", labels)
         self.assertEqual(operating_row["values"], ["5.61B", "5.61B"])
 
-    def test_add_net_debt_uses_debt_components_minus_cash_and_floors_at_zero(self):
+    def test_add_net_debt_uses_debt_components_minus_cash_and_keeps_net_cash_negative(self):
         balance = {
             "annual": {
                 "periods": ["MRQ", "2025-12-31", "2024-12-31"],
@@ -1571,7 +1571,7 @@ class StatementPageBuilderTests(unittest.TestCase):
         rows = enriched["annual"]["rows"]
         net_debt = next(row for row in rows if row["label"] == "Net Debt")
 
-        self.assertEqual(net_debt["values"], ["30B", "0", "--"])
+        self.assertEqual(net_debt["values"], ["30B", "-15B", "989B"])
         self.assertEqual(rows.index(net_debt), rows.index(next(row for row in rows if row["label"] == "Total Debt")) + 1)
 
     def test_add_net_debt_falls_back_to_current_plus_long_term_debt(self):

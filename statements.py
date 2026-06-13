@@ -313,10 +313,8 @@ def add_net_debt(balance_statement, formatter=None):
         for period in balance.get("periods") or []:
             current_debt_raw = _period_value(balance, current_debt_row, period)
             long_term_debt_raw = _period_value(balance, long_term_debt_row, period)
-            if has_debt_component_rows:
+            if has_debt_component_rows and (current_debt_raw is not None or long_term_debt_raw is not None):
                 total_debt_raw = (current_debt_raw or 0) + (long_term_debt_raw or 0)
-                if current_debt_raw is None and long_term_debt_raw is None:
-                    total_debt_raw = None
             else:
                 total_debt_raw = _period_value(balance, total_debt_row, period)
             cash_raw = _period_value(balance, cash_row, period)
@@ -327,7 +325,7 @@ def add_net_debt(balance_statement, formatter=None):
             if total_debt_raw is None:
                 values.append("--")
                 continue
-            values.append(formatter(max(total_debt_raw - cash_raw, 0)))
+            values.append(formatter(total_debt_raw - cash_raw))
 
         insert_anchor = total_debt_row or long_term_debt_row or current_debt_row
         insert_idx = rows.index(insert_anchor) + 1
