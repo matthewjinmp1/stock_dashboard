@@ -111,13 +111,13 @@ const copyData = {
 };
 assert.strictEqual(
   api.buildStatementCopyText(copyData),
-  'Line Item\t2024-12-31\t2025-12-31\tTTM\nTotal Revenue\t1200000000\t1500000\t\nGross Margin\t22%\t23.5%\t24%',
-  'statement copy should use tab-separated raw numbers without B/M suffixes',
+  'Line Item\t2024-12-31\t2025-12-31\tTTM\nTotal Revenue\t1.2\t0.0015\t\nGross Margin\t22%\t23.5%\t24%',
+  'statement copy should use tab-separated billion-scaled numbers without B/M suffixes',
 );
 api.state.statementSearch = 'rev';
 assert.strictEqual(
   api.buildStatementCopyText(copyData),
-  'Line Item\t2024-12-31\t2025-12-31\tTTM\nTotal Revenue\t1200000000\t1500000\t',
+  'Line Item\t2024-12-31\t2025-12-31\tTTM\nTotal Revenue\t1.2\t0.0015\t',
   'statement copy should respect visible search-filtered rows',
 );
 api.state.statementSearch = '';

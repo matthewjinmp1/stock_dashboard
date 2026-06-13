@@ -1108,9 +1108,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const raw = parseMoney(display);
         if (!raw) {
             const plain = Number(String(display).replace(/,/g, '').trim());
-            return Number.isFinite(plain) ? String(plain) : display;
+            return Number.isFinite(plain) ? formatCopyNumber(plain / 1e9) : display;
         }
-        return String(raw);
+        return formatCopyNumber(raw / 1e9);
+    }
+
+    function formatCopyNumber(value) {
+        if (!Number.isFinite(value)) return '';
+        if (value === 0) return '0';
+        return String(Number(value.toPrecision(12)));
     }
 
     function tsvCell(value) {
