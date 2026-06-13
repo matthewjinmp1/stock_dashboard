@@ -342,9 +342,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('NY Growth', val('ny_growth'), '', 'ny_growth'),
             ], 'growth_revenue'),
             metricGroup('Valuation', [
-                metric(`${data.valuationPrefix || 'EV'}/Adj Inc`, val('ev_adj_ebit'), 'ev_adj'),
-                metric(`${data.valuationPrefix || 'EV'}/CY Adj Inc`, val('ev_cy_ebit'), 'ev_cy'),
-                metric(`${data.valuationPrefix || 'EV'}/NY Adj Inc`, val('ev_ny_ebit'), 'ev_ny'),
+                metric('Adjusted PE', val('ev_adj_ebit'), 'ev_adj'),
+                metric('CY Adjusted PE', val('ev_cy_ebit'), 'ev_cy'),
+                metric('NY Adjusted PE', val('ev_ny_ebit'), 'ev_ny'),
             ]),
             metricGroup('Returns', [
                 metric('ROGPPE', val('adjEbitGrossPpe'), 'adj_ebit_gross_ppe'),
@@ -795,8 +795,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ${sortableHeader('ticker', 'Ticker', kind)}${sortableHeader('margin', 'Adj Margin', kind)}
             ${sortableHeader('grossMargin', 'Gross Margin', kind)}${sortableHeader('cy_growth', 'CY Growth', kind)}
             ${sortableHeader('ny_growth', 'NY Growth', kind)}${sortableHeader('shortFloat', 'Short % SO', kind)}
-            ${sortableHeader('ev_adj_ebit', 'EV/Adj Inc', kind)}${sortableHeader('ev_cy_ebit', 'EV/CY Adj Inc', kind)}
-            ${sortableHeader('ev_ny_ebit', 'EV/NY Adj Inc', kind)}<th>Actions</th>
+            ${sortableHeader('ev_adj_ebit', 'Adjusted PE', kind)}${sortableHeader('ev_cy_ebit', 'CY Adjusted PE', kind)}
+            ${sortableHeader('ev_ny_ebit', 'NY Adjusted PE', kind)}<th>Actions</th>
         </tr>`;
     }
 
@@ -1695,12 +1695,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 ]),
             },
             ev_adj: {
-                title: `${data.valuationPrefix || 'EV'} / ${adjustedNetIncomeLabel}`,
+                title: 'Adjusted PE',
                 numeratorLabel: valuationLabel,
                 numerator: val('ev'),
                 divisorLabel: adjustedNetIncomeLabel,
                 divisor: afterTaxAdjIncome,
-                resultLabel: `${data.valuationPrefix || 'EV'} / ${adjustedNetIncomeLabel}`,
+                resultLabel: 'Adjusted PE',
                 result: val('ev_adj_ebit'),
                 rows: formulaValue(`${valuationLabel} / (Adj Op Inc x (1 - Tax Rate))`, [
                     [valuationLabel, val('ev')],
@@ -1713,12 +1713,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 ]),
             },
             ev_cy: {
-                title: `${data.valuationPrefix || 'EV'} / ${cyAdjustedNetIncomeLabel}`,
+                title: 'CY Adjusted PE',
                 numeratorLabel: valuationLabel,
                 numerator: val('ev'),
                 divisorLabel: cyAdjustedNetIncomeLabel,
                 divisor: cyAfterTaxAdjIncome,
-                resultLabel: `${data.valuationPrefix || 'EV'} / ${cyAdjustedNetIncomeLabel}`,
+                resultLabel: 'CY Adjusted PE',
                 result: val('ev_cy_ebit'),
                 rows: formulaValue(`${valuationLabel} / (((Last Year Revenue x (1 + CY Growth) x Adj Op Inc Margin) x (1 - Tax Rate)) / Discount Factor)`, [
                     [valuationLabel, val('ev')],
@@ -1736,12 +1736,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 ]),
             },
             ev_ny: {
-                title: `${data.valuationPrefix || 'EV'} / ${nyAdjustedNetIncomeLabel}`,
+                title: 'NY Adjusted PE',
                 numeratorLabel: valuationLabel,
                 numerator: val('ev'),
                 divisorLabel: nyAdjustedNetIncomeLabel,
                 divisor: nyAfterTaxAdjIncome,
-                resultLabel: `${data.valuationPrefix || 'EV'} / ${nyAdjustedNetIncomeLabel}`,
+                resultLabel: 'NY Adjusted PE',
                 result: val('ev_ny_ebit'),
                 rows: formulaValue(`${valuationLabel} / (((CY Revenue x (1 + NY Growth) x Adj Op Inc Margin) x (1 - Tax Rate)) / Discount Factor)`, [
                     [valuationLabel, val('ev')],
