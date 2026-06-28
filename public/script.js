@@ -1,22 +1,32 @@
 document.addEventListener('DOMContentLoaded', () => {
     const $ = (id) => document.getElementById(id);
     const FORWARD_DISCOUNT_RATE = 0.10;
-    const localStarredAccounts = JSON.parse(localStorage.getItem('stock_starred_accounts') || '{}');
+    function loadJson(key, fallback) {
+        try {
+            return JSON.parse(localStorage.getItem(key) || fallback);
+        } catch (err) {
+            console.warn(`Ignoring invalid browser storage for ${key}.`, err);
+            localStorage.removeItem(key);
+            return JSON.parse(fallback);
+        }
+    }
+
+    const localStarredAccounts = loadJson('stock_starred_accounts', '{}');
     const state = {
         activeView: 'scanner',
         previousScroll: 0,
         latest: null,
-        dataByTicker: JSON.parse(localStorage.getItem('stock_data_by_ticker') || '{}'),
-        watchlist: JSON.parse(localStorage.getItem('stock_watchlist') || '[]'),
-        starred: JSON.parse(localStorage.getItem('stock_starred_tickers') || '[]'),
-        most: JSON.parse(localStorage.getItem('stock_search_counts') || '{}'),
-        assumptions: JSON.parse(localStorage.getItem('stock_assumptions') || '{}'),
+        dataByTicker: loadJson('stock_data_by_ticker', '{}'),
+        watchlist: loadJson('stock_watchlist', '[]'),
+        starred: loadJson('stock_starred_tickers', '[]'),
+        most: loadJson('stock_search_counts', '{}'),
+        assumptions: loadJson('stock_assumptions', '{}'),
         statementTab: localStorage.getItem('stock_statement_tab') || 'income',
         periodicity: localStorage.getItem('stock_periodicity') || 'annual',
         quarterlyGrowthMode: localStorage.getItem('stock_quarterly_growth_mode') || 'yoy',
         statementSearch: '',
         starredAccounts: localStarredAccounts,
-        statementToggles: JSON.parse(localStorage.getItem('stock_statement_toggles') || '{}'),
+        statementToggles: loadJson('stock_statement_toggles', '{}'),
         groups: [],
         sort: {},
         scanRequestId: 0,
@@ -47,11 +57,59 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function save(key, value) {
-        localStorage.setItem(key, JSON.stringify(value));
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+            return true;
+        } catch (err) {
+            console.warn(`Unable to save ${key} in browser storage.`, err);
+            return false;
+        }
     }
 
-    function saveTickerData() {
-        save('stock_data_by_ticker', state.dataByTicker);
+    function saveTickerData(preferredTicker = '') {
+        const compactCache = compactTickerCache(state.dataByTicker);
+        if (save('stock_data_by_ticker', compactCache)) return true;
+        const ticker = String(preferredTicker || '').toUpperCase();
+        const fallback = ticker && state.dataByTicker[ticker]
+            ? { [ticker]: compactTickerData(state.dataByTicker[ticker]) }
+            : {};
+        if (save('stock_data_by_ticker', fallback)) return true;
+        try {
+            localStorage.removeItem('stock_data_by_ticker');
+        } catch (err) {
+            console.warn('Unable to clear oversized browser ticker cache.', err);
+        }
+        return false;
+    }
+
+    function compactTickerCache(cache) {
+        return Object.fromEntries(Object.entries(cache || {}).map(([ticker, data]) => [ticker, compactTickerData(data)]));
+    }
+
+    function compactTickerData(data) {
+        if (!data || typeof data !== 'object') return data;
+        const keep = [
+            'ticker',
+            'companyName',
+            'dataDate',
+            'pulledAt',
+            'fetchTime',
+            'fetchCount',
+            'financialCurrency',
+            'usdFxRate',
+            'nativeCurrency',
+            'payloadVersion',
+            'metrics',
+            'margin',
+            'grossMargin',
+            'cy_growth',
+            'ny_growth',
+            'shortFloat',
+            'ev_adj_ebit',
+            'ev_cy_ebit',
+            'ev_ny_ebit',
+        ];
+        return Object.fromEntries(keep.filter((key) => data[key] !== undefined).map((key) => [key, data[key]]));
     }
 
     function saveAssumptions() {
@@ -648,7 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         if (data.invalidTicker) throw new Error(data.error || `${ticker} is not a valid ticker.`);
         state.dataByTicker[ticker] = data;
-        saveTickerData();
+        saveTickerData(ticker);
         return data;
     }
 
@@ -2143,6 +2201,8 @@ document.addEventListener('DOMContentLoaded', () => {
         accountLabelMatchesSearch,
         buildStatementCopyText,
         statementCopyValue,
+        compactTickerData,
+        saveTickerData,
         buildRatiosStatement,
         growthValues,
         growthRowLabel,

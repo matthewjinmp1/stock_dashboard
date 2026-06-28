@@ -49,11 +49,17 @@ const documentStub = {
 };
 
 const storage = new Map();
+const storageFailures = new Set();
 const localStorageStub = {
   getItem(key) {
     return storage.has(key) ? storage.get(key) : null;
   },
   setItem(key, value) {
+    if (storageFailures.has(key)) {
+      const err = new Error(`Quota exceeded for ${key}`);
+      err.name = 'QuotaExceededError';
+      throw err;
+    }
     storage.set(key, String(value));
   },
   removeItem(key) {
@@ -121,6 +127,22 @@ assert.strictEqual(
   'statement copy should respect visible search-filtered rows',
 );
 api.state.statementSearch = '';
+
+const compactTicker = api.compactTickerData({
+  ticker: 'ROK',
+  companyName: 'Rockwell Automation',
+  metrics: { margin: { raw: 0.2, display: '20%', kind: 'percent' } },
+  incomeStatement: { annual: { rows: [{ label: 'Total Revenue', values: ['9B'] }] } },
+  balanceStatement: { annual: { rows: [{ label: 'Total Assets', values: ['12B'] }] } },
+  cashFlowStatement: { annual: { rows: [{ label: 'Operating Cash Flow', values: ['1B'] }] } },
+});
+assert.strictEqual(compactTicker.ticker, 'ROK', 'compact ticker cache should keep ticker identity');
+assert.strictEqual(compactTicker.metrics.margin.display, '20%', 'compact ticker cache should keep metric summaries');
+assert.strictEqual(compactTicker.incomeStatement, undefined, 'compact ticker cache should drop statement payloads');
+api.state.dataByTicker.ROK = compactTicker;
+storageFailures.add('stock_data_by_ticker');
+assert.doesNotThrow(() => api.saveTickerData('ROK'), 'ticker cache quota failures should not fail the scan');
+storageFailures.delete('stock_data_by_ticker');
 
 const quarterlyPeriods = ['2024-03-31', '2024-06-30', '2024-09-30', '2024-12-31', '2025-03-31'];
 const quarterlyValues = ['100', '110', '120', '130', '150'];
