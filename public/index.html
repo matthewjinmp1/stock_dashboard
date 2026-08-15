@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stock Analysis Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=29">
+    <link rel="stylesheet" href="styles.css?v=30">
 </head>
 
 <body>
@@ -27,12 +27,6 @@
                 </div>
             </form>
 
-            <nav class="workspace-tabs" aria-label="Stock data views" role="tablist">
-                <button class="workspace-tab active" id="workspace-tab-metrics" type="button" role="tab"
-                    aria-selected="true" aria-controls="metrics-workspace" data-workspace-tab="metrics">Metrics</button>
-                <button class="workspace-tab" id="workspace-tab-financials" type="button" role="tab"
-                    aria-selected="false" aria-controls="financials-workspace" data-workspace-tab="financials">Financials</button>
-            </nav>
         </section>
 
         <nav class="tabs legacy-navigation hidden" aria-hidden="true">
@@ -63,6 +57,13 @@
                         </div>
                     </div>
                 </div>
+
+                <nav class="workspace-tabs" aria-label="Stock data views" role="tablist">
+                    <button class="workspace-tab active" id="workspace-tab-metrics" type="button" role="tab"
+                        aria-selected="true" aria-controls="metrics-workspace" data-workspace-tab="metrics">Metrics</button>
+                    <button class="workspace-tab" id="workspace-tab-financials" type="button" role="tab"
+                        aria-selected="false" aria-controls="financials-workspace" data-workspace-tab="financials">Financials</button>
+                </nav>
 
                 <section id="metrics-workspace" class="workspace-panel" role="tabpanel"
                     aria-labelledby="workspace-tab-metrics">

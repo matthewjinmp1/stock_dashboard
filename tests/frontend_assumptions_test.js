@@ -96,6 +96,10 @@ assert.strictEqual(api.displayCurrency({ financialCurrency: 'USD', usdFxRate: 1 
 const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 assert(indexHtml.includes('data-workspace-tab="metrics"'), 'app shell should expose a Metrics workspace tab');
 assert(indexHtml.includes('data-workspace-tab="financials"'), 'app shell should expose a Financials workspace tab');
+assert(
+  indexHtml.indexOf('class="workspace-tabs"') > indexHtml.indexOf('class="glass-card result-card"'),
+  'workspace tabs should appear below the stock summary card',
+);
 assert(!indexHtml.includes('<h1>Stock Analysis'), 'legacy dashboard hero should not remain visible');
 assert(indexHtml.includes('class="tabs legacy-navigation hidden"'), 'legacy list navigation should remain hidden while its functionality is retained');
 
