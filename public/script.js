@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'starred-cash': { key: 'cash', label: 'Starred CF', title: 'Starred Cash Flow' },
         'starred-ratios': { key: 'ratios', label: 'Starred Ratios', title: 'Starred Ratios' },
     };
-    const METRIC_TABS = ['valuation', 'growth', 'quality', 'market', 'leverage', 'analyst'];
+    const METRIC_TABS = ['valuation', 'growth', 'margins', 'quality', 'market', 'leverage', 'analyst'];
     function loadJson(key, fallback) {
         try {
             return JSON.parse(localStorage.getItem(key) || fallback);
@@ -443,7 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!stats) return;
         stats.classList.remove('stats-grid');
         const sections = [
-            { tab: 'growth', html: metricGroup('Margins', [
+            { tab: 'margins', html: metricGroup('Margins', [
                 metric('Adj Op Inc Margin', val('margin'), 'adj_margin', 'margin'),
                 metric('Gross Margin', val('grossMargin')),
             ]) },
@@ -486,7 +486,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('CY EPS Growth', val('currentYearEpsGrowth')),
                 metric('NY EPS Growth', val('nextYearEpsGrowth')),
             ]) },
-            { tab: 'growth', html: metricGroup('Est Net Margin', [
+            { tab: 'margins', html: metricGroup('Est Net Margin', [
                 metric('LY Net Margin', val('lastYearEstimatedNetMargin'), 'ly_est_net_margin'),
                 metric('CY Net Margin', val('currentYearEstimatedNetMargin'), 'cy_est_net_margin'),
                 metric('NY Net Margin', val('nextYearEstimatedNetMargin'), 'ny_est_net_margin'),
