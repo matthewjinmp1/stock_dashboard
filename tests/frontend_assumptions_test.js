@@ -136,6 +136,23 @@ assert(api.accountLabelMatchesSearch('Cash Dividends Paid', 'rev, cash div'), 'c
 assert(!api.accountLabelMatchesSearch('Operating Income', 'come'), 'search should not match arbitrary substrings inside a word');
 assert(!api.accountLabelMatchesSearch('Operating Income', 'rev, cash'), 'comma-separated search should reject labels that match none of the groups');
 
+assert.deepStrictEqual(
+  JSON.parse(JSON.stringify(api.historicalRevenueGrowth({
+    incomeStatement: {
+      annual: {
+        periods: ['TTM', '2025-12-31', '2023-12-31', '2022-12-31', '2024-12-31'],
+        rows: [{ label: 'Total Revenue', values: ['150B', '144B', '110B', '100B', '120B'] }],
+      },
+    },
+  }))),
+  [
+    { label: '2023', value: '10%' },
+    { label: '2024', value: '9.1%' },
+    { label: '2025', value: '20%' },
+  ],
+  'revenue growth should use the latest three fiscal-year changes and ignore TTM',
+);
+
 api.state.statementTab = 'income';
 api.state.periodicity = 'annual';
 api.state.statementSearch = '';

@@ -426,19 +426,47 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>`;
     }
 
-    function metricGroup(title, items, calcType = '') {
+    function metricGroup(title, items, calcType = '', className = '') {
         const link = calcType ? ' metric-title-link' : '';
         const calcAttr = calcType ? ` data-calc="${calcType}"` : '';
-        return `<section class="metric-group metric-count-${items.length}">
+        return `<section class="metric-group metric-count-${items.length}${className ? ` ${className}` : ''}">
             <h3 class="${link.trim()}"${calcAttr}>${title}</h3>
             <div class="metric-group-grid">${items.join('')}</div>
         </section>`;
+    }
+
+    function historicalRevenueGrowth(data) {
+        const annual = (data.incomeStatement || {}).annual || {};
+        const periods = annual.periods || [];
+        const preferredLabels = new Set(['total revenue', 'operating revenue', 'revenue']);
+        const rows = annual.rows || [];
+        const revenueRow = rows.find((row) => preferredLabels.has(String(row.label || '').toLowerCase()));
+        const observations = periods.map((period, index) => ({
+            period,
+            date: new Date(Date.parse(period)),
+            value: parseMoney((revenueRow?.values || [])[index]),
+        })).filter((item) => !isSummaryPeriod(item.period) && !Number.isNaN(item.date.getTime()) && item.value > 0)
+            .sort((a, b) => a.date - b.date);
+        const growthByYear = new Map();
+        for (let index = 1; index < observations.length; index += 1) {
+            const previous = observations[index - 1];
+            const current = observations[index];
+            const years = Math.max((current.date - previous.date) / (365.25 * 24 * 60 * 60 * 1000), 0.01);
+            const growth = Math.pow(current.value / previous.value, 1 / years) - 1;
+            growthByYear.set(current.date.getFullYear(), formatPercentDecimal(growth));
+        }
+        const latestYear = observations.at(-1)?.date.getFullYear() || new Date().getFullYear() - 1;
+        return [latestYear - 2, latestYear - 1, latestYear].map((year) => ({
+            label: String(year),
+            value: growthByYear.get(year) || '--',
+        }));
     }
 
     function renderStats(data) {
         data = applyAssumptions(data);
         const val = (key) => metricDisplay(data, key);
         const netCash = netCashPresentation(data);
+        const revenueGrowth = historicalRevenueGrowth(data);
         const stats = $('result-stats');
         if (!stats) return;
         stats.classList.remove('stats-grid');
@@ -447,11 +475,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('Adj Op Inc Margin', val('margin'), 'adj_margin', 'margin'),
                 metric('Gross Margin', val('grossMargin')),
             ]) },
-            { tab: 'growth', html: metricGroup('Growth', [
-                metric('3Y Growth', val('gp_3y_growth') || '--', 'gp_3y_growth'),
+            { tab: 'growth', html: metricGroup('Revenue Growth', [
+                ...revenueGrowth.map((item) => metric(item.label, item.value)),
                 metric('CY Growth', val('cy_growth'), '', 'cy_growth'),
                 metric('NY Growth', val('ny_growth'), '', 'ny_growth'),
-            ], 'growth_revenue') },
+            ], 'growth_revenue', 'revenue-growth-card') },
             { tab: 'valuation', html: metricGroup('Valuation', [
                 metric('Adjusted PE', val('ev_adj_ebit'), 'ev_adj'),
                 metric('CY Adjusted PE', val('ev_cy_ebit'), 'ev_cy'),
@@ -2280,6 +2308,7 @@ document.addEventListener('DOMContentLoaded', () => {
         parseMoney,
         parsePercentValue,
         accountLabelMatchesSearch,
+        historicalRevenueGrowth,
         starredStatementKey,
         buildStatementCopyText,
         statementCopyValue,
