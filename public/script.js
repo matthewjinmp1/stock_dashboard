@@ -1075,7 +1075,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="statement-heading-row">
                 <div>
                     <h2>${state.statementTab === 'starred' ? 'Starred Statements' : activeTab[1]}</h2>
-                    <p>${state.periodicity === 'annual' ? 'Annual' : 'Quarterly'} figures shown in USD-normalized values</p>
                 </div>
                 <div class="statement-period-actions">
                         <button class="mini-btn ${state.periodicity === 'annual' ? 'on blue' : ''}" data-periodicity="annual">Annual</button>
