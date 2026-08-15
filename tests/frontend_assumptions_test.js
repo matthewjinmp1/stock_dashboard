@@ -100,7 +100,7 @@ const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.ht
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
 assert(indexHtml.includes('data-workspace-tab="metrics"'), 'app shell should expose a Metrics workspace tab');
 assert(indexHtml.includes('data-workspace-tab="financials"'), 'app shell should expose a Financials workspace tab');
-assert.strictEqual((indexHtml.match(/data-metric-tab=/g) || []).length, 7, 'metrics workspace should expose seven category tabs');
+assert.strictEqual((indexHtml.match(/data-metric-tab=/g) || []).length, 8, 'metrics workspace should expose eight category tabs');
 assert(
   indexHtml.indexOf('class="workspace-tabs"') > indexHtml.indexOf('class="glass-card result-card"'),
   'workspace tabs should appear below the stock summary card',

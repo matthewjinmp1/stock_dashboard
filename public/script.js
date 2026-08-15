@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'starred-cash': { key: 'cash', label: 'Starred CF', title: 'Starred Cash Flow' },
         'starred-ratios': { key: 'ratios', label: 'Starred Ratios', title: 'Starred Ratios' },
     };
-    const METRIC_TABS = ['valuation', 'growth', 'margins', 'quality', 'market', 'leverage', 'analyst'];
+    const METRIC_TABS = ['valuation', 'growth', 'margins', 'returns', 'quality', 'market', 'leverage', 'analyst'];
     function loadJson(key, fallback) {
         try {
             return JSON.parse(localStorage.getItem(key) || fallback);
@@ -485,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('CY Adjusted PE', val('ev_cy_ebit'), 'ev_cy'),
                 metric('NY Adjusted PE', val('ev_ny_ebit'), 'ev_ny'),
             ]) },
-            { tab: 'quality', html: metricGroup('Returns', [
+            { tab: 'returns', html: metricGroup('Returns', [
                 metric('ROGPPE', val('adjEbitGrossPpe'), 'adj_ebit_gross_ppe'),
                 metric('ROC', val('roc'), 'roc'),
             ]) },
