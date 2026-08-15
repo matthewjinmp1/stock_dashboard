@@ -1858,6 +1858,14 @@ button:hover {
     grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.margin-history-card {
+    grid-column: 1 / -1;
+}
+
+.margin-history-card .metric-group-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 #result-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.85rem;
@@ -2135,7 +2143,8 @@ button:hover {
         grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
     }
 
-    .revenue-growth-card .metric-group-grid {
+    .revenue-growth-card .metric-group-grid,
+    .margin-history-card .metric-group-grid {
         grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
     }
 

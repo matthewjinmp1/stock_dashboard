@@ -165,6 +165,41 @@ assert.deepStrictEqual(
   'revenue growth should use the latest three fiscal-year changes and ignore TTM',
 );
 
+const marginHistoryData = {
+  incomeStatement: {
+    annual: {
+      periods: ['TTM', '2025-12-31', '2023-12-31', '2022-12-31', '2024-12-31'],
+      rows: [
+        { label: 'Total Revenue', values: ['150B', '144B', '110B', '100B', '120B'] },
+        { label: 'Gross Profit', values: ['90B', '72B', '44B', '30B', '60B'] },
+        { label: 'Adjusted Operating Income', values: ['45B', '43.2B', '27.5B', '20B', '36B'] },
+      ],
+    },
+  },
+};
+assert.deepStrictEqual(
+  JSON.parse(JSON.stringify(api.historicalMarginSeries(marginHistoryData, ['Gross Profit']))),
+  [
+    { label: '2022', value: '30%' },
+    { label: '2023', value: '40%' },
+    { label: '2024', value: '50%' },
+    { label: '2025', value: '50%' },
+    { label: 'TTM', value: '60%' },
+  ],
+  'gross margin history should show four fiscal years followed by TTM',
+);
+assert.deepStrictEqual(
+  JSON.parse(JSON.stringify(api.historicalMarginSeries(marginHistoryData, ['Adjusted Operating Income']))),
+  [
+    { label: '2022', value: '20%' },
+    { label: '2023', value: '25%' },
+    { label: '2024', value: '30%' },
+    { label: '2025', value: '30%' },
+    { label: 'TTM', value: '30%' },
+  ],
+  'adjusted operating margin history should use adjusted operating income over revenue',
+);
+
 api.state.statementTab = 'income';
 api.state.periodicity = 'annual';
 api.state.statementSearch = '';

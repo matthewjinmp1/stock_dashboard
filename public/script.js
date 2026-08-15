@@ -464,11 +464,43 @@ document.addEventListener('DOMContentLoaded', () => {
         }));
     }
 
+    function historicalMarginSeries(data, numeratorLabels) {
+        const annual = (data.incomeStatement || {}).annual || {};
+        const periods = annual.periods || [];
+        const rows = annual.rows || [];
+        const findRow = (labels) => labels
+            .map((label) => rows.find((row) => String(row.label || '').toLowerCase() === label.toLowerCase()))
+            .find(Boolean);
+        const revenueRow = findRow(['Total Revenue', 'Operating Revenue', 'Revenue']);
+        const numeratorRow = findRow(numeratorLabels);
+        const marginAt = (index) => {
+            const revenueValue = (revenueRow?.values || [])[index];
+            const numeratorValue = (numeratorRow?.values || [])[index];
+            const hasRevenue = revenueValue !== undefined && revenueValue !== null && revenueValue !== '' && revenueValue !== '--';
+            const hasNumerator = numeratorValue !== undefined && numeratorValue !== null && numeratorValue !== '' && numeratorValue !== '--';
+            const revenue = parseMoney(revenueValue);
+            if (!hasRevenue || !hasNumerator || revenue === 0) return '--';
+            return formatPercentDecimal(parseMoney(numeratorValue) / revenue);
+        };
+        const annualItems = periods.map((period, index) => ({
+            period,
+            index,
+            date: new Date(Date.parse(period)),
+        })).filter((item) => !isSummaryPeriod(item.period) && !Number.isNaN(item.date.getTime()))
+            .sort((a, b) => a.date - b.date)
+            .slice(-4)
+            .map((item) => ({ label: String(item.date.getFullYear()), value: marginAt(item.index) }));
+        const ttmIndex = periods.findIndex((period) => String(period || '').toUpperCase() === 'TTM');
+        return [...annualItems, { label: 'TTM', value: ttmIndex >= 0 ? marginAt(ttmIndex) : '--' }];
+    }
+
     function renderStats(data) {
         data = applyAssumptions(data);
         const val = (key) => metricDisplay(data, key);
         const netCash = netCashPresentation(data);
         const revenueGrowth = historicalRevenueGrowth(data);
+        const grossMarginHistory = historicalMarginSeries(data, ['Gross Profit']);
+        const adjustedOperatingMarginHistory = historicalMarginSeries(data, ['Adjusted Operating Income']);
         const stats = $('result-stats');
         if (!stats) return;
         stats.classList.remove('stats-grid');
@@ -516,6 +548,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('CY EPS Growth', val('currentYearEpsGrowth')),
                 metric('NY EPS Growth', val('nextYearEpsGrowth')),
             ]) },
+            { tab: 'growth', html: metricGroup('Gross Margin History', [
+                ...grossMarginHistory.map((item) => metric(item.label, item.value)),
+            ], '', 'margin-history-card') },
+            { tab: 'growth', html: metricGroup('Adjusted Operating Margin History', [
+                ...adjustedOperatingMarginHistory.map((item) => metric(item.label, item.value)),
+            ], '', 'margin-history-card') },
             { tab: 'margins', html: metricGroup('Est Net Margin', [
                 metric('LY Net Margin', val('lastYearEstimatedNetMargin'), 'ly_est_net_margin'),
                 metric('CY Net Margin', val('currentYearEstimatedNetMargin'), 'cy_est_net_margin'),
@@ -2321,6 +2359,7 @@ document.addEventListener('DOMContentLoaded', () => {
         parsePercentValue,
         accountLabelMatchesSearch,
         historicalRevenueGrowth,
+        historicalMarginSeries,
         starredStatementKey,
         buildStatementCopyText,
         statementCopyValue,
