@@ -91,6 +91,7 @@ vm.runInNewContext(script, context, { filename: 'public/script.js' });
 
 const api = context.window.__stockAnalysisTestApi;
 assert(api, 'test API should be exposed');
+assert.strictEqual(api.displayCurrency({ financialCurrency: 'USD', usdFxRate: 1 }), 'USD • 1.0000', 'currency summary should stay compact');
 
 const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 assert(indexHtml.includes('data-workspace-tab="metrics"'), 'app shell should expose a Metrics workspace tab');

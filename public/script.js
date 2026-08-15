@@ -365,7 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const currency = data.financialCurrency || '--';
         const rate = Number(data.usdFxRate);
         const formattedRate = Number.isFinite(rate) ? rate.toFixed(4) : '--';
-        return `Native currency: ${currency} • USD rate: ${formattedRate}`;
+        return `${currency} • ${formattedRate}`;
     }
 
     function escapeAttr(value) {
@@ -790,7 +790,7 @@ document.addEventListener('DOMContentLoaded', () => {
         $('result-data-date').textContent = '--';
         setFetchInfoText('Fetching: 0.00s • Fetches: --', true);
         startFetchTimer(fetchStartedAt, requestId);
-        $('result-currency-info').textContent = 'Native currency: -- • USD rate: --';
+        $('result-currency-info').textContent = '-- • --';
         $('glass-card').classList.remove('refreshing');
         $('loading-spinner').classList.remove('hidden');
         $('error-message').classList.add('hidden');
@@ -2223,6 +2223,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saveStarredAccounts,
         metricEntry,
         metricDisplay,
+        displayCurrency,
         metricValueHtml,
         netCashPresentation,
         parseMoney,
