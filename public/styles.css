@@ -1884,12 +1884,34 @@ button:hover {
 }
 
 .statement-tabs {
-    gap: 0.4rem;
+    flex-wrap: nowrap;
+    gap: 0.2rem;
+    overflow-x: auto;
+    scrollbar-width: thin;
 }
 
 .statement-tabs .tab-btn {
-    padding: 0.5rem 0.75rem;
+    flex: 0 0 auto;
+    padding: 0.5rem 0.6rem;
     font-size: 0.8rem;
+}
+
+@media (max-width: 1400px) {
+    .statement-toolbar {
+        flex-direction: column;
+        gap: 0.9rem;
+    }
+
+    .statement-search,
+    .statement-tabs {
+        width: 100%;
+        min-width: 0;
+        flex-basis: auto;
+    }
+
+    .statement-tabs {
+        justify-content: flex-start;
+    }
 }
 
 .mini-btn {

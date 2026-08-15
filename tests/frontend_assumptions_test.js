@@ -94,6 +94,7 @@ assert(api, 'test API should be exposed');
 assert.strictEqual(api.displayCurrency({ financialCurrency: 'USD', usdFxRate: 1 }), 'USD • 1.0000', 'currency summary should stay compact');
 
 const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
 assert(indexHtml.includes('data-workspace-tab="metrics"'), 'app shell should expose a Metrics workspace tab');
 assert(indexHtml.includes('data-workspace-tab="financials"'), 'app shell should expose a Financials workspace tab');
 assert(
@@ -102,6 +103,7 @@ assert(
 );
 assert(!indexHtml.includes('<h1>Stock Analysis'), 'legacy dashboard hero should not remain visible');
 assert(indexHtml.includes('class="tabs legacy-navigation hidden"'), 'legacy list navigation should remain hidden while its functionality is retained');
+assert(/\.statement-tabs\s*\{[^}]*flex-wrap:\s*nowrap;/s.test(stylesCss), 'statement tabs should stay on one row');
 
 const metricsWorkspaceTab = elements.get('workspace-tab-metrics');
 const financialsWorkspaceTab = elements.get('workspace-tab-financials');
