@@ -288,11 +288,15 @@ button:active {
 }
 
 .info-workspace {
-    padding: 2.25rem 0.25rem 1rem;
+    padding: 1.5rem 0 1rem;
 }
 
 .company-overview {
-    max-width: 72rem;
+    width: 100%;
+    padding: 1.75rem;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    background: var(--surface-1);
 }
 
 .company-overview h3 {

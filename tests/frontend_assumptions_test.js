@@ -109,6 +109,10 @@ assert(
 assert(!indexHtml.includes('<h1>Stock Analysis'), 'legacy dashboard hero should not remain visible');
 assert(indexHtml.includes('class="tabs legacy-navigation hidden"'), 'legacy list navigation should remain hidden while its functionality is retained');
 assert(/\.statement-tabs\s*\{[^}]*flex-wrap:\s*nowrap;/s.test(stylesCss), 'statement tabs should stay on one row');
+assert(
+  /\.company-overview\s*\{[^}]*border:\s*1px solid var\(--card-border\);[^}]*background:\s*var\(--surface-1\);/s.test(stylesCss),
+  'company description should use the same bordered surface treatment as metric cards',
+);
 
 const metricsWorkspaceTab = elements.get('workspace-tab-metrics');
 const financialsWorkspaceTab = elements.get('workspace-tab-financials');
