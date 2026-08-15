@@ -113,6 +113,10 @@ assert(
   /\.company-overview\s*\{[^}]*border:\s*1px solid var\(--card-border\);[^}]*background:\s*var\(--surface-1\);/s.test(stylesCss),
   'company description should use the same bordered surface treatment as metric cards',
 );
+assert(
+  /\.margin-history-card\s*\{[^}]*max-width:\s*76rem;/s.test(stylesCss),
+  'margin history cards should stay compact on wide screens',
+);
 
 const metricsWorkspaceTab = elements.get('workspace-tab-metrics');
 const financialsWorkspaceTab = elements.get('workspace-tab-financials');

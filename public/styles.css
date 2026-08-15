@@ -1860,6 +1860,9 @@ button:hover {
 
 .margin-history-card {
     grid-column: 1 / -1;
+    width: 100%;
+    max-width: 76rem;
+    justify-self: start;
 }
 
 .margin-history-card .metric-group-grid {
