@@ -519,6 +519,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('CY Adjusted PE', val('ev_cy_ebit'), 'ev_cy'),
                 metric('NY Adjusted PE', val('ev_ny_ebit'), 'ev_ny'),
             ]) },
+            { tab: 'valuation', html: metricGroup('Sales Multiples', [
+                metric('Price / Sales', val('priceSales'), 'price_sales'),
+                metric('Price / Gross Profit', val('priceGrossProfit'), 'price_gross_profit'),
+            ]) },
             { tab: 'returns', html: metricGroup('Returns', [
                 metric('ROGPPE', val('adjEbitGrossPpe'), 'adj_ebit_gross_ppe'),
                 metric('ROC', val('roc'), 'roc'),
@@ -648,6 +652,8 @@ document.addEventListener('DOMContentLoaded', () => {
             || parseMoney(data.derivedEnterpriseValue)
             || parseMoney(metricEntry(data, 'marketCap'))
             || parseMoney(data.marketCap);
+        const marketCapRaw = parseMoney(metricEntry(data, 'marketCap')) || parseMoney(data.marketCap);
+        const grossProfitRaw = statementGrossProfitRaw(data);
         const grossPpeRaw = parseMoney(metricEntry(data, 'grossPpe'));
         const investmentCapexRaw = parseMoney(metricEntry(data, 'investmentCapex'));
         const rocDenomRaw = parseMoney(metricEntry(data, 'netWorkingCapital')) + parseMoney(metricEntry(data, 'netFixedAssets'));
@@ -686,6 +692,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const cyDiscountedMultiple = discountedForwardMultiple(valuationRaw, cyAfterTaxAdjRaw, cyDiscount.factor);
         const nyDiscountedMultiple = discountedForwardMultiple(valuationRaw, nyAfterTaxAdjRaw, nyDiscount.factor);
         setMetric(data, 'ev_adj_ebit', valuationRaw && afterTaxAdjRaw ? valuationRaw / afterTaxAdjRaw : null, valuationRaw && afterTaxAdjRaw ? formatRatio(valuationRaw / afterTaxAdjRaw) : '--', 'ratio');
+        setMetric(data, 'priceSales', marketCapRaw && revenueRaw ? marketCapRaw / revenueRaw : null, marketCapRaw && revenueRaw ? formatRatio(marketCapRaw / revenueRaw) : '--', 'ratio');
+        setMetric(data, 'priceGrossProfit', marketCapRaw && grossProfitRaw ? marketCapRaw / grossProfitRaw : null, marketCapRaw && grossProfitRaw ? formatRatio(marketCapRaw / grossProfitRaw) : '--', 'ratio');
         if (cyDiscountedMultiple !== null) {
             setMetric(data, 'ev_cy_ebit', cyDiscountedMultiple, formatRatio(cyDiscountedMultiple), 'ratio');
         }
@@ -1798,6 +1806,18 @@ document.addEventListener('DOMContentLoaded', () => {
             || parseMoney(latestStatementValueMatching(annual, (label) => /revenue/i.test(label)));
     }
 
+    function statementGrossProfitRaw(data) {
+        const annual = (data.incomeStatement || {}).annual;
+        const reportedGrossProfit = parseMoney(latestStatementValue(annual, ['Gross Profit']));
+        if (reportedGrossProfit) return reportedGrossProfit;
+        const revenue = statementRevenueRaw(data)
+            || parseMoney(metricEntry(data, 'revenue'))
+            || parseMoney(data.revenue);
+        const grossMargin = parsePercentValue(metricEntry(data, 'grossMargin'))
+            || parsePercentValue(data.grossMargin);
+        return revenue && grossMargin ? revenue * grossMargin : 0;
+    }
+
     function latestAnnualStatementValue(statement, labels) {
         const labelSet = new Set(labels.map((label) => label.toLowerCase()));
         const rows = statement?.rows || [];
@@ -1998,6 +2018,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const adjustedNetIncomeLabel = 'Adjusted Net Income';
         const cyAdjustedNetIncomeLabel = 'CY Adjusted Net Income';
         const nyAdjustedNetIncomeLabel = 'NY Adjusted Net Income';
+        const grossProfitRaw = statementGrossProfitRaw(data);
+        const grossProfitDisplay = grossProfitRaw ? formatMoneyFront(grossProfitRaw) : '--';
         return {
             growth_revenue: {
                 title: 'Revenue Growth',
@@ -2031,6 +2053,34 @@ document.addEventListener('DOMContentLoaded', () => {
                     ['Adj Op Inc', val('adj_income')],
                     ['Median Tax Rate', taxDisplay],
                     [adjustedNetIncomeLabel, afterTaxAdjIncome],
+                ]),
+            },
+            price_sales: {
+                title: 'Price / Sales',
+                numeratorLabel: 'Market Cap',
+                numerator: val('marketCap'),
+                divisorLabel: 'TTM Revenue',
+                divisor: val('revenue'),
+                resultLabel: 'Price / Sales',
+                result: val('priceSales'),
+                rows: formulaValue('Market Cap / TTM Revenue', [
+                    ['Market Cap', val('marketCap')],
+                    ['Metric Date', `TTM as of ${formatDateShort(payloadDate(data))}`],
+                    ['TTM Revenue', val('revenue')],
+                ]),
+            },
+            price_gross_profit: {
+                title: 'Price / Gross Profit',
+                numeratorLabel: 'Market Cap',
+                numerator: val('marketCap'),
+                divisorLabel: 'TTM Gross Profit',
+                divisor: grossProfitDisplay,
+                resultLabel: 'Price / Gross Profit',
+                result: val('priceGrossProfit'),
+                rows: formulaValue('Market Cap / TTM Gross Profit', [
+                    ['Market Cap', val('marketCap')],
+                    ['Metric Date', `TTM as of ${formatDateShort(payloadDate(data))}`],
+                    ['TTM Gross Profit', grossProfitDisplay],
                 ]),
             },
             ev_cy: {

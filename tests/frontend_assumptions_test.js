@@ -678,6 +678,37 @@ const cyCalc = api.calcDefinitions(adjusted).ev_cy;
 assert(cyCalc.rows.some(([label]) => label === '10% Discount Rate'), 'forward valuation calc should show discount rate');
 assert(cyCalc.rows.some(([label, value]) => label === 'Discounted CY Adjusted Net Income' && value !== '--'), 'forward valuation calc should show discounted denominator');
 
+const salesMultipleData = {
+  ...data,
+  ticker: 'SALES',
+  ev: '30B',
+  marketCap: '20B',
+  incomeStatement: {
+    annual: {
+      periods: ['TTM', '2025-12-31'],
+      rows: [
+        { label: 'Total Revenue', values: ['10B', '9B'] },
+        { label: 'Gross Profit', values: ['4B', '3.5B'] },
+      ],
+    },
+  },
+  metrics: {
+    ...data.metrics,
+    ev: { raw: 30_000_000_000, display: '30B', kind: 'money' },
+    marketCap: { raw: 20_000_000_000, display: '20B', kind: 'money' },
+    revenue: { raw: 10_000_000_000, display: '10B', kind: 'money' },
+  },
+};
+const salesMultiples = api.applyAssumptions(salesMultipleData);
+assertAlmostEqual(api.metricEntry(salesMultiples, 'priceSales').raw, 2, 0.0001, 'price to sales should use market cap over TTM revenue');
+assertAlmostEqual(api.metricEntry(salesMultiples, 'priceGrossProfit').raw, 5, 0.0001, 'price to gross profit should use market cap over TTM gross profit');
+const priceSalesCalc = api.calcDefinitions(salesMultiples).price_sales;
+assert.strictEqual(priceSalesCalc.numerator, '20B', 'price to sales calc should show market cap as its numerator');
+assert.strictEqual(priceSalesCalc.divisor, '10B', 'price to sales calc should show TTM revenue as its denominator');
+const priceGrossProfitCalc = api.calcDefinitions(salesMultiples).price_gross_profit;
+assert.strictEqual(priceGrossProfitCalc.numerator, '20B', 'price to gross profit calc should show market cap as its numerator');
+assert.strictEqual(priceGrossProfitCalc.divisor, '4B', 'price to gross profit calc should show TTM gross profit as its denominator');
+
 const growthRevenueCalc = api.calcDefinitions(adjusted).growth_revenue;
 assert.strictEqual(growthRevenueCalc.title, 'Revenue Growth', 'growth section should link to a revenue bridge calc');
 assert(growthRevenueCalc.rows.some(([label, value]) => label === 'Last Year Revenue' && value === '950M'), 'growth calc should include last year revenue');
