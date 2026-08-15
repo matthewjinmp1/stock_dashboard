@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const localStarredAccounts = loadJson('stock_starred_accounts', '{}');
     const state = {
         activeView: 'scanner',
+        dashboardTab: 'metrics',
         previousScroll: 0,
         latest: null,
         dataByTicker: loadJson('stock_data_by_ticker', '{}'),
@@ -50,6 +51,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const tab = $(`tab-${name}`);
         if (!tab) return;
         tab.addEventListener('click', () => showView(name));
+    });
+    ['metrics', 'financials'].map((name) => $(`workspace-tab-${name}`)).filter(Boolean).forEach((tab) => {
+        tab.addEventListener('click', () => showDashboardTab(tab.dataset.workspaceTab));
     });
     const fetchInfoButton = $('result-fetch-info');
     if (fetchInfoButton) {
@@ -166,6 +170,29 @@ document.addEventListener('DOMContentLoaded', () => {
         if (name === 'groups') renderTickerTable('groups');
         if (name === 'starred') renderStarredTickers();
         if (name === 'most-searched') renderMostSearched();
+    }
+
+    function showDashboardTab(name) {
+        const next = name === 'financials' ? 'financials' : 'metrics';
+        state.dashboardTab = next;
+        const panels = {
+            metrics: $('metrics-workspace'),
+            financials: $('financials-workspace'),
+        };
+        Object.entries(panels).forEach(([key, panel]) => {
+            if (panel) panel.classList.toggle('hidden', key !== next);
+        });
+        ['metrics', 'financials'].map((key) => $(`workspace-tab-${key}`)).filter(Boolean).forEach((tab) => {
+            const active = tab.dataset.workspaceTab === next;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+            tab.tabIndex = active ? 0 : -1;
+        });
+    }
+
+    function setAppChromeVisible(visible) {
+        const toolbar = $('app-toolbar');
+        if (toolbar) toolbar.classList.toggle('hidden', !visible);
     }
 
     function formatSigned(value) {
@@ -330,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
         $('fetch-ticker-badge').textContent = state.latest.ticker || '--';
         renderFetchDetails(state.latest);
         showView('fetchDetails');
-        document.querySelector('.tabs').classList.add('hidden');
+        setAppChromeVisible(false);
         window.scrollTo(0, 0);
     }
 
@@ -751,6 +778,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.scanRequestId = requestId;
         const fetchStartedAt = performance.now();
         showView('scanner');
+        setAppChromeVisible(true);
         $('result-container').classList.remove('hidden');
         $('result-stats').classList.add('hidden');
         $('statement-panel').classList.add('hidden');
@@ -2167,18 +2195,18 @@ document.addEventListener('DOMContentLoaded', () => {
             .map(([label, value]) => `<li><span class="calc-label">${label}</span><span class="calc-val">${value || '--'}</span></li>`)
             .join('');
         showView('calc');
-        document.querySelector('.tabs').classList.add('hidden');
+        setAppChromeVisible(false);
         window.scrollTo(0, 0);
     }
 
     $('calc-back-btn').addEventListener('click', () => {
-        document.querySelector('.tabs').classList.remove('hidden');
+        setAppChromeVisible(true);
         showView('scanner');
         window.scrollTo(0, state.previousScroll || 0);
     });
 
     $('fetch-back-btn').addEventListener('click', () => {
-        document.querySelector('.tabs').classList.remove('hidden');
+        setAppChromeVisible(true);
         showView('scanner');
         window.scrollTo(0, state.previousScroll || 0);
     });
@@ -2187,6 +2215,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.__stockAnalysisTestApi = {
         state,
+        showDashboardTab,
         applyAssumptions,
         calcDefinitions,
         renderDataromaCards,

@@ -6,22 +6,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stock Analysis Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=28">
+    <link rel="stylesheet" href="styles.css?v=29">
 </head>
 
 <body>
-    <div class="background-elements">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-    </div>
-
     <main class="container">
-        <header>
-            <h1>Stock Analysis <span>Dashboard</span></h1>
-            <p>Stock metrics, statements, estimates, and valuation math powered by Yahoo Finance data.</p>
-        </header>
+        <section class="app-toolbar" id="app-toolbar">
+            <form id="search-form" class="ticker-search" role="search">
+                <div class="input-group">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        class="search-icon" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <label class="sr-only" for="ticker-input">Stock ticker</label>
+                    <input type="text" id="ticker-input" placeholder="Search a ticker, e.g. META or GOOGL"
+                        autocomplete="off" required>
+                    <button type="submit" id="search-btn">Search</button>
+                </div>
+            </form>
 
-        <nav class="tabs">
+            <nav class="workspace-tabs" aria-label="Stock data views" role="tablist">
+                <button class="workspace-tab active" id="workspace-tab-metrics" type="button" role="tab"
+                    aria-selected="true" aria-controls="metrics-workspace" data-workspace-tab="metrics">Metrics</button>
+                <button class="workspace-tab" id="workspace-tab-financials" type="button" role="tab"
+                    aria-selected="false" aria-controls="financials-workspace" data-workspace-tab="financials">Financials</button>
+            </nav>
+        </section>
+
+        <nav class="tabs legacy-navigation hidden" aria-hidden="true">
             <button class="tab-btn active" id="tab-scanner">Scanner</button>
             <button class="tab-btn" id="tab-watchlist">Watchlist</button>
             <button class="tab-btn" id="tab-groups">Groups</button>
@@ -30,46 +44,35 @@
         </nav>
 
         <div id="view-scanner" class="view-section active">
-            <section class="search-section">
-                <form id="search-form">
-                    <div class="input-group">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            class="search-icon" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                            stroke-linejoin="round">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <input type="text" id="ticker-input" placeholder="Enter stock ticker (e.g. META, GOOGL)"
-                            autocomplete="off" required>
-                        <button type="submit" id="search-btn">Scan</button>
-                    </div>
-                </form>
-            </section>
-
             <section id="result-container" class="hidden">
                 <div class="glass-card result-card" id="glass-card">
                     <div class="card-header">
                         <div class="loader card-corner-loader hidden" id="loading-spinner"></div>
                         <div>
                             <div class="result-identity">
-                            <h2 id="result-ticker">AAPL</h2>
+                                <h2 id="result-ticker">AAPL</h2>
                                 <div class="company-name"></div>
                             </div>
                             <div class="stat-label" id="result-data-date">As of --</div>
                             <button class="stat-label fetch-info fetch-info-button" id="result-fetch-info" type="button">Fetch time: -- • Fetches: --</button>
                             <div class="stat-label currency-info" id="result-currency-info">Native currency: -- • USD rate: --</div>
                         </div>
-                        <div style="display:flex; align-items:center; gap: 0.75rem;">
+                        <div class="result-actions">
                             <button id="result-star-btn" class="tab-btn" type="button">Star</button>
                             <button id="refresh-data-btn" class="tab-btn" type="button">Refresh data</button>
                         </div>
                     </div>
-                    <div class="card-body">
-                        <div class="stats-grid hidden" id="result-stats">
-                        </div>
-                    </div>
                 </div>
-                <div id="statement-panel" class="glass-card statement-card hidden"></div>
+
+                <section id="metrics-workspace" class="workspace-panel" role="tabpanel"
+                    aria-labelledby="workspace-tab-metrics">
+                    <div class="stats-grid hidden" id="result-stats"></div>
+                </section>
+
+                <section id="financials-workspace" class="workspace-panel hidden" role="tabpanel"
+                    aria-labelledby="workspace-tab-financials">
+                    <div id="statement-panel" class="glass-card statement-card hidden"></div>
+                </section>
                 <div id="error-message" class="error-text hidden"></div>
             </section>
         </div> <!-- End view-scanner -->
@@ -212,7 +215,7 @@
 
     </main>
 
-    <script src="script.js?v=28"></script>
+    <script src="script.js?v=29"></script>
 </body>
 
 </html>

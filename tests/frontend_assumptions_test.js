@@ -92,6 +92,24 @@ vm.runInNewContext(script, context, { filename: 'public/script.js' });
 const api = context.window.__stockAnalysisTestApi;
 assert(api, 'test API should be exposed');
 
+const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+assert(indexHtml.includes('data-workspace-tab="metrics"'), 'app shell should expose a Metrics workspace tab');
+assert(indexHtml.includes('data-workspace-tab="financials"'), 'app shell should expose a Financials workspace tab');
+assert(!indexHtml.includes('<h1>Stock Analysis'), 'legacy dashboard hero should not remain visible');
+assert(indexHtml.includes('class="tabs legacy-navigation hidden"'), 'legacy list navigation should remain hidden while its functionality is retained');
+
+const metricsWorkspaceTab = elements.get('workspace-tab-metrics');
+const financialsWorkspaceTab = elements.get('workspace-tab-financials');
+metricsWorkspaceTab.dataset.workspaceTab = 'metrics';
+financialsWorkspaceTab.dataset.workspaceTab = 'financials';
+api.showDashboardTab('financials');
+assert(elements.get('metrics-workspace').classList.contains('hidden'), 'Financials tab should hide metrics');
+assert(!elements.get('financials-workspace').classList.contains('hidden'), 'Financials tab should reveal statements');
+assert.strictEqual(financialsWorkspaceTab.getAttribute('aria-selected'), 'true', 'Financials tab should expose its selected state');
+api.showDashboardTab('metrics');
+assert(!elements.get('metrics-workspace').classList.contains('hidden'), 'Metrics tab should reveal metrics');
+assert(elements.get('financials-workspace').classList.contains('hidden'), 'Metrics tab should hide statements');
+
 assert(api.accountLabelMatchesSearch('Operating Income', 'op'), 'search should match the prefix of the first word');
 assert(api.accountLabelMatchesSearch('Operating Income', 'inc'), 'search should match the prefix of any word');
 assert(api.accountLabelMatchesSearch('Net Non Operating Interest Income Expense', 'int inc'), 'multi-word search should match word prefixes across the label');
