@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!tab) return;
         tab.addEventListener('click', () => showView(name));
     });
-    ['metrics', 'financials'].map((name) => $(`workspace-tab-${name}`)).filter(Boolean).forEach((tab) => {
+    ['metrics', 'financials', 'info'].map((name) => $(`workspace-tab-${name}`)).filter(Boolean).forEach((tab) => {
         tab.addEventListener('click', () => showDashboardTab(tab.dataset.workspaceTab));
     });
     document.querySelectorAll('[data-metric-tab]').forEach((tab) => {
@@ -108,6 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const keep = [
             'ticker',
             'companyName',
+            'companyDescription',
             'dataDate',
             'pulledAt',
             'fetchTime',
@@ -186,16 +187,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showDashboardTab(name) {
-        const next = name === 'financials' ? 'financials' : 'metrics';
+        const next = ['metrics', 'financials', 'info'].includes(name) ? name : 'metrics';
         state.dashboardTab = next;
         const panels = {
             metrics: $('metrics-workspace'),
             financials: $('financials-workspace'),
+            info: $('info-workspace'),
         };
         Object.entries(panels).forEach(([key, panel]) => {
             if (panel) panel.classList.toggle('hidden', key !== next);
         });
-        ['metrics', 'financials'].map((key) => $(`workspace-tab-${key}`)).filter(Boolean).forEach((tab) => {
+        ['metrics', 'financials', 'info'].map((key) => $(`workspace-tab-${key}`)).filter(Boolean).forEach((tab) => {
             const active = tab.dataset.workspaceTab === next;
             tab.classList.toggle('active', active);
             tab.setAttribute('aria-selected', active ? 'true' : 'false');
@@ -837,6 +839,14 @@ document.addEventListener('DOMContentLoaded', () => {
         updateResultStarButton(ticker);
         renderStats(data);
         renderStatements(data);
+        renderCompanyInfo(data);
+    }
+
+    function renderCompanyInfo(data) {
+        const description = $('company-description');
+        if (!description) return;
+        description.textContent = String(data?.companyDescription || '').trim()
+            || 'Company description unavailable.';
     }
 
     async function scanTicker(ticker, refresh = false) {
@@ -856,6 +866,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const title = $('result-ticker').parentElement;
         const company = title ? title.querySelector('.company-name') : null;
         if (company) company.textContent = '';
+        const description = $('company-description');
+        if (description) description.textContent = 'Loading company description...';
         $('result-data-date').textContent = '--';
         setFetchInfoText('Fetching: 0.00s • Fetches: --', true);
         startFetchTimer(fetchStartedAt, requestId);

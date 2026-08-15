@@ -207,6 +207,7 @@ def make_fetch_result(**overrides):
         "financial_currency": "USD",
         "usd_fx_rate": 1.0,
         "company_name": "Microsoft Corporation",
+        "company_description": "Microsoft develops software and cloud services.",
         "income_statement": fake_statement("Income"),
         "balance_statement": fake_statement("Balance"),
         "cash_flow_statement": fake_statement("Cash"),
@@ -737,6 +738,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         "financialCurrency",
         "usdFxRate",
         "companyName",
+        "companyDescription",
         "incomeStatement",
         "balanceStatement",
         "cashFlowStatement",
@@ -847,6 +849,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         payload = captured["payload"]
         self.assertEqual(payload["ticker"], "TEST")
         self.assertEqual(payload["companyName"], "Test Fixture Corporation")
+        self.assertIn("dashboard testing", payload["companyDescription"])
         self.assertEqual(payload["marketCap"], "500B")
         self.assertEqual(payload["netCash"], "20B")
         self.assertEqual(payload["derivedEnterpriseValue"], "480B")
@@ -918,6 +921,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         self.assertEqual(payload["netWorkingCapital"], "43.1B")
         self.assertEqual(payload["medianTaxRate"], "19.3%")
         self.assertEqual(payload["companyName"], "Microsoft Corporation")
+        self.assertEqual(payload["companyDescription"], "Microsoft develops software and cloud services.")
         self.assertEqual(payload["valuationBasis"], "derivedEV")
         self.assertEqual(payload["valuationPrefix"], "EV")
         self.assertEqual(payload["valuationNumeratorLabel"], "Derived Enterprise Value")

@@ -63,6 +63,8 @@
                         aria-selected="true" aria-controls="metrics-workspace" data-workspace-tab="metrics">Metrics</button>
                     <button class="workspace-tab" id="workspace-tab-financials" type="button" role="tab"
                         aria-selected="false" aria-controls="financials-workspace" data-workspace-tab="financials">Financials</button>
+                    <button class="workspace-tab" id="workspace-tab-info" type="button" role="tab"
+                        aria-selected="false" aria-controls="info-workspace" data-workspace-tab="info">Info</button>
                 </nav>
 
                 <section id="metrics-workspace" class="workspace-panel" role="tabpanel"
@@ -91,6 +93,14 @@
                 <section id="financials-workspace" class="workspace-panel hidden" role="tabpanel"
                     aria-labelledby="workspace-tab-financials">
                     <div id="statement-panel" class="glass-card statement-card hidden"></div>
+                </section>
+
+                <section id="info-workspace" class="workspace-panel info-workspace hidden" role="tabpanel"
+                    aria-labelledby="workspace-tab-info">
+                    <div class="company-overview">
+                        <h3>Company Description</h3>
+                        <p id="company-description">Company description unavailable.</p>
+                    </div>
                 </section>
                 <div id="error-message" class="error-text hidden"></div>
             </section>
@@ -234,7 +244,7 @@
 
     </main>
 
-    <script src="script.js?v=32"></script>
+    <script src="script.js?v=33"></script>
 </body>
 
 </html>

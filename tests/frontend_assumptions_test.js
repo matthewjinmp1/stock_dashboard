@@ -100,6 +100,7 @@ const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.ht
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
 assert(indexHtml.includes('data-workspace-tab="metrics"'), 'app shell should expose a Metrics workspace tab');
 assert(indexHtml.includes('data-workspace-tab="financials"'), 'app shell should expose a Financials workspace tab');
+assert(indexHtml.includes('data-workspace-tab="info"'), 'app shell should expose an Info workspace tab');
 assert.strictEqual((indexHtml.match(/data-metric-tab=/g) || []).length, 8, 'metrics workspace should expose eight category tabs');
 assert(
   indexHtml.indexOf('class="workspace-tabs"') > indexHtml.indexOf('class="glass-card result-card"'),
@@ -111,8 +112,10 @@ assert(/\.statement-tabs\s*\{[^}]*flex-wrap:\s*nowrap;/s.test(stylesCss), 'state
 
 const metricsWorkspaceTab = elements.get('workspace-tab-metrics');
 const financialsWorkspaceTab = elements.get('workspace-tab-financials');
+const infoWorkspaceTab = elements.get('workspace-tab-info');
 metricsWorkspaceTab.dataset.workspaceTab = 'metrics';
 financialsWorkspaceTab.dataset.workspaceTab = 'financials';
+infoWorkspaceTab.dataset.workspaceTab = 'info';
 api.showDashboardTab('financials');
 assert(elements.get('metrics-workspace').classList.contains('hidden'), 'Financials tab should hide metrics');
 assert(!elements.get('financials-workspace').classList.contains('hidden'), 'Financials tab should reveal statements');
@@ -120,6 +123,11 @@ assert.strictEqual(financialsWorkspaceTab.getAttribute('aria-selected'), 'true',
 api.showDashboardTab('metrics');
 assert(!elements.get('metrics-workspace').classList.contains('hidden'), 'Metrics tab should reveal metrics');
 assert(elements.get('financials-workspace').classList.contains('hidden'), 'Metrics tab should hide statements');
+api.showDashboardTab('info');
+assert(elements.get('metrics-workspace').classList.contains('hidden'), 'Info tab should hide metrics');
+assert(elements.get('financials-workspace').classList.contains('hidden'), 'Info tab should hide statements');
+assert(!elements.get('info-workspace').classList.contains('hidden'), 'Info tab should reveal company information');
+assert.strictEqual(infoWorkspaceTab.getAttribute('aria-selected'), 'true', 'Info tab should expose its selected state');
 
 api.showMetricTab('growth');
 assert.strictEqual(api.state.metricTab, 'growth', 'metric category tabs should update the active category');

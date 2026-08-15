@@ -27,7 +27,7 @@ PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 ENABLE_DATAROMA_FETCHES = os.environ.get("ENABLE_DATAROMA_FETCHES", "0") == "1"
-PAYLOAD_VERSION = 43
+PAYLOAD_VERSION = 44
 YAHOO_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -50,7 +50,7 @@ FETCH_RESULT_FIELDS = [
     "valuation_basis", "valuation_prefix", "valuation_numerator_label",
     "current_year_eps", "next_year_eps", "year_ago_eps", "current_year_eps_growth",
     "next_year_eps_growth", "price_current_eps", "price_cy_eps", "price_ny_eps",
-    "short_float", "structured_metrics",
+    "short_float", "structured_metrics", "company_description",
 ]
 
 # Ordered dicts: keys define the preferred display order.
@@ -643,6 +643,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "financialCurrency": "CNY",
             "usdFxRate": 0.138,
             "companyName": "Test Fixture Corporation",
+            "companyDescription": "Test Fixture Corporation builds representative products for dashboard testing.",
             "incomeStatement": income_statement,
             "balanceStatement": balance_statement,
             "cashFlowStatement": cash_flow_statement,
@@ -800,6 +801,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "valuation_prefix": "EV",
             "valuation_numerator_label": "Current Enterprise Value",
             "company_name": ticker,
+            "company_description": "",
             "financial_currency": "USD",
             "usd_fx_rate": 1.0,
             "income_statement": empty_stmt,
@@ -1587,6 +1589,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 beta_raw = None
 
             company_name = info.get("longName") or info.get("shortName") or ticker
+            company_description = str(info.get("longBusinessSummary") or "").strip()
 
             def safe_ratio(num, denom):
                 if num is None or denom in (None, 0):
@@ -1726,6 +1729,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "financial_currency": financial_currency,
                 "usd_fx_rate": financial_fx_rate,
                 "company_name": company_name,
+                "company_description": company_description,
                 "income_statement": income_statement,
                 "balance_statement": balance_statement,
                 "cash_flow_statement": cash_flow_statement,
@@ -1996,6 +2000,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "financialCurrency": result["financial_currency"],
             "usdFxRate": result["usd_fx_rate"],
             "companyName": result["company_name"],
+            "companyDescription": result.get("company_description") or "",
             "incomeStatement": result["income_statement"],
             "balanceStatement": result["balance_statement"],
             "cashFlowStatement": result["cash_flow_statement"],
