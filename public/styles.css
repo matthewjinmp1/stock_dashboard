@@ -1728,6 +1728,15 @@ button:hover {
     gap: 0.55rem;
 }
 
+.result-actions .card-corner-loader,
+.result-card.refreshing .result-actions .card-corner-loader {
+    position: static;
+    flex: 0 0 auto;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-width: 3px;
+}
+
 .tab-btn {
     border: 1px solid #34404d;
     border-radius: 6px;
