@@ -1763,6 +1763,66 @@ button:hover {
     margin-top: 1rem;
 }
 
+.metric-category-tabs {
+    display: flex;
+    width: 100%;
+    gap: 0.35rem;
+    margin-bottom: 0.85rem;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--card-border);
+    scrollbar-width: thin;
+}
+
+.metric-category-tabs.hidden {
+    display: none;
+}
+
+.metric-category-tab {
+    position: relative;
+    flex: 0 0 auto;
+    padding: 0.7rem 0.8rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-muted);
+    box-shadow: none;
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.metric-category-tab::after {
+    content: "";
+    position: absolute;
+    right: 0.8rem;
+    bottom: -1px;
+    left: 0.8rem;
+    height: 2px;
+    background: transparent;
+}
+
+.metric-category-tab:hover,
+.metric-category-tab.active {
+    background: transparent;
+    color: var(--text-primary);
+}
+
+.metric-category-tab.active::after {
+    background: var(--accent-color);
+}
+
+.metric-category-tab:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: -2px;
+}
+
+#result-stats[data-metric-tab="valuation"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#result-stats[data-metric-tab="leverage"] {
+    grid-template-columns: minmax(0, 30rem);
+}
+
 #result-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.85rem;

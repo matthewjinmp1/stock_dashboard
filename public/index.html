@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stock Analysis Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=31">
+    <link rel="stylesheet" href="styles.css?v=32">
 </head>
 
 <body>
@@ -67,6 +67,20 @@
 
                 <section id="metrics-workspace" class="workspace-panel" role="tabpanel"
                     aria-labelledby="workspace-tab-metrics">
+                    <nav class="metric-category-tabs hidden" id="metric-category-tabs" aria-label="Metric categories" role="tablist">
+                        <button class="metric-category-tab active" type="button" role="tab" aria-selected="true"
+                            aria-controls="result-stats" data-metric-tab="valuation">Valuation</button>
+                        <button class="metric-category-tab" type="button" role="tab" aria-selected="false"
+                            aria-controls="result-stats" data-metric-tab="growth">Growth &amp; Margins</button>
+                        <button class="metric-category-tab" type="button" role="tab" aria-selected="false"
+                            aria-controls="result-stats" data-metric-tab="quality">Quality</button>
+                        <button class="metric-category-tab" type="button" role="tab" aria-selected="false"
+                            aria-controls="result-stats" data-metric-tab="market">Market</button>
+                        <button class="metric-category-tab" type="button" role="tab" aria-selected="false"
+                            aria-controls="result-stats" data-metric-tab="leverage">Leverage</button>
+                        <button class="metric-category-tab" type="button" role="tab" aria-selected="false"
+                            aria-controls="result-stats" data-metric-tab="analyst">Analyst</button>
+                    </nav>
                     <div class="stats-grid hidden" id="result-stats"></div>
                 </section>
 

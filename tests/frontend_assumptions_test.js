@@ -46,6 +46,9 @@ const documentStub = {
   querySelector() {
     return makeElement();
   },
+  querySelectorAll() {
+    return [];
+  },
 };
 
 const storage = new Map();
@@ -97,6 +100,7 @@ const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.ht
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
 assert(indexHtml.includes('data-workspace-tab="metrics"'), 'app shell should expose a Metrics workspace tab');
 assert(indexHtml.includes('data-workspace-tab="financials"'), 'app shell should expose a Financials workspace tab');
+assert.strictEqual((indexHtml.match(/data-metric-tab=/g) || []).length, 6, 'metrics workspace should expose six category tabs');
 assert(
   indexHtml.indexOf('class="workspace-tabs"') > indexHtml.indexOf('class="glass-card result-card"'),
   'workspace tabs should appear below the stock summary card',
@@ -116,6 +120,12 @@ assert.strictEqual(financialsWorkspaceTab.getAttribute('aria-selected'), 'true',
 api.showDashboardTab('metrics');
 assert(!elements.get('metrics-workspace').classList.contains('hidden'), 'Metrics tab should reveal metrics');
 assert(elements.get('financials-workspace').classList.contains('hidden'), 'Metrics tab should hide statements');
+
+api.showMetricTab('growth');
+assert.strictEqual(api.state.metricTab, 'growth', 'metric category tabs should update the active category');
+assert.strictEqual(storage.get('stock_metric_tab'), 'growth', 'metric category selection should persist between scans');
+api.showMetricTab('not-a-category');
+assert.strictEqual(api.state.metricTab, 'valuation', 'unknown metric categories should fall back to valuation');
 
 assert(api.accountLabelMatchesSearch('Operating Income', 'op'), 'search should match the prefix of the first word');
 assert(api.accountLabelMatchesSearch('Operating Income', 'inc'), 'search should match the prefix of any word');

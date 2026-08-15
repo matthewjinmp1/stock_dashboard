@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'starred-cash': { key: 'cash', label: 'Starred CF', title: 'Starred Cash Flow' },
         'starred-ratios': { key: 'ratios', label: 'Starred Ratios', title: 'Starred Ratios' },
     };
+    const METRIC_TABS = ['valuation', 'growth', 'quality', 'market', 'leverage', 'analyst'];
     function loadJson(key, fallback) {
         try {
             return JSON.parse(localStorage.getItem(key) || fallback);
@@ -19,9 +20,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const localStarredAccounts = loadJson('stock_starred_accounts', '{}');
     const storedStatementTab = localStorage.getItem('stock_statement_tab');
+    const storedMetricTab = localStorage.getItem('stock_metric_tab');
     const state = {
         activeView: 'scanner',
         dashboardTab: 'metrics',
+        metricTab: METRIC_TABS.includes(storedMetricTab) ? storedMetricTab : 'valuation',
         previousScroll: 0,
         latest: null,
         dataByTicker: loadJson('stock_data_by_ticker', '{}'),
@@ -61,6 +64,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     ['metrics', 'financials'].map((name) => $(`workspace-tab-${name}`)).filter(Boolean).forEach((tab) => {
         tab.addEventListener('click', () => showDashboardTab(tab.dataset.workspaceTab));
+    });
+    document.querySelectorAll('[data-metric-tab]').forEach((tab) => {
+        tab.addEventListener('click', () => showMetricTab(tab.dataset.metricTab));
     });
     const fetchInfoButton = $('result-fetch-info');
     if (fetchInfoButton) {
@@ -195,6 +201,19 @@ document.addEventListener('DOMContentLoaded', () => {
             tab.setAttribute('aria-selected', active ? 'true' : 'false');
             tab.tabIndex = active ? 0 : -1;
         });
+    }
+
+    function showMetricTab(name) {
+        const next = METRIC_TABS.includes(name) ? name : 'valuation';
+        state.metricTab = next;
+        localStorage.setItem('stock_metric_tab', next);
+        document.querySelectorAll('[data-metric-tab]').forEach((tab) => {
+            const active = tab.dataset.metricTab === next;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+            tab.tabIndex = active ? 0 : -1;
+        });
+        if (state.latest) renderStats(state.latest);
     }
 
     function setAppChromeVisible(visible) {
@@ -423,66 +442,71 @@ document.addEventListener('DOMContentLoaded', () => {
         const stats = $('result-stats');
         if (!stats) return;
         stats.classList.remove('stats-grid');
-        stats.innerHTML = [
-            metricGroup('Margins', [
+        const sections = [
+            { tab: 'growth', html: metricGroup('Margins', [
                 metric('Adj Op Inc Margin', val('margin'), 'adj_margin', 'margin'),
                 metric('Gross Margin', val('grossMargin')),
-            ]),
-            metricGroup('Growth', [
+            ]) },
+            { tab: 'growth', html: metricGroup('Growth', [
                 metric('3Y Growth', val('gp_3y_growth') || '--', 'gp_3y_growth'),
                 metric('CY Growth', val('cy_growth'), '', 'cy_growth'),
                 metric('NY Growth', val('ny_growth'), '', 'ny_growth'),
-            ], 'growth_revenue'),
-            metricGroup('Valuation', [
+            ], 'growth_revenue') },
+            { tab: 'valuation', html: metricGroup('Valuation', [
                 metric('Adjusted PE', val('ev_adj_ebit'), 'ev_adj'),
                 metric('CY Adjusted PE', val('ev_cy_ebit'), 'ev_cy'),
                 metric('NY Adjusted PE', val('ev_ny_ebit'), 'ev_ny'),
-            ]),
-            metricGroup('Returns', [
+            ]) },
+            { tab: 'quality', html: metricGroup('Returns', [
                 metric('ROGPPE', val('adjEbitGrossPpe'), 'adj_ebit_gross_ppe'),
                 metric('ROC', val('roc'), 'roc'),
-            ]),
-            metricGroup('Spending', [
+            ]) },
+            { tab: 'quality', html: metricGroup('Spending', [
                 metric('Investment Rate', val('capexAdjIncome'), 'capex_adj_income'),
                 metric('R&D / Adj Op Inc', val('rndAdjIncome')),
-            ]),
-            metricGroup('Taxes', [
+            ]) },
+            { tab: 'quality', html: metricGroup('Taxes', [
                 metric('Median Tax Rate', val('medianTaxRate'), '', 'medianTaxRate'),
-            ]),
-            metricGroup('Short Interest', [
+            ]) },
+            { tab: 'market', html: metricGroup('Short Interest', [
                 metric('Short % Shares Out', val('shortFloat')),
-            ]),
-            metricGroup('Market', [
+            ]) },
+            { tab: 'market', html: metricGroup('Market', [
                 metric('Market Cap', val('marketCap')),
                 metric(netCash.label, netCash.display, 'net_cash'),
                 metric('Our EV', val('derivedEnterpriseValue')),
-            ]),
-            metricGroup('Price & Yield', [
+            ]) },
+            { tab: 'market', html: metricGroup('Price & Yield', [
                 metric('Current Price', val('currentPrice')),
                 metric('Dividend Yield', val('dividendYield')),
                 metric('Beta', val('beta')),
                 metric('Est Txn Cost', val('transactionCost'), 'transaction_cost'),
-            ]),
-            metricGroup('EPS Growth', [
+            ]) },
+            { tab: 'growth', html: metricGroup('EPS Growth', [
                 metric('CY EPS Growth', val('currentYearEpsGrowth')),
                 metric('NY EPS Growth', val('nextYearEpsGrowth')),
-            ]),
-            metricGroup('Est Net Margin', [
+            ]) },
+            { tab: 'growth', html: metricGroup('Est Net Margin', [
                 metric('LY Net Margin', val('lastYearEstimatedNetMargin'), 'ly_est_net_margin'),
                 metric('CY Net Margin', val('currentYearEstimatedNetMargin'), 'cy_est_net_margin'),
                 metric('NY Net Margin', val('nextYearEstimatedNetMargin'), 'ny_est_net_margin'),
-            ]),
-            metricGroup('P/E', [
+            ]) },
+            { tab: 'valuation', html: metricGroup('P/E', [
                 metric('P/LY EPS', val('priceCurrentEps')),
                 metric('P/CY EPS', val('priceCyEps')),
                 metric('P/NY EPS', val('priceNyEps')),
-            ]),
-            metricGroup('Leverage', [
+            ]) },
+            { tab: 'leverage', html: metricGroup('Leverage', [
                 metric('Net Debt / Adj Inc', val('netDebtAdjIncome'), 'net_debt_adj_income'),
-            ]),
-            renderDataromaCards(data),
-            renderAnalystCards(data),
-        ].join('');
+            ]) },
+            { tab: 'analyst', html: renderDataromaCards(data) },
+            { tab: 'analyst', html: renderAnalystCards(data) },
+        ];
+        stats.dataset.metricTab = state.metricTab;
+        stats.innerHTML = sections.filter((section) => section.tab === state.metricTab).map((section) => section.html).join('');
+        const metricTabs = $('metric-category-tabs');
+        if (metricTabs) metricTabs.classList.remove('hidden');
+        showMetricTabSelection();
 
         stats.querySelectorAll('[data-calc]').forEach((node) => {
             node.addEventListener('click', () => openCalc(node.dataset.calc));
@@ -517,6 +541,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         stats.querySelectorAll('[data-reset-assumption]').forEach((node) => {
             node.addEventListener('click', () => resetAssumption(node.dataset.resetAssumption));
+        });
+    }
+
+    function showMetricTabSelection() {
+        document.querySelectorAll('[data-metric-tab]').forEach((tab) => {
+            const active = tab.dataset.metricTab === state.metricTab;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+            tab.tabIndex = active ? 0 : -1;
         });
     }
 
@@ -788,6 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setAppChromeVisible(true);
         $('result-container').classList.remove('hidden');
         $('result-stats').classList.add('hidden');
+        $('metric-category-tabs').classList.add('hidden');
         $('statement-panel').classList.add('hidden');
         state.latest = null;
         $('result-ticker').textContent = ticker;
@@ -2232,6 +2266,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.__stockAnalysisTestApi = {
         state,
         showDashboardTab,
+        showMetricTab,
         applyAssumptions,
         calcDefinitions,
         renderDataromaCards,
