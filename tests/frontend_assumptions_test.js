@@ -238,7 +238,7 @@ api.state.statementSearch = 'rev';
 api.resetStatementDefaultsForTicker({ ticker: 'MSFT' });
 assert.strictEqual(api.state.loadedTicker, 'MSFT', 'new tickers should become the loaded statement ticker');
 assert.strictEqual(api.state.periodicity, 'annual', 'new tickers should default statements to annual');
-assert.strictEqual(api.state.statementTab, 'starred', 'new tickers should default statements to starred');
+assert.strictEqual(api.state.statementTab, 'starred-income', 'new tickers should default statements to starred income');
 assert.strictEqual(api.state.quarterlyGrowthMode, 'yoy', 'new tickers should reset quarterly growth mode');
 assert.strictEqual(api.state.statementSearch, '', 'new tickers should clear statement search');
 
@@ -251,6 +251,28 @@ assert.strictEqual(api.state.periodicity, 'quarterly', 'same-ticker refreshes sh
 assert.strictEqual(api.state.statementTab, 'cash', 'same-ticker refreshes should keep statement tab');
 assert.strictEqual(api.state.quarterlyGrowthMode, 'qoq', 'same-ticker refreshes should keep quarterly growth mode');
 assert.strictEqual(api.state.statementSearch, 'cash', 'same-ticker refreshes should keep active statement search');
+
+assert.strictEqual(api.starredStatementKey('starred-income'), 'income', 'starred IS should map to the income statement');
+assert.strictEqual(api.starredStatementKey('starred-balance'), 'balance', 'starred BS should map to the balance sheet');
+assert.strictEqual(api.starredStatementKey('starred-cash'), 'cash', 'starred CF should map to the cash flow statement');
+assert.strictEqual(api.starredStatementKey('starred-ratios'), 'ratios', 'starred ratios should map to ratios');
+assert.strictEqual(api.starredStatementKey('income'), '', 'regular statement tabs should not be treated as starred tabs');
+
+api.state.periodicity = 'annual';
+api.state.statementTab = 'starred-balance';
+api.state.statementSearch = '';
+api.state.starredAccounts = {
+  'income:Total Revenue': true,
+  'balance:Total Assets': true,
+};
+assert.strictEqual(
+  api.buildStatementCopyText({
+    incomeStatement: { annual: { periods: ['2025-12-31'], rows: [{ label: 'Total Revenue', values: ['10B'] }] } },
+    balanceStatement: { annual: { periods: ['2025-12-31'], rows: [{ label: 'Total Assets', values: ['20B'] }] } },
+  }),
+  'Line Item\t2025-12-31\nTotal Assets\t20',
+  'focused starred tabs should copy only rows from their statement type',
+);
 
 const ratiosData = {
   incomeStatement: {

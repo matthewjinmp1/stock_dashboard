@@ -1,6 +1,12 @@
 document.addEventListener('DOMContentLoaded', () => {
     const $ = (id) => document.getElementById(id);
     const FORWARD_DISCOUNT_RATE = 0.10;
+    const STARRED_STATEMENT_TABS = {
+        'starred-income': { key: 'income', label: 'Starred IS', title: 'Starred Income Statement' },
+        'starred-balance': { key: 'balance', label: 'Starred BS', title: 'Starred Balance Sheet' },
+        'starred-cash': { key: 'cash', label: 'Starred CF', title: 'Starred Cash Flow' },
+        'starred-ratios': { key: 'ratios', label: 'Starred Ratios', title: 'Starred Ratios' },
+    };
     function loadJson(key, fallback) {
         try {
             return JSON.parse(localStorage.getItem(key) || fallback);
@@ -12,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const localStarredAccounts = loadJson('stock_starred_accounts', '{}');
+    const storedStatementTab = localStorage.getItem('stock_statement_tab');
     const state = {
         activeView: 'scanner',
         dashboardTab: 'metrics',
@@ -22,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
         starred: loadJson('stock_starred_tickers', '[]'),
         most: loadJson('stock_search_counts', '{}'),
         assumptions: loadJson('stock_assumptions', '{}'),
-        statementTab: localStorage.getItem('stock_statement_tab') || 'income',
+        statementTab: storedStatementTab === 'starred' ? 'starred-income' : (storedStatementTab || 'income'),
         periodicity: localStorage.getItem('stock_periodicity') || 'annual',
         quarterlyGrowthMode: localStorage.getItem('stock_quarterly_growth_mode') || 'yoy',
         statementSearch: '',
@@ -742,7 +749,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!nextTicker || nextTicker === state.loadedTicker) return;
         state.loadedTicker = nextTicker;
         state.periodicity = 'annual';
-        state.statementTab = 'starred';
+        state.statementTab = 'starred-income';
         state.quarterlyGrowthMode = 'yoy';
         state.statementSearch = '';
         localStorage.setItem('stock_periodicity', state.periodicity);
@@ -1068,13 +1075,14 @@ document.addEventListener('DOMContentLoaded', () => {
             ['cash', 'Cash Flow'],
             ['ratios', 'Ratios'],
             ['all', 'All Accounts'],
-            ['starred', 'Starred'],
+            ...Object.entries(STARRED_STATEMENT_TABS).map(([key, tab]) => [key, tab.label]),
         ];
         const activeTab = tabs.find(t => t[0] === state.statementTab) || tabs[0];
+        const statementTitle = STARRED_STATEMENT_TABS[state.statementTab]?.title || activeTab[1];
         panel.innerHTML = `<div class="statement-header">
             <div class="statement-heading-row">
                 <div>
-                    <h2>${state.statementTab === 'starred' ? 'Starred Statements' : activeTab[1]}</h2>
+                    <h2>${statementTitle}</h2>
                 </div>
                 <div class="statement-period-actions">
                         <button class="mini-btn ${state.periodicity === 'annual' ? 'on blue' : ''}" data-periodicity="annual">Annual</button>
@@ -1099,7 +1107,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderStatementResults(data) {
         if (!data) return '';
-        if (state.statementTab === 'starred') return renderStarredStatementTable(data);
+        if (starredStatementKey()) return renderStarredStatementTable(data, starredStatementKey());
         if (state.statementTab === 'all') return renderAllStatementTable(data);
         return renderStatementTable(statementForTab(data, state.statementTab), state.statementTab);
     }
@@ -1154,8 +1162,9 @@ document.addEventListener('DOMContentLoaded', () => {
             { key: 'ratios', title: 'Ratios', statement: buildRatiosStatement(data) },
         ];
         if (state.statementTab === 'all') return baseSections;
-        if (state.statementTab === 'starred') {
-            return baseSections.map((section) => ({
+        const starredTabKey = starredStatementKey();
+        if (starredTabKey) {
+            return baseSections.filter((section) => section.key === starredTabKey).map((section) => ({
                 ...section,
                 statement: {
                     periods: section.statement.periods || [],
@@ -1178,7 +1187,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const periods = statement.periods || [];
         const rows = filterStatementRows(statement.rows || []);
         if (!rows.length) return '';
-        const includeTitle = state.statementTab === 'all' || state.statementTab === 'starred';
+        const includeTitle = state.statementTab === 'all';
         const lines = [
             ['Line Item', ...periods].map(tsvCell).join('\t'),
             ...rows.map((row) => [row.label, ...(row.values || []).map(statementCopyValue)].map(tsvCell).join('\t')),
@@ -1332,6 +1341,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${statement}:${label}`;
     }
 
+    function starredStatementKey(tab = state.statementTab) {
+        return STARRED_STATEMENT_TABS[tab]?.key || '';
+    }
+
+    function isStarredStatementTab(tab = state.statementTab) {
+        return Boolean(starredStatementKey(tab));
+    }
+
     function toggleStarredAccount(statement, label) {
         const key = starredKey(statement, label);
         state.starredAccounts[key] = !state.starredAccounts[key];
@@ -1346,19 +1363,19 @@ document.addEventListener('DOMContentLoaded', () => {
         renderStatements(state.latest);
     }
 
-    function renderStarredStatementTable(data) {
+    function renderStarredStatementTable(data, statementKey) {
         const p = state.periodicity || 'annual';
-        const blocks = [
-            ['income', 'Income Statement', (data.incomeStatement || {})[p] || {}],
-            ['balance', 'Balance Sheet', (data.balanceStatement || {})[p] || {}],
-            ['cash', 'Cash Flow Statement', (data.cashFlowStatement || {})[p] || {}],
-            ['ratios', 'Ratios', buildRatiosStatement(data)],
-        ].map(([key, label, statement]) => {
-            const rows = (statement.rows || []).filter((row) => state.starredAccounts[starredKey(key, row.label)]);
-            if (!rows.length) return '';
-            return `<h3 class="statement-section-title">${label}</h3>${renderStatementTable({ periods: statement.periods, rows }, key, false)}`;
-        }).join('');
-        return blocks || '<p class="empty-note">Star accounts from a statement to show them here.</p>';
+        const definitions = {
+            income: ['income statement', (data.incomeStatement || {})[p] || {}],
+            balance: ['balance sheet', (data.balanceStatement || {})[p] || {}],
+            cash: ['cash flow statement', (data.cashFlowStatement || {})[p] || {}],
+            ratios: ['ratio', buildRatiosStatement(data)],
+        };
+        const [label, statement] = definitions[statementKey] || definitions.income;
+        const rows = (statement.rows || []).filter((row) => state.starredAccounts[starredKey(statementKey, row.label)]);
+        return rows.length
+            ? renderStatementTable({ periods: statement.periods, rows }, statementKey, false)
+            : `<p class="empty-note">No starred ${label} accounts yet.</p>`;
     }
 
     function renderAllStatementTable(data) {
@@ -1450,7 +1467,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const starred = state.starredAccounts[starredKey(statementKey, row.label)];
         const growthOn = state.statementToggles[`${statementKey}:growth:${row.label}`];
         const marginOn = state.statementToggles[`${statementKey}:margin:${row.label}`];
-        const shouldHighlight = starred && state.statementTab !== 'starred';
+        const shouldHighlight = starred && !isStarredStatementTab();
         let html = `<tr${shouldHighlight ? ' class="starred-row"' : ''}><td class="statement-action-cell"><div class="statement-actions">
             <button class="mini-btn ${starred ? 'on gold' : ''}" data-statement="${statementKey}" data-star-account="${row.label}">${starred ? 'Starred' : 'Star'}</button>
             <button class="mini-btn ${growthOn ? 'on blue' : ''}" data-statement="${statementKey}" data-toggle-ratio="growth" data-label="${row.label}">Growth</button>
@@ -2228,6 +2245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         parseMoney,
         parsePercentValue,
         accountLabelMatchesSearch,
+        starredStatementKey,
         buildStatementCopyText,
         statementCopyValue,
         compactTickerData,
