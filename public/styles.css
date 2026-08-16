@@ -1889,6 +1889,17 @@ button:hover {
     min-height: 86px;
 }
 
+.share-growth-card {
+    grid-column: 1 / -1;
+    width: 100%;
+    max-width: 60rem;
+    justify-self: start;
+}
+
+.share-growth-card .metric-group-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 #result-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.85rem;
@@ -2167,6 +2178,7 @@ button:hover {
     }
 
     .revenue-growth-card .metric-group-grid,
+    .share-growth-card .metric-group-grid,
     .margin-history-values,
     .margin-growth-values {
         grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));

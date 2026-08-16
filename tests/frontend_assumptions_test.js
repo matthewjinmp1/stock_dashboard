@@ -177,6 +177,7 @@ const marginHistoryData = {
         { label: 'Total Revenue', values: ['150B', '144B', '110B', '100B', '120B'] },
         { label: 'Gross Profit', values: ['90B', '72B', '44B', '30B', '60B'] },
         { label: 'Adjusted Operating Income', values: ['45B', '43.2B', '27.5B', '20B', '36B'] },
+        { label: 'Diluted Average Shares', values: ['92M', '94M', '100M', '105M', '97M'] },
       ],
     },
     quarterly: {
@@ -225,6 +226,16 @@ assert.deepStrictEqual(
     { label: 'TTM', value: '8.6%' },
   ],
   'adjusted operating income history should show three annual growth rates and date-annualized TTM growth',
+);
+assert.deepStrictEqual(
+  JSON.parse(JSON.stringify(api.historicalIncomeGrowthSeries(marginHistoryData, ['Diluted Average Shares']))),
+  [
+    { label: '2023', value: '-4.8%' },
+    { label: '2024', value: '-3%' },
+    { label: '2025', value: '-3.1%' },
+    { label: 'TTM', value: '-4.2%' },
+  ],
+  'diluted share history should show three annual changes and date-annualized TTM change',
 );
 
 api.state.statementTab = 'income';

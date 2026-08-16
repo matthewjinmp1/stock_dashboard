@@ -563,6 +563,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const adjustedOperatingMarginHistory = historicalMarginSeries(data, ['Adjusted Operating Income']);
         const grossProfitGrowthHistory = historicalIncomeGrowthSeries(data, ['Gross Profit']);
         const adjustedOperatingIncomeGrowthHistory = historicalIncomeGrowthSeries(data, ['Adjusted Operating Income']);
+        const dilutedShareGrowthHistory = historicalIncomeGrowthSeries(data, [
+            'Diluted Average Shares',
+            'Diluted Shares',
+            'Diluted Weighted Average Shares',
+        ]);
         const stats = $('result-stats');
         if (!stats) return;
         stats.classList.remove('stats-grid');
@@ -614,6 +619,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('CY EPS Growth', val('currentYearEpsGrowth')),
                 metric('NY EPS Growth', val('nextYearEpsGrowth')),
             ]) },
+            { tab: 'growth', html: metricGroup('Diluted Share Growth', [
+                ...dilutedShareGrowthHistory.map((item) => metric(item.label, item.value)),
+            ], '', 'share-growth-card') },
             { tab: 'growth', html: metricHistoryGroup('Gross Margin History', [
                 ...grossMarginHistory.map((item) => metric(item.label, item.value)),
             ], 'Gross Profit Growth', [
