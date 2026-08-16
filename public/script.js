@@ -437,6 +437,17 @@ document.addEventListener('DOMContentLoaded', () => {
         </section>`;
     }
 
+    function metricHistoryGroup(title, historyItems, growthTitle, growthItems) {
+        return `<section class="metric-group margin-history-card">
+            <h3>${title}</h3>
+            <div class="metric-group-grid margin-history-values">${historyItems.join('')}</div>
+            <div class="margin-growth-section">
+                <h4>${growthTitle}</h4>
+                <div class="metric-group-grid margin-growth-values">${growthItems.join('')}</div>
+            </div>
+        </section>`;
+    }
+
     function historicalRevenueGrowth(data) {
         const annual = (data.incomeStatement || {}).annual || {};
         const periods = annual.periods || [];
@@ -494,6 +505,55 @@ document.addEventListener('DOMContentLoaded', () => {
         return [...annualItems, { label: 'TTM', value: ttmIndex >= 0 ? marginAt(ttmIndex) : '--' }];
     }
 
+    function historicalIncomeGrowthSeries(data, numeratorLabels) {
+        const incomeStatement = data.incomeStatement || {};
+        const annual = incomeStatement.annual || {};
+        const periods = annual.periods || [];
+        const rows = annual.rows || [];
+        const numeratorRow = numeratorLabels
+            .map((label) => rows.find((row) => String(row.label || '').toLowerCase() === label.toLowerCase()))
+            .find(Boolean);
+        const values = numeratorRow?.values || [];
+        const annualItems = periods.map((period, index) => ({
+            period,
+            index,
+            date: new Date(Date.parse(period)),
+            value: values[index],
+        })).filter((item) => !isSummaryPeriod(item.period) && !Number.isNaN(item.date.getTime()))
+            .sort((a, b) => a.date - b.date)
+            .slice(-4);
+
+        const growthDisplay = (previous, current, years, blankWhenEqual = false) => {
+            const previousValue = parsePercentBase(previous);
+            const currentValue = parsePercentBase(current);
+            if (!previousValue || !currentValue || !Number.isFinite(years) || years <= 0) return '--';
+            if ((previousValue < 0 && currentValue > 0) || (previousValue > 0 && currentValue < 0)) return '--';
+            if (blankWhenEqual && Math.abs(currentValue) === Math.abs(previousValue)) return '--';
+            const growth = Math.pow(Math.abs(currentValue) / Math.abs(previousValue), 1 / years) - 1;
+            return formatPercentDecimal(growth);
+        };
+
+        const annualGrowth = annualItems.slice(1).map((item, index) => {
+            const previous = annualItems[index];
+            const years = Math.max((item.date - previous.date) / (365.25 * 24 * 60 * 60 * 1000), 0.01);
+            return { label: String(item.date.getFullYear()), value: growthDisplay(previous.value, item.value, years) };
+        });
+
+        const ttmIndex = periods.findIndex((period) => String(period || '').toUpperCase() === 'TTM');
+        const latestAnnual = annualItems.at(-1);
+        const quarterlyDates = ((incomeStatement.quarterly || {}).periods || [])
+            .map((period) => new Date(Date.parse(period)))
+            .filter((date) => !Number.isNaN(date.getTime()));
+        const ttmEnd = quarterlyDates.sort((a, b) => b - a)[0];
+        const ttmYears = latestAnnual && ttmEnd
+            ? (ttmEnd - latestAnnual.date) / (365.25 * 24 * 60 * 60 * 1000)
+            : 1;
+        const ttmValue = ttmIndex >= 0 && latestAnnual
+            ? growthDisplay(latestAnnual.value, values[ttmIndex], ttmYears, true)
+            : '--';
+        return [...annualGrowth, { label: 'TTM', value: ttmValue }];
+    }
+
     function renderStats(data) {
         data = applyAssumptions(data);
         const val = (key) => metricDisplay(data, key);
@@ -501,6 +561,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const revenueGrowth = historicalRevenueGrowth(data);
         const grossMarginHistory = historicalMarginSeries(data, ['Gross Profit']);
         const adjustedOperatingMarginHistory = historicalMarginSeries(data, ['Adjusted Operating Income']);
+        const grossProfitGrowthHistory = historicalIncomeGrowthSeries(data, ['Gross Profit']);
+        const adjustedOperatingIncomeGrowthHistory = historicalIncomeGrowthSeries(data, ['Adjusted Operating Income']);
         const stats = $('result-stats');
         if (!stats) return;
         stats.classList.remove('stats-grid');
@@ -552,12 +614,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('CY EPS Growth', val('currentYearEpsGrowth')),
                 metric('NY EPS Growth', val('nextYearEpsGrowth')),
             ]) },
-            { tab: 'growth', html: metricGroup('Gross Margin History', [
+            { tab: 'growth', html: metricHistoryGroup('Gross Margin History', [
                 ...grossMarginHistory.map((item) => metric(item.label, item.value)),
-            ], '', 'margin-history-card') },
-            { tab: 'growth', html: metricGroup('Adjusted Operating Margin History', [
+            ], 'Gross Profit Growth', [
+                ...grossProfitGrowthHistory.map((item) => metric(item.label, item.value)),
+            ]) },
+            { tab: 'growth', html: metricHistoryGroup('Adjusted Operating Margin History', [
                 ...adjustedOperatingMarginHistory.map((item) => metric(item.label, item.value)),
-            ], '', 'margin-history-card') },
+            ], 'Adjusted Op Income Growth', [
+                ...adjustedOperatingIncomeGrowthHistory.map((item) => metric(item.label, item.value)),
+            ]) },
             { tab: 'margins', html: metricGroup('Est Net Margin', [
                 metric('LY Net Margin', val('lastYearEstimatedNetMargin'), 'ly_est_net_margin'),
                 metric('CY Net Margin', val('currentYearEstimatedNetMargin'), 'cy_est_net_margin'),
@@ -2410,6 +2476,7 @@ document.addEventListener('DOMContentLoaded', () => {
         accountLabelMatchesSearch,
         historicalRevenueGrowth,
         historicalMarginSeries,
+        historicalIncomeGrowthSeries,
         starredStatementKey,
         buildStatementCopyText,
         statementCopyValue,

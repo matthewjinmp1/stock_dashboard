@@ -179,6 +179,9 @@ const marginHistoryData = {
         { label: 'Adjusted Operating Income', values: ['45B', '43.2B', '27.5B', '20B', '36B'] },
       ],
     },
+    quarterly: {
+      periods: ['2026-06-30', '2026-03-31', '2025-12-31'],
+    },
   },
 };
 assert.deepStrictEqual(
@@ -202,6 +205,26 @@ assert.deepStrictEqual(
     { label: 'TTM', value: '30%' },
   ],
   'adjusted operating margin history should use adjusted operating income over revenue',
+);
+assert.deepStrictEqual(
+  JSON.parse(JSON.stringify(api.historicalIncomeGrowthSeries(marginHistoryData, ['Gross Profit']))),
+  [
+    { label: '2023', value: '46.7%' },
+    { label: '2024', value: '36.3%' },
+    { label: '2025', value: '20%' },
+    { label: 'TTM', value: '56.9%' },
+  ],
+  'gross profit history should show three annual growth rates and date-annualized TTM growth',
+);
+assert.deepStrictEqual(
+  JSON.parse(JSON.stringify(api.historicalIncomeGrowthSeries(marginHistoryData, ['Adjusted Operating Income']))),
+  [
+    { label: '2023', value: '37.5%' },
+    { label: '2024', value: '30.8%' },
+    { label: '2025', value: '20%' },
+    { label: 'TTM', value: '8.6%' },
+  ],
+  'adjusted operating income history should show three annual growth rates and date-annualized TTM growth',
 );
 
 api.state.statementTab = 'income';
