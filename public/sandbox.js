@@ -280,13 +280,13 @@
         }
 
         function metricValue(metric) {
-            return `<div class="sandbox-value"><span>${escapeHtml(metric.label)}</span><strong>${escapeHtml(metric.display)}</strong><code>${escapeHtml(metric.variable)}</code></div>`;
+            return `<div class="sandbox-value"><span>${escapeHtml(metric.label)}</span><strong>${escapeHtml(metric.display)}</strong></div>`;
         }
 
         function formulaValue(formula, result) {
             const display = result?.error ? '--' : formatFormulaValue(result?.raw, formula.format);
             const error = result?.error ? `<small class="sandbox-formula-error">${escapeHtml(result.error)}</small>` : '';
-            return `<div class="sandbox-value"><span>${escapeHtml(formula.name)}</span><strong>${escapeHtml(display)}</strong><code>${escapeHtml(sandboxVariableName(formula.name))}</code>${error}</div>`;
+            return `<div class="sandbox-value"><span>${escapeHtml(formula.name)}</span><strong>${escapeHtml(display)}</strong>${error}</div>`;
         }
 
         function widgetHtml(widget, evaluated) {

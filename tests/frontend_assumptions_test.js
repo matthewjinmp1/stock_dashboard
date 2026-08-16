@@ -164,6 +164,8 @@ assert(
   /title: `Box \$\{layout\.widgets\.length \+ 1\}`,[\s\S]*?metrics: \[\],/.test(sandboxScript),
   'new Sandbox boxes should start without preselected metrics',
 );
+const sandboxMetricRenderer = sandboxScript.match(/function metricValue\(metric\) \{[\s\S]*?function widgetHtml/)[0];
+assert(!sandboxMetricRenderer.includes('<code>'), 'finished Sandbox boxes should not display internal variable names');
 assert(
   indexHtml.indexOf('class="workspace-tabs"') > indexHtml.indexOf('class="glass-card result-card"'),
   'workspace tabs should appear below the stock summary card',
