@@ -623,9 +623,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('CY EPS Growth', val('currentYearEpsGrowth')),
                 metric('NY EPS Growth', val('nextYearEpsGrowth')),
             ]) },
-            { tab: 'growth', html: metricGroup('Diluted Share Growth', [
-                ...dilutedShareGrowthHistory.map((item) => metric(item.label, item.value)),
-            ], '', 'share-growth-card') },
             { tab: 'growth', html: metricHistoryGroup('Gross Margin History', [
                 ...grossMarginHistory.map((item) => metric(item.label, item.value)),
             ], 'Gross Profit Growth', [
@@ -636,6 +633,9 @@ document.addEventListener('DOMContentLoaded', () => {
             ], 'Adjusted Op Income Growth', [
                 ...adjustedOperatingIncomeGrowthHistory.map((item) => metric(item.label, item.value)),
             ]) },
+            { tab: 'growth', html: metricGroup('Diluted Share Growth', [
+                ...dilutedShareGrowthHistory.map((item) => metric(item.label, item.value)),
+            ], '', 'share-growth-card') },
             { tab: 'margins', html: metricGroup('Est Net Margin', [
                 metric('LY Net Margin', val('lastYearEstimatedNetMargin'), 'ly_est_net_margin'),
                 metric('CY Net Margin', val('currentYearEstimatedNetMargin'), 'cy_est_net_margin'),

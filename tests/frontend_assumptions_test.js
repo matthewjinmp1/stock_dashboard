@@ -120,6 +120,10 @@ assert(
   /\.margin-history-card\s*\{[^}]*max-width:\s*76rem;/s.test(stylesCss),
   'margin history cards should stay compact on wide screens',
 );
+assert(
+  script.indexOf("metricHistoryGroup('Adjusted Operating Margin History'") < script.indexOf("metricGroup('Diluted Share Growth'"),
+  'diluted share growth should remain the final card in the Growth tab',
+);
 
 const metricsWorkspaceTab = elements.get('workspace-tab-metrics');
 const financialsWorkspaceTab = elements.get('workspace-tab-financials');
