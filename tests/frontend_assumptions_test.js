@@ -161,6 +161,10 @@ assert(indexHtml.includes('data-workspace-tab="info"'), 'app shell should expose
 assert.strictEqual((indexHtml.match(/data-metric-tab=/g) || []).length, 9, 'metrics workspace should expose nine category tabs');
 assert(indexHtml.includes('data-metric-tab="sandbox"'), 'metrics workspace should expose a Sandbox tab');
 assert(
+  /title: `Box \$\{layout\.widgets\.length \+ 1\}`,[\s\S]*?metrics: \[\],/.test(sandboxScript),
+  'new Sandbox boxes should start without preselected metrics',
+);
+assert(
   indexHtml.indexOf('class="workspace-tabs"') > indexHtml.indexOf('class="glass-card result-card"'),
   'workspace tabs should appear below the stock summary card',
 );

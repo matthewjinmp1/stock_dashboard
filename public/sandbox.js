@@ -362,7 +362,7 @@
             const widget = cleanWidget({
                 title: `Box ${layout.widgets.length + 1}`,
                 y: nextRow,
-                metrics: sandboxMetricCatalog(data).filter((metric) => ['marketCap', 'revenue', 'margin'].includes(metric.key)).map((metric) => metric.key),
+                metrics: [],
             }, layout.widgets.length);
             layout.widgets.push(widget);
             persist();
