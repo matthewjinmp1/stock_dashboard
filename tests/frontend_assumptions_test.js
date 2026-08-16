@@ -90,11 +90,61 @@ const context = {
 context.global = context;
 context.window.window = context.window;
 
+const math = require(path.join(__dirname, '..', 'public', 'vendor', 'math.js'));
+context.window.math = math;
+context.math = math;
+const sandboxScript = fs.readFileSync(path.join(__dirname, '..', 'public', 'sandbox.js'), 'utf8');
+vm.runInNewContext(sandboxScript, context, { filename: 'public/sandbox.js' });
 const script = fs.readFileSync(path.join(__dirname, '..', 'public', 'script.js'), 'utf8');
 vm.runInNewContext(script, context, { filename: 'public/script.js' });
 
 const api = context.window.__stockAnalysisTestApi;
 assert(api, 'test API should be exposed');
+const sandboxApi = context.window.StockSandbox;
+assert(sandboxApi, 'Sandbox API should be exposed');
+assert.strictEqual(sandboxApi.sandboxVariableName('marketCap'), 'market_cap', 'Sandbox should expose readable formula variables');
+assert.strictEqual(sandboxApi.sandboxVariableName('3Y Growth'), 'value_3_y_growth', 'Sandbox formula variables should never begin with a number');
+const sandboxData = {
+  metrics: {
+    marketCap: { raw: 500, display: '500B', kind: 'money' },
+    revenue: { raw: 100, display: '100B', kind: 'money' },
+    margin: { raw: 0.25, display: '25%', kind: 'percent' },
+    unavailable: { raw: null, display: '--', kind: 'number' },
+  },
+};
+const sandboxCatalog = sandboxApi.sandboxMetricCatalog(sandboxData);
+assert.strictEqual(sandboxCatalog.find((metric) => metric.key === 'marketCap').raw, 500, 'Sandbox catalog should retain raw metric values');
+assert.strictEqual(sandboxCatalog.find((metric) => metric.key === 'margin').display, '25%', 'Sandbox catalog should retain display strings');
+const sandboxLayout = sandboxApi.normalizeSandboxLayout({ widgets: [{
+  id: 'valuation-box',
+  title: 'Valuation',
+  metrics: ['marketCap'],
+  formulas: [
+    { id: 'sales-multiple', name: 'Sales Multiple', expression: 'market_cap / revenue', format: 'multiple' },
+    { id: 'growth-adjusted', name: 'Growth Adjusted', expression: 'sales_multiple * (1 + margin)', format: 'number' },
+  ],
+}] });
+const sandboxEvaluation = sandboxApi.evaluateFormulaSet(sandboxData, sandboxLayout);
+assert.strictEqual(sandboxEvaluation.results.get('sales-multiple').raw, 5, 'Sandbox should calculate formulas from raw values');
+assert.strictEqual(sandboxEvaluation.results.get('growth-adjusted').raw, 6.25, 'Sandbox formulas should be able to reference other formulas');
+assert.strictEqual(sandboxApi.formatFormulaValue(5, 'multiple'), '5x', 'Sandbox should format calculated multiples');
+assert.strictEqual(sandboxApi.formatFormulaValue(0.125, 'percent'), '12.5%', 'Sandbox should format decimal percentages');
+assert(
+  sandboxApi.validateExpression('market_cap.constructor', new Set(['market_cap'])).error,
+  'Sandbox should reject property access in formulas',
+);
+assert(
+  sandboxApi.evaluateFormulaSet(sandboxData, sandboxApi.normalizeSandboxLayout({ widgets: [{ formulas: [
+    { id: 'missing-value', name: 'Missing Value', expression: 'unavailable + 1' },
+  ] }] })).results.get('missing-value').error.includes('unavailable'),
+  'Sandbox should explain when a source metric is unavailable',
+);
+assert(
+  sandboxApi.evaluateFormulaSet(sandboxData, sandboxApi.normalizeSandboxLayout({ widgets: [{ formulas: [
+    { id: 'metric-name-conflict', name: 'Revenue', expression: 'market_cap / revenue' },
+  ] }] })).results.get('metric-name-conflict').error.includes('conflicts'),
+  'Sandbox should reject formula names that collide with source metrics',
+);
 assert.strictEqual(api.tickerFromUrlSearch('?ticker=ci'), 'CI', 'dashboard links should normalize ticker query parameters');
 assert.strictEqual(api.tickerFromUrlSearch('?other=value'), '', 'dashboard links should ignore unrelated query parameters');
 assert.strictEqual(api.displayCurrency({ financialCurrency: 'USD', usdFxRate: 1 }), 'USD • 1.0000', 'currency summary should stay compact');
@@ -104,7 +154,8 @@ const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.c
 assert(indexHtml.includes('data-workspace-tab="metrics"'), 'app shell should expose a Metrics workspace tab');
 assert(indexHtml.includes('data-workspace-tab="financials"'), 'app shell should expose a Financials workspace tab');
 assert(indexHtml.includes('data-workspace-tab="info"'), 'app shell should expose an Info workspace tab');
-assert.strictEqual((indexHtml.match(/data-metric-tab=/g) || []).length, 8, 'metrics workspace should expose eight category tabs');
+assert.strictEqual((indexHtml.match(/data-metric-tab=/g) || []).length, 9, 'metrics workspace should expose nine category tabs');
+assert(indexHtml.includes('data-metric-tab="sandbox"'), 'metrics workspace should expose a Sandbox tab');
 assert(
   indexHtml.indexOf('class="workspace-tabs"') > indexHtml.indexOf('class="glass-card result-card"'),
   'workspace tabs should appear below the stock summary card',

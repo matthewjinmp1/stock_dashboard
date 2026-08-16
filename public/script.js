@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'starred-cash': { key: 'cash', label: 'Starred CF', title: 'Starred Cash Flow' },
         'starred-ratios': { key: 'ratios', label: 'Starred Ratios', title: 'Starred Ratios' },
     };
-    const METRIC_TABS = ['valuation', 'growth', 'margins', 'returns', 'quality', 'market', 'leverage', 'analyst'];
+    const METRIC_TABS = ['valuation', 'growth', 'margins', 'returns', 'quality', 'market', 'leverage', 'analyst', 'sandbox'];
     function loadJson(key, fallback) {
         try {
             return JSON.parse(localStorage.getItem(key) || fallback);
@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadedTicker: null,
     };
     let activeFetchTimer = null;
+    const sandbox = window.StockSandbox?.createSandbox?.();
     localStorage.removeItem('stock_statement_search');
 
     const views = {
@@ -572,6 +573,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const stats = $('result-stats');
         if (!stats) return;
         stats.classList.remove('stats-grid');
+        if (state.metricTab === 'sandbox') {
+            stats.dataset.metricTab = 'sandbox';
+            sandbox?.render(stats, applyAssumptions(data));
+            const metricTabs = $('metric-category-tabs');
+            if (metricTabs) metricTabs.classList.remove('hidden');
+            showMetricTabSelection();
+            return;
+        }
+        sandbox?.destroy();
         const sections = [
             { tab: 'margins', html: metricGroup('Margins', [
                 metric('Adj Op Inc Margin', val('margin'), 'adj_margin', 'margin'),
