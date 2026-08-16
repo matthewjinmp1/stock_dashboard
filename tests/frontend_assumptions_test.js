@@ -78,6 +78,7 @@ const context = {
   localStorage: localStorageStub,
   window: { scrollY: 0, scrollTo() {} },
   performance: { now: () => now },
+  URLSearchParams,
   fetch: async () => ({ ok: true, json: async () => ({}) }),
   requestAnimationFrame(callback) { callback(); },
   setInterval(callback) {
@@ -94,6 +95,8 @@ vm.runInNewContext(script, context, { filename: 'public/script.js' });
 
 const api = context.window.__stockAnalysisTestApi;
 assert(api, 'test API should be exposed');
+assert.strictEqual(api.tickerFromUrlSearch('?ticker=ci'), 'CI', 'dashboard links should normalize ticker query parameters');
+assert.strictEqual(api.tickerFromUrlSearch('?other=value'), '', 'dashboard links should ignore unrelated query parameters');
 assert.strictEqual(api.displayCurrency({ financialCurrency: 'USD', usdFxRate: 1 }), 'USD • 1.0000', 'currency summary should stay compact');
 
 const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');

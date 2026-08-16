@@ -1027,6 +1027,11 @@ document.addEventListener('DOMContentLoaded', () => {
         save('stock_search_counts', state.most);
     }
 
+    function tickerFromUrlSearch(search = '') {
+        const params = new URLSearchParams(String(search || ''));
+        return String(params.get('ticker') || '').trim().toUpperCase();
+    }
+
     $('search-form').addEventListener('submit', async (event) => {
         event.preventDefault();
         const ticker = $('ticker-input').value.trim().toUpperCase();
@@ -2508,6 +2513,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadStarredAccounts();
 
+    const linkedTicker = tickerFromUrlSearch(window.location?.search);
+    if (linkedTicker) {
+        $('ticker-input').value = linkedTicker;
+        scanTicker(linkedTicker);
+    }
+
     window.__stockAnalysisTestApi = {
         state,
         showDashboardTab,
@@ -2543,6 +2554,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resetAssumption,
         saveAssumptions,
         resetStatementDefaultsForTicker,
+        tickerFromUrlSearch,
     };
 
     window.removeTicker = (ticker) => {
