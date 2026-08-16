@@ -104,6 +104,10 @@ const sandboxApi = context.window.StockSandbox;
 assert(sandboxApi, 'Sandbox API should be exposed');
 assert.strictEqual(sandboxApi.sandboxVariableName('marketCap'), 'market_cap', 'Sandbox should expose readable formula variables');
 assert.strictEqual(sandboxApi.sandboxVariableName('3Y Growth'), 'value_3_y_growth', 'Sandbox formula variables should never begin with a number');
+assert.strictEqual(sandboxApi.shouldShowMetricOption(true, '', 'Market Cap market_cap'), true, 'selected Sandbox metrics should remain visible without a search');
+assert.strictEqual(sandboxApi.shouldShowMetricOption(false, '', 'Market Cap market_cap'), false, 'unselected Sandbox metrics should stay hidden without a search');
+assert.strictEqual(sandboxApi.shouldShowMetricOption(false, 'market', 'Market Cap market_cap'), true, 'Sandbox search should reveal matching unselected metrics');
+assert.strictEqual(sandboxApi.shouldShowMetricOption(false, 'revenue', 'Market Cap market_cap'), false, 'Sandbox search should keep nonmatching metrics hidden');
 const sandboxData = {
   metrics: {
     marketCap: { raw: 500, display: '500B', kind: 'money' },

@@ -2450,6 +2450,12 @@ button:hover {
     overflow: auto;
 }
 
+.sandbox-metric-empty {
+    margin: 0.7rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+
 .sandbox-metric-option {
     display: flex;
     min-width: 0;
@@ -2460,6 +2466,11 @@ button:hover {
     border-radius: 5px;
     color: var(--text-secondary);
     font-size: 0.68rem;
+}
+
+.sandbox-metric-option.hidden,
+.sandbox-metric-empty.hidden {
+    display: none;
 }
 
 .sandbox-metric-option input {

@@ -60,6 +60,11 @@
             .replace(/\b\w/g, (letter) => letter.toUpperCase());
     }
 
+    function shouldShowMetricOption(selected, query, searchText) {
+        const normalizedQuery = String(query || '').trim().toLowerCase();
+        return Boolean(selected) || Boolean(normalizedQuery && String(searchText || '').toLowerCase().includes(normalizedQuery));
+    }
+
     function entryRaw(entry) {
         const raw = entry && typeof entry === 'object' && 'raw' in entry ? entry.raw : entry;
         if (raw === null || raw === undefined || raw === '') return null;
@@ -403,14 +408,14 @@
         }
 
         function editorHtml(catalog) {
-            const searchItems = catalog.map((metric) => `<label class="sandbox-metric-option" data-metric-option="${escapeHtml(`${metric.label} ${metric.variable}`.toLowerCase())}">
+            const searchItems = catalog.map((metric) => `<label class="sandbox-metric-option${draft.metrics.includes(metric.key) ? '' : ' hidden'}" data-metric-option="${escapeHtml(`${metric.label} ${metric.variable}`.toLowerCase())}">
                 <input type="checkbox" name="sandbox-metric" value="${escapeHtml(metric.key)}"${draft.metrics.includes(metric.key) ? ' checked' : ''}>
                 <span>${escapeHtml(metric.label)}<code>${escapeHtml(metric.variable)}</code></span>
             </label>`).join('');
             return `<form class="sandbox-editor-form">
                 <div class="sandbox-editor-header"><div><h2 id="sandbox-dialog-title">Edit box</h2><p>Choose metrics or create formulas from raw values.</p></div><button type="button" class="sandbox-dialog-close" data-sandbox-cancel aria-label="Close">x</button></div>
                 <label class="sandbox-title-field">Box name<input name="sandbox-title" maxlength="80" value="${escapeHtml(draft.title)}" required></label>
-                <section class="sandbox-editor-section"><div class="sandbox-editor-heading"><h3>Metrics</h3><input type="search" name="metric-search" placeholder="Search metrics"></div><div class="sandbox-metric-picker">${searchItems}</div></section>
+                <section class="sandbox-editor-section"><div class="sandbox-editor-heading"><div><h3>Metrics</h3><p>Selected metrics stay visible. Search to add another.</p></div><input type="search" name="metric-search" placeholder="Search to add a metric"></div><div class="sandbox-metric-picker">${searchItems}</div><p class="sandbox-metric-empty" data-metric-empty${draft.metrics.length ? ' hidden' : ''}>Search to add metrics.</p></section>
                 <section class="sandbox-editor-section"><div class="sandbox-editor-heading"><div><h3>Formulas</h3><p>Use value names such as <code>market_cap</code>. Percent values are decimals.</p></div><button type="button" data-add-formula>Add formula</button></div><div class="sandbox-formulas">${formulaRows(catalog)}</div></section>
                 <footer><button type="button" data-sandbox-cancel>Cancel</button><button type="submit" class="sandbox-primary-action">Save box</button></footer>
             </form>`;
@@ -430,6 +435,22 @@
 
             function wireEditor() {
                 const form = dialog.querySelector('.sandbox-editor-form');
+                const search = dialog.querySelector('[name="metric-search"]');
+                const filterMetricOptions = () => {
+                    const query = search?.value || '';
+                    let visibleCount = 0;
+                    dialog.querySelectorAll('[data-metric-option]').forEach((option) => {
+                        const selected = Boolean(option.querySelector('[name="sandbox-metric"]')?.checked);
+                        const visible = shouldShowMetricOption(selected, query, option.dataset.metricOption);
+                        option.classList.toggle('hidden', !visible);
+                        if (visible) visibleCount += 1;
+                    });
+                    const empty = dialog.querySelector('[data-metric-empty]');
+                    if (empty) {
+                        empty.textContent = String(query || '').trim() ? 'No matching metrics.' : 'Search to add metrics.';
+                        empty.classList.toggle('hidden', visibleCount > 0);
+                    }
+                };
                 form?.addEventListener('input', () => captureDraft(dialog));
                 form?.addEventListener('change', () => captureDraft(dialog));
                 form?.addEventListener('submit', (event) => {
@@ -465,10 +486,8 @@
                     select.value = '';
                     captureDraft(dialog);
                 }));
-                dialog.querySelector('[name="metric-search"]')?.addEventListener('input', (event) => {
-                    const query = event.target.value.trim().toLowerCase();
-                    dialog.querySelectorAll('[data-metric-option]').forEach((option) => option.classList.toggle('hidden', query && !option.dataset.metricOption.includes(query)));
-                });
+                search?.addEventListener('input', filterMetricOptions);
+                dialog.querySelectorAll('[name="sandbox-metric"]').forEach((checkbox) => checkbox.addEventListener('change', filterMetricOptions));
             }
 
             refreshEditor();
@@ -501,6 +520,7 @@
         normalizeSandboxLayout,
         sandboxMetricCatalog,
         sandboxVariableName,
+        shouldShowMetricOption,
         validateExpression,
     };
 }(window));
