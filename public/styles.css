@@ -1850,6 +1850,17 @@ button:hover {
     grid-template-columns: minmax(0, 30rem);
 }
 
+.returns-card {
+    grid-column: 1 / -1;
+    width: 100%;
+    max-width: 76rem;
+    justify-self: start;
+}
+
+.returns-card .metric-group-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .revenue-growth-card {
     grid-column: span 2;
 }
@@ -2178,6 +2189,7 @@ button:hover {
     }
 
     .revenue-growth-card .metric-group-grid,
+    .returns-card .metric-group-grid,
     .share-growth-card .metric-group-grid,
     .margin-history-values,
     .margin-growth-values {

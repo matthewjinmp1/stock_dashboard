@@ -568,6 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'Diluted Shares',
             'Diluted Weighted Average Shares',
         ]);
+        const returnRatios = currentReturnRatioValues(data);
         const stats = $('result-stats');
         if (!stats) return;
         stats.classList.remove('stats-grid');
@@ -591,9 +592,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 metric('Price / Gross Profit', val('priceGrossProfit'), 'price_gross_profit'),
             ]) },
             { tab: 'returns', html: metricGroup('Returns', [
+                metric('ROA', returnRatios.roa),
+                metric('ROE', returnRatios.roe),
+                metric('ROIC', returnRatios.roic),
                 metric('ROGPPE', val('adjEbitGrossPpe'), 'adj_ebit_gross_ppe'),
                 metric('ROC', val('roc'), 'roc'),
-            ]) },
+            ], '', 'returns-card') },
             { tab: 'quality', html: metricGroup('Spending', [
                 metric('Investment Rate', val('capexAdjIncome'), 'capex_adj_income'),
                 metric('R&D / Adj Op Inc', val('rndAdjIncome')),
@@ -1420,8 +1424,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return stmt[state.periodicity || 'annual'] || {};
     }
 
-    function buildRatiosStatement(data) {
-        const periodicity = state.periodicity || 'annual';
+    function buildRatiosStatement(data, periodicityOverride = '') {
+        const periodicity = periodicityOverride || state.periodicity || 'annual';
         const income = ((data || {}).incomeStatement || {})[periodicity] || {};
         const balance = ((data || {}).balanceStatement || {})[periodicity] || {};
         const periods = income.periods || balance.periods || [];
@@ -1442,6 +1446,25 @@ document.addEventListener('DOMContentLoaded', () => {
                         const netIncomeRaw = parseMoney(netIncome);
                         const totalAssetsRaw = parseMoney(totalAssets);
                         return totalAssetsRaw ? formatPercentDecimal(netIncomeRaw / totalAssetsRaw) : '--';
+                    }),
+                },
+                {
+                    label: 'ROE',
+                    values: periods.map((period) => {
+                        const netIncome = statementValueForPeriod(income, [
+                            'Net Income',
+                            'Net Income Common Stockholders',
+                            'Net Income Applicable To Common Shares',
+                            'Net Income Continuous Operations',
+                        ], period);
+                        const equityPeriod = String(period || '').toUpperCase() === 'TTM' ? firstAvailablePeriod(balance, ['MRQ', 'LATEST', 'TTM']) : period;
+                        const equity = statementValueForPeriod(balance, [
+                            'Stockholders Equity',
+                            'Common Stock Equity',
+                            'Total Equity Gross Minority Interest',
+                        ], equityPeriod);
+                        const equityRaw = parseMoney(equity);
+                        return equityRaw ? formatPercentDecimal(parseMoney(netIncome) / equityRaw) : '--';
                     }),
                 },
                 {
@@ -1509,6 +1532,26 @@ document.addEventListener('DOMContentLoaded', () => {
                     }),
                 },
             ],
+        };
+    }
+
+    function currentReturnRatioValues(data) {
+        const ratios = buildRatiosStatement(data, 'annual');
+        const periods = ratios.periods || [];
+        let currentIndex = periods.findIndex((period) => String(period || '').toUpperCase() === 'TTM');
+        if (currentIndex < 0) {
+            currentIndex = periods.map((period, index) => ({ index, date: Date.parse(period) }))
+                .filter((item) => !Number.isNaN(item.date))
+                .sort((a, b) => b.date - a.date)[0]?.index ?? -1;
+        }
+        const valueFor = (label) => {
+            const row = (ratios.rows || []).find((item) => item.label === label);
+            return currentIndex >= 0 ? (row?.values || [])[currentIndex] || '--' : '--';
+        };
+        return {
+            roa: valueFor('ROA'),
+            roe: valueFor('ROE'),
+            roic: valueFor('ROIC'),
         };
     }
 
@@ -2491,6 +2534,7 @@ document.addEventListener('DOMContentLoaded', () => {
         compactTickerData,
         saveTickerData,
         buildRatiosStatement,
+        currentReturnRatioValues,
         growthValues,
         growthRowLabel,
         marginValues,
