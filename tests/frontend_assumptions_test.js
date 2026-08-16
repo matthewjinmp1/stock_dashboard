@@ -108,6 +108,31 @@ assert.strictEqual(sandboxApi.shouldShowMetricOption(true, '', 'Market Cap marke
 assert.strictEqual(sandboxApi.shouldShowMetricOption(false, '', 'Market Cap market_cap'), false, 'unselected Sandbox metrics should stay hidden without a search');
 assert.strictEqual(sandboxApi.shouldShowMetricOption(false, 'market', 'Market Cap market_cap'), true, 'Sandbox search should reveal matching unselected metrics');
 assert.strictEqual(sandboxApi.shouldShowMetricOption(false, 'revenue', 'Market Cap market_cap'), false, 'Sandbox search should keep nonmatching metrics hidden');
+const migratedSandboxLayout = sandboxApi.normalizeSandboxLayout({ version: 1, widgets: [{
+  id: 'legacy-box', x: 3, y: 2, w: 6, h: 4,
+}] });
+assert.strictEqual(migratedSandboxLayout.version, 3, 'Sandbox layouts should migrate to the fine-grained grid');
+assert.strictEqual(migratedSandboxLayout.widgets[0].x, 300, 'Sandbox migration should preserve horizontal position');
+assert.strictEqual(migratedSandboxLayout.widgets[0].y, 148, 'Sandbox migration should preserve vertical position');
+assert.strictEqual(migratedSandboxLayout.widgets[0].w, 600, 'Sandbox migration should preserve box width');
+assert.strictEqual(migratedSandboxLayout.widgets[0].h, 296, 'Sandbox migration should preserve box height');
+const previousSandboxLayout = sandboxApi.normalizeSandboxLayout({ version: 2, widgets: [{
+  id: 'previous-box', x: 31, y: 39, w: 61, h: 75,
+}] });
+assert.strictEqual(previousSandboxLayout.widgets[0].x, 310, 'Sandbox should migrate prior fine-grid positions');
+assert.strictEqual(previousSandboxLayout.widgets[0].y, 156, 'Sandbox should migrate prior fine-grid rows');
+assert.strictEqual(previousSandboxLayout.widgets[0].w, 610, 'Sandbox should migrate prior fine-grid widths');
+assert.strictEqual(previousSandboxLayout.widgets[0].h, 300, 'Sandbox should migrate prior fine-grid heights');
+const preciseSandboxLayout = sandboxApi.normalizeSandboxLayout({ version: 3, widgets: [{
+  id: 'precise-box', x: 311, y: 159, w: 611, h: 301,
+}] });
+assert.strictEqual(preciseSandboxLayout.widgets[0].x, 311, 'fine-grained Sandbox positions should remain exact');
+assert.strictEqual(preciseSandboxLayout.widgets[0].y, 159, 'fine-grained Sandbox rows should remain exact');
+assert.strictEqual(preciseSandboxLayout.widgets[0].w, 611, 'fine-grained Sandbox widths should remain exact');
+assert.strictEqual(preciseSandboxLayout.widgets[0].h, 301, 'fine-grained Sandbox heights should remain exact');
+assert(/column:\s*GRID_COLUMNS/.test(sandboxScript), 'Sandbox should initialize with the fine-grained column count');
+assert(/columnMax:\s*GRID_COLUMNS/.test(sandboxScript), 'Sandbox responsive sizing should retain the fine-grained desktop grid');
+assert(/cellHeight:\s*GRID_ROW_HEIGHT/.test(sandboxScript), 'Sandbox should use fine-grained vertical resizing');
 const sandboxData = {
   metrics: {
     marketCap: { raw: 500, display: '500B', kind: 'money' },

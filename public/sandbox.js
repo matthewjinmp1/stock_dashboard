@@ -2,6 +2,13 @@
     'use strict';
 
     const STORAGE_KEY = 'stock_sandbox_layout_v1';
+    const LAYOUT_VERSION = 3;
+    const GRID_COLUMNS = 1200;
+    const GRID_ROW_HEIGHT = 1;
+    const PREVIOUS_GRID_COLUMNS = 120;
+    const PREVIOUS_GRID_ROW_HEIGHT = 4;
+    const LEGACY_COLUMNS = 12;
+    const LEGACY_ROW_HEIGHT = 74;
     const FORMATS = new Set(['number', 'percent', 'money', 'multiple']);
     const ALLOWED_FUNCTIONS = new Set(['abs', 'ceil', 'floor', 'max', 'min', 'pow', 'round', 'sqrt']);
     const ALLOWED_OPERATORS = new Set(['add', 'subtract', 'multiply', 'divide', 'pow', 'mod', 'unaryMinus', 'unaryPlus']);
@@ -116,14 +123,17 @@
     }
 
     function cleanWidget(widget, index) {
-        const numeric = (value, fallback, min, max) => Math.min(max, Math.max(min, Number(value) || fallback));
+        const numeric = (value, fallback, min, max) => {
+            const number = Number(value);
+            return Math.min(max, Math.max(min, Number.isFinite(number) ? number : fallback));
+        };
         return {
             id: String(widget?.id || createId('widget')),
             title: String(widget?.title || `Box ${index + 1}`).slice(0, 80),
-            x: numeric(widget?.x, (index * 4) % 12, 0, 11),
-            y: numeric(widget?.y, 0, 0, 1000),
-            w: numeric(widget?.w, 4, 2, 12),
-            h: numeric(widget?.h, 4, 2, 12),
+            x: numeric(widget?.x, (index * Math.round(GRID_COLUMNS / 3)) % GRID_COLUMNS, 0, GRID_COLUMNS - 1),
+            y: numeric(widget?.y, 0, 0, 400000),
+            w: numeric(widget?.w, Math.round(GRID_COLUMNS / 3), Math.round(GRID_COLUMNS / 12), GRID_COLUMNS),
+            h: numeric(widget?.h, 296, 80, 40000),
             metrics: Array.isArray(widget?.metrics) ? [...new Set(widget.metrics.map(String))].slice(0, 30) : [],
             formulas: Array.isArray(widget?.formulas) ? widget.formulas.slice(0, 20).map(cleanFormula) : [],
         };
@@ -131,17 +141,42 @@
 
     function normalizeSandboxLayout(layout) {
         const widgets = Array.isArray(layout?.widgets) ? layout.widgets.slice(0, 30) : [];
-        const cleaned = widgets.map(cleanWidget);
-        const reasonableLastRow = Math.max(12, cleaned.length * 12);
-        cleaned.forEach((widget, index) => {
-            if (widget.y > reasonableLastRow) widget.y = index * 4;
-        });
-        return { version: 1, widgets: cleaned };
+        let normalizedWidgets = widgets;
+        if (Number(layout?.version) < LAYOUT_VERSION) {
+            const isLegacyLayout = Number(layout?.version) < 2;
+            const sourceColumns = isLegacyLayout ? LEGACY_COLUMNS : PREVIOUS_GRID_COLUMNS;
+            const sourceRowHeight = isLegacyLayout ? LEGACY_ROW_HEIGHT : PREVIOUS_GRID_ROW_HEIGHT;
+            const horizontalScale = GRID_COLUMNS / sourceColumns;
+            const verticalScale = sourceRowHeight / GRID_ROW_HEIGHT;
+            const reasonableLegacyLastRow = Math.max(12, widgets.length * 12);
+            const sourceNumber = (value, fallback, min, max) => {
+                const number = Number(value);
+                return Math.min(max, Math.max(min, Number.isFinite(number) ? number : fallback));
+            };
+            normalizedWidgets = widgets.map((widget, index) => {
+                const sourceY = sourceNumber(widget?.y, 0, 0, isLegacyLayout ? 1000 : 100000);
+                const safeY = isLegacyLayout && sourceY > reasonableLegacyLastRow ? index * 4 : sourceY;
+                return {
+                    ...widget,
+                    x: Math.round(sourceNumber(widget?.x, (index * sourceColumns / 3) % sourceColumns, 0, sourceColumns - 1) * horizontalScale),
+                    y: Math.round(safeY * verticalScale),
+                    w: Math.round(sourceNumber(widget?.w, sourceColumns / 3, sourceColumns / 12, sourceColumns) * horizontalScale),
+                    h: Math.round(sourceNumber(widget?.h, isLegacyLayout ? 4 : 74, isLegacyLayout ? 2 : 20, isLegacyLayout ? 12 : 10000) * verticalScale),
+                };
+            });
+        }
+        const cleaned = normalizedWidgets.map(cleanWidget);
+        return { version: LAYOUT_VERSION, widgets: cleaned };
     }
 
     function parseLayout(storage) {
         try {
-            return normalizeSandboxLayout(JSON.parse(storage?.getItem(STORAGE_KEY) || '{}'));
+            const parsed = JSON.parse(storage?.getItem(STORAGE_KEY) || '{}');
+            const normalized = normalizeSandboxLayout(parsed);
+            if (parsed?.version !== normalized.version) {
+                storage?.setItem?.(STORAGE_KEY, JSON.stringify(normalized));
+            }
+            return normalized;
         } catch (error) {
             storage?.removeItem?.(STORAGE_KEY);
             return normalizeSandboxLayout({});
@@ -341,14 +376,17 @@
         function wireGrid() {
             if (!global.GridStack || !root?.querySelector?.('.sandbox-grid')) return;
             grid = global.GridStack.init({
-                column: 12,
-                cellHeight: 74,
+                column: GRID_COLUMNS,
+                cellHeight: GRID_ROW_HEIGHT,
                 float: true,
                 margin: 10,
-                minRow: 3,
+                minRow: 220,
                 handle: '.sandbox-widget-drag',
                 resizable: { handles: 'e,se,s,sw,w' },
-                columnOpts: { breakpoints: [{ w: 720, c: 1 }] },
+                columnOpts: {
+                    columnMax: GRID_COLUMNS,
+                    breakpoints: [{ w: 720, c: 1 }],
+                },
             }, root.querySelector('.sandbox-grid'));
             grid.on('change', (_event, items) => updateLayoutFromGrid(items));
         }
