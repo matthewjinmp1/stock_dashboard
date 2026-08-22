@@ -110,6 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'ticker',
             'companyName',
             'companyDescription',
+            'companyLogo',
             'dataDate',
             'pulledAt',
             'fetchTime',
@@ -966,6 +967,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const company = title ? title.querySelector('.company-name') : null;
         if (company) company.textContent = data.companyName || '--';
+        renderCompanyLogo(data, ticker);
         $('result-data-date').textContent = displayDate(data);
         setFetchInfoText(displayFetchInfo(data), false);
         $('result-fetch-info').title = 'Click to see fetch timing details';
@@ -974,6 +976,32 @@ document.addEventListener('DOMContentLoaded', () => {
         renderStats(data);
         renderStatements(data);
         renderCompanyInfo(data);
+    }
+
+    function renderCompanyLogo(data, ticker) {
+        const shell = $('company-logo-shell');
+        const image = $('company-logo');
+        if (!shell || !image) return;
+        const logoUrl = String(data?.companyLogo || '').trim();
+        shell.classList.add('hidden');
+        shell.setAttribute('aria-hidden', 'true');
+        image.removeAttribute('src');
+        image.alt = '';
+        image.dataset.logoUrl = logoUrl;
+        if (!logoUrl) return;
+        image.onload = () => {
+            if (image.dataset.logoUrl !== logoUrl) return;
+            shell.classList.remove('hidden');
+            shell.setAttribute('aria-hidden', 'false');
+        };
+        image.onerror = () => {
+            if (image.dataset.logoUrl !== logoUrl) return;
+            shell.classList.add('hidden');
+            shell.setAttribute('aria-hidden', 'true');
+            image.removeAttribute('src');
+        };
+        image.alt = `${data?.companyName || ticker} logo`;
+        image.src = logoUrl;
     }
 
     function renderCompanyInfo(data) {
@@ -1000,6 +1028,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const title = $('result-ticker').parentElement;
         const company = title ? title.querySelector('.company-name') : null;
         if (company) company.textContent = '';
+        renderCompanyLogo({}, ticker);
         const description = $('company-description');
         if (description) description.textContent = 'Loading company description...';
         $('result-data-date').textContent = '--';

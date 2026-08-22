@@ -19,6 +19,37 @@ server.HAS_YFINANCE = False
 server.ENABLE_DATAROMA_FETCHES = False
 
 
+class CompanyLogoTests(unittest.TestCase):
+    def tearDown(self):
+        server.company_logo_url.cache_clear()
+
+    def test_company_logo_url_resolves_share_class_alias(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = os.path.join(directory, "companies.db")
+            with sqlite3.connect(database) as connection:
+                connection.execute("CREATE TABLE companies (ticker TEXT PRIMARY KEY, logo TEXT)")
+                connection.execute(
+                    "INSERT INTO companies VALUES (?, ?)",
+                    ("GOOG", "https://companiesmarketcap.com/img/company-logos/64/GOOG.png"),
+                )
+            with mock.patch.object(server, "COMPANIES_DB_FILE", database):
+                server.company_logo_url.cache_clear()
+                self.assertEqual(
+                    server.company_logo_url("GOOGL"),
+                    "https://companiesmarketcap.com/img/company-logos/64/GOOG.png",
+                )
+
+    def test_company_logo_url_rejects_untrusted_hosts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = os.path.join(directory, "companies.db")
+            with sqlite3.connect(database) as connection:
+                connection.execute("CREATE TABLE companies (ticker TEXT PRIMARY KEY, logo TEXT)")
+                connection.execute("INSERT INTO companies VALUES ('TEST', 'https://example.com/logo.png')")
+            with mock.patch.object(server, "COMPANIES_DB_FILE", database):
+                server.company_logo_url.cache_clear()
+                self.assertEqual(server.company_logo_url("TEST"), "")
+
+
 class DummyOpener:
     def __init__(self):
         self.addheaders = []
@@ -792,6 +823,7 @@ class HandleApiRequestContractTests(unittest.TestCase):
         "usdFxRate",
         "companyName",
         "companyDescription",
+        "companyLogo",
         "incomeStatement",
         "balanceStatement",
         "cashFlowStatement",

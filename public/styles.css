@@ -1718,6 +1718,39 @@ button:hover {
     border: 0;
 }
 
+.company-summary {
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    gap: 0.9rem;
+}
+
+.company-summary-copy {
+    min-width: 0;
+}
+
+.company-logo-shell {
+    width: 3.25rem;
+    height: 3.25rem;
+    flex: 0 0 3.25rem;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid #2d3744;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.company-logo-shell.hidden {
+    display: none;
+}
+
+.company-logo-shell img {
+    width: 78%;
+    height: 78%;
+    object-fit: contain;
+}
+
 .card-header h2 {
     font-size: 2rem;
     line-height: 1;
@@ -2573,6 +2606,16 @@ button:hover {
     .result-actions {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .company-summary {
+        gap: 0.7rem;
+    }
+
+    .company-logo-shell {
+        width: 2.75rem;
+        height: 2.75rem;
+        flex-basis: 2.75rem;
     }
 
     .result-actions .tab-btn {

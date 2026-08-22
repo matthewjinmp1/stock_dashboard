@@ -7,7 +7,7 @@
     <title>Stock Analysis Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="vendor/gridstack.min.css?v=13.0.2">
-    <link rel="stylesheet" href="styles.css?v=43">
+    <link rel="stylesheet" href="styles.css?v=44">
 </head>
 
 <body>
@@ -42,14 +42,19 @@
             <section id="result-container" class="hidden">
                 <div class="glass-card result-card" id="glass-card">
                     <div class="card-header">
-                        <div>
-                            <div class="result-identity">
-                                <h2 id="result-ticker">AAPL</h2>
-                                <div class="company-name"></div>
+                        <div class="company-summary">
+                            <div class="company-logo-shell hidden" id="company-logo-shell" aria-hidden="true">
+                                <img id="company-logo" alt="" decoding="async">
                             </div>
-                            <div class="stat-label" id="result-data-date">As of --</div>
-                            <button class="stat-label fetch-info fetch-info-button" id="result-fetch-info" type="button">Fetch time: -- • Fetches: --</button>
-                            <div class="stat-label currency-info" id="result-currency-info">-- • --</div>
+                            <div class="company-summary-copy">
+                                <div class="result-identity">
+                                    <h2 id="result-ticker">AAPL</h2>
+                                    <div class="company-name"></div>
+                                </div>
+                                <div class="stat-label" id="result-data-date">As of --</div>
+                                <button class="stat-label fetch-info fetch-info-button" id="result-fetch-info" type="button">Fetch time: -- • Fetches: --</button>
+                                <div class="stat-label currency-info" id="result-currency-info">-- • --</div>
+                            </div>
                         </div>
                         <div class="result-actions">
                             <div class="loader card-corner-loader hidden" id="loading-spinner" aria-label="Loading stock data"></div>
@@ -250,7 +255,7 @@
     <script src="vendor/gridstack-all.js?v=13.0.2"></script>
     <script src="vendor/math.js?v=15.2.0"></script>
     <script src="sandbox.js?v=7"></script>
-    <script src="script.js?v=39"></script>
+    <script src="script.js?v=40"></script>
 </body>
 
 </html>

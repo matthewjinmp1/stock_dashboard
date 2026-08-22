@@ -5,10 +5,12 @@ import os
 import datetime
 import time
 import statistics
+import sqlite3
 import urllib.request
 import html
 import re
 import threading
+from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, parse_qs
 
@@ -30,6 +32,7 @@ except ImportError:
 PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
 PREFERENCES_FILE = os.environ.get("PREFERENCES_FILE", "preferences.json")
+COMPANIES_DB_FILE = os.environ.get("COMPANIES_DB_FILE", "companies.db")
 LEGACY_CACHE_FILE = "cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "900"))
 ENABLE_DATAROMA_FETCHES = os.environ.get("ENABLE_DATAROMA_FETCHES", "0") == "1"
@@ -42,6 +45,43 @@ YAHOO_USER_AGENT = (
 NASDAQ_USER_AGENT = YAHOO_USER_AGENT
 NASDAQ_SESSION = curl_requests.Session(impersonate="chrome") if curl_requests else None
 NASDAQ_SESSION_LOCK = threading.Lock()
+COMPANY_LOGO_ALIASES = {
+    "GOOGL": "GOOG",
+}
+
+
+@lru_cache(maxsize=4096)
+def company_logo_url(ticker):
+    symbol = str(ticker or "").upper().strip()
+    if not symbol:
+        return ""
+    normalized = symbol.replace(".", "-")
+    candidates = list(dict.fromkeys([
+        symbol,
+        normalized,
+        COMPANY_LOGO_ALIASES.get(symbol),
+        COMPANY_LOGO_ALIASES.get(normalized),
+    ]))
+    candidates = [candidate for candidate in candidates if candidate]
+    try:
+        database = os.path.abspath(COMPANIES_DB_FILE)
+        with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as connection:
+            for candidate in candidates:
+                row = connection.execute(
+                    "SELECT logo FROM companies WHERE ticker = ?",
+                    (candidate,),
+                ).fetchone()
+                logo = str(row[0] if row else "").strip()
+                parsed = urlparse(logo)
+                hostname = str(parsed.hostname or "").lower()
+                if parsed.scheme == "https" and (
+                    hostname == "companiesmarketcap.com"
+                    or hostname.endswith(".companiesmarketcap.com")
+                ):
+                    return logo
+    except (OSError, sqlite3.Error):
+        pass
+    return ""
 
 FETCH_RESULT_FIELDS = [
     "income", "margin", "gross_margin", "ev_cy_ebit", "ev_ny_ebit", "adj_income",
@@ -652,6 +692,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "usdFxRate": 0.138,
             "companyName": "Test Fixture Corporation",
             "companyDescription": "Test Fixture Corporation builds representative products for dashboard testing.",
+            "companyLogo": "",
             "incomeStatement": income_statement,
             "balanceStatement": balance_statement,
             "cashFlowStatement": cash_flow_statement,
@@ -1902,6 +1943,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not payload.get("pulledAt"):
                 payload["pulledAt"] = cached_entry.get("pulledAt")
             payload["fetchCount"] = fetch_count
+            payload["companyLogo"] = company_logo_url(ticker)
             if refresh_error:
                 payload["staleDueToRefreshError"] = True
                 payload["refreshError"] = "Data refresh failed; showing cached data."
@@ -2025,6 +2067,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "usdFxRate": result["usd_fx_rate"],
             "companyName": result["company_name"],
             "companyDescription": result.get("company_description") or "",
+            "companyLogo": company_logo_url(ticker),
             "incomeStatement": result["income_statement"],
             "balanceStatement": result["balance_statement"],
             "cashFlowStatement": result["cash_flow_statement"],
