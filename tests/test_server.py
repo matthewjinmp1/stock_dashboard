@@ -40,6 +40,17 @@ class FakeResponse:
         return self.payload.encode("utf-8")
 
 
+class FakeCurlResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self.payload
+
+
 def make_handler():
     handler = server.Handler.__new__(server.Handler)
     handler._request_fetch_count = 0
@@ -590,7 +601,9 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
             }
         }
 
-        with mock.patch("server.urllib.request.urlopen", return_value=FakeResponse(json.dumps(payload))):
+        session = mock.Mock()
+        session.get.return_value = FakeCurlResponse(payload)
+        with mock.patch.object(server, "NASDAQ_SESSION", session):
             bid, ask, spread, cost = self.handler._nasdaq_bid_ask_metrics(
                 "MSFT",
                 current_price_raw=417.26,
@@ -601,9 +614,49 @@ class FetchYahooFinanceDataTests(unittest.TestCase):
         self.assertAlmostEqual(ask, 417.28)
         self.assertAlmostEqual(spread, 0.05)
         self.assertAlmostEqual(cost, 0.00005991420220628985)
+        session.get.assert_called_once()
+
+    def test_nasdaq_session_is_reused_across_quotes(self):
+        payload = {"data": {"primaryData": {"bidPrice": "$10", "askPrice": "$10.02"}}}
+        session = mock.Mock()
+        session.get.return_value = FakeCurlResponse(payload)
+
+        with mock.patch.object(server, "NASDAQ_SESSION", session):
+            self.handler._nasdaq_bid_ask_metrics("MSFT")
+            self.handler._nasdaq_bid_ask_metrics("META")
+
+        self.assertEqual(session.get.call_count, 2)
+
+    def test_nasdaq_session_failure_falls_back_to_urllib(self):
+        payload = {"data": {"primaryData": {"bidPrice": "$10", "askPrice": "$10.02"}}}
+        session = mock.Mock()
+        session.get.side_effect = RuntimeError("session failed")
+
+        with mock.patch.object(server, "NASDAQ_SESSION", session), mock.patch.object(
+            server.urllib.request,
+            "urlopen",
+            return_value=FakeResponse(json.dumps(payload)),
+        ) as fallback:
+            bid, ask, spread, cost = self.handler._nasdaq_bid_ask_metrics("MSFT")
+
+        self.assertAlmostEqual(bid, 10)
+        self.assertAlmostEqual(ask, 10.02)
+        self.assertAlmostEqual(spread, 0.02)
+        self.assertAlmostEqual(cost, 0.0009990009990009776)
+        fallback.assert_called_once()
+
+    def test_nasdaq_metrics_are_converted_without_refetching(self):
+        converted = self.handler._convert_bid_ask_metrics((10, 10.02, 0.02, 0.001), 1.25)
+
+        self.assertAlmostEqual(converted[0], 12.5)
+        self.assertAlmostEqual(converted[1], 12.525)
+        self.assertAlmostEqual(converted[2], 0.025)
+        self.assertEqual(converted[3], 0.001)
 
     def test_nasdaq_bid_ask_metrics_fails_closed_on_bad_payload(self):
-        with mock.patch("server.urllib.request.urlopen", return_value=FakeResponse("{}")):
+        session = mock.Mock()
+        session.get.return_value = FakeCurlResponse({})
+        with mock.patch.object(server, "NASDAQ_SESSION", session):
             bid, ask, spread, cost = self.handler._nasdaq_bid_ask_metrics("MSFT")
 
         self.assertIsNone(bid)

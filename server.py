@@ -8,6 +8,7 @@ import statistics
 import urllib.request
 import html
 import re
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, parse_qs
 
@@ -20,6 +21,11 @@ try:
     HAS_YFINANCE = True
 except ImportError:
     HAS_YFINANCE = False
+
+try:
+    from curl_cffi import requests as curl_requests
+except ImportError:
+    curl_requests = None
 
 PORT = int(os.environ.get("PORT", "3000"))
 CACHE_DB_FILE = os.environ.get("CACHE_DB_FILE", "cache.db")
@@ -34,6 +40,8 @@ YAHOO_USER_AGENT = (
     "Chrome/120.0.0.0 Safari/537.36"
 )
 NASDAQ_USER_AGENT = YAHOO_USER_AGENT
+NASDAQ_SESSION = curl_requests.Session(impersonate="chrome") if curl_requests else None
+NASDAQ_SESSION_LOCK = threading.Lock()
 
 FETCH_RESULT_FIELDS = [
     "income", "margin", "gross_margin", "ev_cy_ebit", "ev_ny_ebit", "adj_income",
@@ -1145,18 +1153,29 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return None, None, None, None
 
         url = f"https://api.nasdaq.com/api/quote/{symbol}/info?assetclass=stocks"
-        request = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": NASDAQ_USER_AGENT,
-                "Accept": "application/json, text/plain, */*",
-                "Origin": "https://www.nasdaq.com",
-                "Referer": f"https://www.nasdaq.com/market-activity/stocks/{symbol.lower()}",
-            },
-        )
-        try:
+        headers = {
+            "User-Agent": NASDAQ_USER_AGENT,
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "https://www.nasdaq.com",
+            "Referer": f"https://www.nasdaq.com/market-activity/stocks/{symbol.lower()}",
+        }
+
+        def fetch_with_urllib():
+            request = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(request, timeout=4) as response:
-                payload = json.loads(response.read().decode("utf-8", "replace"))
+                return json.loads(response.read().decode("utf-8", "replace"))
+
+        try:
+            if NASDAQ_SESSION:
+                try:
+                    with NASDAQ_SESSION_LOCK:
+                        response = NASDAQ_SESSION.get(url, headers=headers, timeout=4)
+                    response.raise_for_status()
+                    payload = response.json()
+                except Exception:
+                    payload = fetch_with_urllib()
+            else:
+                payload = fetch_with_urllib()
             primary = ((payload.get("data") or {}).get("primaryData") or {})
             bid_raw = self._parse_quote_price(primary.get("bidPrice"))
             ask_raw = self._parse_quote_price(primary.get("askPrice"))
@@ -1168,6 +1187,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 current_price_raw=reference_price_raw,
                 market_cap_raw=market_cap_raw,
             )
+        except Exception:
+            return None, None, None, None
+
+    def _convert_bid_ask_metrics(self, metrics, quote_fx_rate):
+        bid, ask, spread, cost = metrics or (None, None, None, None)
+        if cost is None:
+            return None, None, None, None
+        try:
+            rate = float(quote_fx_rate or 1.0)
+            return bid * rate, ask * rate, spread * rate, cost
         except Exception:
             return None, None, None, None
 
@@ -1250,10 +1279,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     pass
                 return {}
 
-            executor = ThreadPoolExecutor(max_workers=6)
+            # Keep six Yahoo workers while Nasdaq uses one independent worker.
+            executor = ThreadPoolExecutor(max_workers=7)
             try:
                 statements_started = time.perf_counter()
                 futures = {
+                    "nasdaq": executor.submit(lambda: timed(
+                        "nasdaq_bid_ask",
+                        "Nasdaq bid/ask quote",
+                        lambda: self._nasdaq_bid_ask_metrics(ticker),
+                    )),
                     "info": executor.submit(fetch_info),
                     "annual_income": executor.submit(lambda: fetch_yf_frame("annual_income", "Annual income statement", "financials")),
                     "ttm_income": executor.submit(lambda: fetch_yf_frame("ttm_income", "Official TTM income statement", "ttm_income_stmt")),
@@ -1266,7 +1301,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "estimates": executor.submit(lambda: timed("estimates_total", "Estimates group", fetch_estimate_frames)),
                     "recommendations": executor.submit(fetch_analyst_recommendations),
                 }
-                self._request_fetch_count += 10
+                self._request_fetch_count += 11
 
                 try:
                     info = futures["info"].result() or {}
@@ -1330,16 +1365,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     quote_fx_rate = financial_fx_rate
                 else:
                     quote_fx_rate = futures["quote_fx"].result() if "quote_fx" in futures else 1.0
+                early_bid_ask_metrics = futures["nasdaq"].result()
             finally:
                 if executor is not None:
                     executor.shutdown(wait=True)
-
-            early_bid_ask_metrics = timed(
-                "nasdaq_bid_ask",
-                "Nasdaq bid/ask quote",
-                lambda: self._nasdaq_bid_ask_metrics(ticker),
-            )
-            self._request_fetch_count += 1
             
             print(f"[FX] Financial Rate: {financial_fx_rate}, Quote Rate: {quote_fx_rate}")
 
@@ -1605,15 +1634,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ask_price_raw = None
             bid_ask_spread_raw = None
             transaction_cost_raw = None
-            if quote_fx_rate == 1.0:
-                bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw = early_bid_ask_metrics
-            else:
-                bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw = self._nasdaq_bid_ask_metrics(
-                    ticker,
-                    quote_fx_rate=quote_fx_rate,
-                    current_price_raw=current_price_raw,
-                    market_cap_raw=market_cap_raw,
-                )
+            bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw = self._convert_bid_ask_metrics(
+                early_bid_ask_metrics,
+                quote_fx_rate,
+            )
             if transaction_cost_raw is None:
                 bid_price_raw, ask_price_raw, bid_ask_spread_raw, transaction_cost_raw = self._bid_ask_metrics(
                     info,
